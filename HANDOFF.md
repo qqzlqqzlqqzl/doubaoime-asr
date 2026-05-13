@@ -31,6 +31,16 @@ git pull --rebase --autostash
 
 这次提交已经推到 `origin/main`。另一台电脑继续工作前必须先拉到至少 `64e49f0`，否则很容易把已通过测试的响应式 UI 修复覆盖掉。
 
+2026-05-13，本轮按用户参考截图继续收紧主设置 UI：
+
+- 默认窗口基准从 `900x680` 改为 `760x520`。在当前 200% DPI 开发机上，源码默认布局报告为 `1519x1039`，内容边界为 `1509x934`，不再留下大块底部空白。
+- 默认窗口仍显示“高级设置”；只有逻辑高度低于 `500` 时才隐藏高级设置，保证窄窗口/最小窗口仍是单页无滚动。
+- 热键/文件行改成“标签 + 输入框 + 录制/选择按钮”的顺序，贴近参考图，而不是把按钮插在输入框前面。
+- 紧凑模式下隐藏副标题和底部说明，保留三种模式块、豆包快捷键、插入延迟、剪贴板保护、开机自启动、高级延迟、状态和 6 个底部按钮。
+- 同步更新 `test-desktop-exe.ps1` 的 200% 默认窗口尺寸期望，从 `900x680` 改为 `760x520`。
+- 已跑：`python -m compileall doubaoime_asr`、`python -m pytest -q`、源码 UI 布局 JSON 断言、`build-desktop-exe.ps1`、`test-activation.ps1`、`test-license-stress.ps1`。
+- 阻塞：`test-desktop-exe.ps1` 和 `test-windows-compat.ps1` 在启动新打包 `dist\DoubaoASRHelper.exe` 时仍被 Windows 应用控制策略拦截，错误为“应用程序控制策略已阻止此文件”；`Unblock-File` 无效。需要代码签名或调整本机 Smart App Control/Code Integrity 策略后才能重新跑完整 EXE 截图链路。
+
 2026-05-13，本轮继续补齐可自动化的端到端缺口：
 
 - 剪贴板保护从纯文本恢复升级为 Windows 原生格式快照恢复；当前自动覆盖文本、`CF_DIB` 图片和 `CF_HDROP` 文件列表。`CF_BITMAP/CF_DIBV5` 属于 Windows 派生或不可搬运句柄，冻结 EXE 中会跳过。

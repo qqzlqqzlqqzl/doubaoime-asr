@@ -76,8 +76,8 @@ DELAY_SPECS = {
     "auto_send_delay_ms": (0, 500, 50),
 }
 BASE_TK_SCALING = 96 / 72
-DEFAULT_WINDOW_WIDTH = 900
-DEFAULT_WINDOW_HEIGHT = 680
+DEFAULT_WINDOW_WIDTH = 760
+DEFAULT_WINDOW_HEIGHT = 520
 MIN_WINDOW_WIDTH = 560
 MIN_WINDOW_HEIGHT = 420
 MAIN_WINDOW_TITLE = "豆包 ASR 助手"
@@ -1379,7 +1379,7 @@ class DesktopApp:
         self.active_keys: set[str] = set()
         self._layout_after_id: str | None = None
         self._layout_signature: tuple[int, int, int, float] | None = None
-        self._action_layout_signature: tuple[int, int, int, bool, bool] | None = None
+        self._action_layout_signature: tuple[int, int, int, bool, bool, bool] | None = None
         self.recording_session_id = 0
         self.recording_mode: str | None = None
         self.pending_mode: str | None = None
@@ -1657,7 +1657,7 @@ class DesktopApp:
         shell = tk.Frame(self.root, bg=UI_BG)
         shell.pack(fill="both", expand=True)
 
-        outer = tk.Frame(shell, padx=18, pady=14, bg=UI_BG)
+        outer = tk.Frame(shell, padx=12, pady=10, bg=UI_BG)
         outer.pack(fill="both", expand=True)
         self.root.bind("<Configure>", lambda _event: self.request_layout_settings_controls(), add="+")
         self.settings_outer = outer
@@ -1682,7 +1682,7 @@ class DesktopApp:
         self.settings_subtitle_label.pack(anchor="w", pady=(2, 0))
 
         table = tk.Frame(outer, bg=UI_BG)
-        table.pack(fill="x", pady=(10, 0))
+        table.pack(fill="x", pady=(6, 0))
         self.settings_table = table
         self.settings_sections.clear()
         self.settings_mode_groups.clear()
@@ -1707,7 +1707,7 @@ class DesktopApp:
         self._create_delay_row(common_body, "insert_delay_ms", "插入延迟：", "", *DELAY_SPECS["insert_delay_ms"], display="seconds")
 
         checks = tk.Frame(common_body, bg=UI_BG)
-        checks.pack(fill="x", pady=(2, 4))
+        checks.pack(fill="x", pady=(1, 3))
         self.settings_checks_frame = checks
         self.settings_checkbuttons.clear()
         self.settings_option_buttons.clear()
@@ -1726,7 +1726,7 @@ class DesktopApp:
         self._create_delay_entry_row(advanced_body, "auto_send_delay_ms", "发送延迟：", "推荐 0~100", *DELAY_SPECS["auto_send_delay_ms"])
 
         buttons = tk.Frame(outer, bg=UI_BG)
-        buttons.pack(fill="x", pady=(10, 8))
+        buttons.pack(fill="x", pady=(7, 5))
         self.action_buttons_frame = buttons
         self.action_buttons.clear()
         actions = [
@@ -1771,7 +1771,7 @@ class DesktopApp:
 
     def _build_mode_group(self, parent: tk.Widget, title: str) -> tk.Frame:
         group = tk.Frame(parent, bg=UI_CARD, highlightthickness=1, highlightbackground=UI_BORDER)
-        group.pack(fill="x", pady=(0, 7))
+        group.pack(fill="x", pady=(0, 5))
         title_label = tk.Label(
             group,
             text=f"【{title}】 模式",
@@ -1780,8 +1780,8 @@ class DesktopApp:
             font=("Microsoft YaHei UI", 10, "bold"),
             anchor="w",
         )
-        title_label.pack(anchor="w", padx=12, pady=(7, 0))
-        body = tk.Frame(group, bg=UI_CARD, padx=10, pady=5)
+        title_label.pack(anchor="w", padx=10, pady=(6, 0))
+        body = tk.Frame(group, bg=UI_CARD, padx=8, pady=4)
         body.pack(fill="x")
         self.settings_mode_groups.append(
             {
@@ -1794,15 +1794,15 @@ class DesktopApp:
 
     def _build_separator(self, parent: tk.Widget) -> None:
         separator = tk.Frame(parent, bg=UI_BORDER, height=1)
-        separator.pack(fill="x", pady=(2, 8))
+        separator.pack(fill="x", pady=(1, 6))
 
     def _build_settings_section(self, parent: tk.Widget, title: str, subtitle: str) -> tk.Frame:
         section = tk.Frame(parent, bg=UI_CARD, highlightthickness=1, highlightbackground=UI_BORDER)
-        section.pack(fill="x", pady=4)
-        body = tk.Frame(section, bg=UI_CARD, padx=12, pady=8)
+        section.pack(fill="x", pady=3)
+        body = tk.Frame(section, bg=UI_CARD, padx=10, pady=6)
         body.pack(fill="x")
         header = tk.Frame(body, bg=UI_CARD)
-        header.pack(fill="x", pady=(0, 5))
+        header.pack(fill="x", pady=(0, 3))
         title_label = tk.Label(
             header,
             text=title,
@@ -1841,7 +1841,7 @@ class DesktopApp:
         row_type: str,
     ) -> dict[str, object]:
         row_frame = tk.Frame(parent, bg=UI_CARD)
-        row_frame.pack(fill="x", pady=3)
+        row_frame.pack(fill="x", pady=2)
         label_widget = tk.Label(
             row_frame,
             text=label,
@@ -2131,10 +2131,10 @@ class DesktopApp:
             (logical_width <= 620 and logical_height <= 430)
             or logical_height <= 430
         )
-        compact = narrow or logical_available_width < 760
-        show_desc = not narrow and logical_height > 700
+        compact = narrow or logical_available_width < 760 or logical_height < 640
+        show_desc = not compact and not narrow and logical_height > 700
         show_section_headers = not tiny
-        hide_advanced_section = logical_height <= 700
+        hide_advanced_section = logical_height < 500
         desc_wrap = int(
             min(
                 max(220 * ui_scale, available_width * 0.24),
@@ -2182,9 +2182,9 @@ class DesktopApp:
                 else:
                     self.settings_title_label.pack(anchor="w")
         if self.settings_subtitle_label is not None:
-            if (tiny or short) and self.settings_subtitle_label.winfo_ismapped():
+            if (tiny or short or compact) and self.settings_subtitle_label.winfo_ismapped():
                 self.settings_subtitle_label.pack_forget()
-            elif not tiny and not short and not self.settings_subtitle_label.winfo_ismapped():
+            elif not tiny and not short and not compact and not self.settings_subtitle_label.winfo_ismapped():
                 self.settings_subtitle_label.pack(anchor="w", pady=(2, 0))
         if self.settings_status_label is not None:
             self.settings_status_label.configure(
@@ -2196,7 +2196,7 @@ class DesktopApp:
             self.settings_status_label.pack_configure(padx=(8 if tiny else 14, 0))
 
         if self.settings_table is not None:
-            self.settings_table.pack_configure(pady=(3 if tiny else 7 if short else 10, 0))
+            self.settings_table.pack_configure(pady=(3 if tiny else 5 if short or compact else 8, 0))
 
         for group in self.settings_mode_groups:
             group_frame = group.get("group")
@@ -2204,12 +2204,12 @@ class DesktopApp:
             body = group.get("body")
             if isinstance(group_frame, tk.Frame):
                 group_frame.configure(highlightthickness=0 if tiny else 1)
-                group_frame.pack_configure(pady=(0, 3 if tiny else 5 if short else 7))
+                group_frame.pack_configure(pady=(0, 3 if tiny else 4 if short or compact else 6))
             if isinstance(title, tk.Label):
                 title.configure(font=("Microsoft YaHei UI", normal_size, "bold"))
-                title.pack_configure(padx=8 if tiny else 12, pady=(4 if tiny else 7, 0))
+                title.pack_configure(padx=8 if tiny else 10, pady=(4 if tiny else 5 if short or compact else 6, 0))
             if isinstance(body, tk.Frame):
-                body.configure(padx=8 if tiny else 10, pady=3 if tiny else 5)
+                body.configure(padx=8 if tiny else 9 if short or compact else 10, pady=3 if tiny else 4 if short or compact else 5)
 
         for section in self.settings_sections:
             section_frame = section.get("section")
@@ -2231,11 +2231,11 @@ class DesktopApp:
                         section_frame.pack_forget()
                     continue
                 if not section_frame.winfo_ismapped():
-                    section_frame.pack(fill="x", pady=4)
+                    section_frame.pack(fill="x", pady=3)
                 section_frame.configure(highlightthickness=0 if tiny else 1)
-                section_frame.pack_configure(pady=0 if tiny else 3 if short else 4)
+                section_frame.pack_configure(pady=0 if tiny else 2 if short or compact else 3)
             if isinstance(body, tk.Frame):
-                body.configure(padx=8 if tiny else 10 if short else 12, pady=0 if tiny else 5 if short else 8)
+                body.configure(padx=8 if tiny else 9 if short or compact else 10, pady=0 if tiny else 4 if short or compact else 6)
             if isinstance(header, tk.Frame):
                 if show_section_headers:
                     if not header.winfo_ismapped():
@@ -2244,7 +2244,7 @@ class DesktopApp:
                             header.pack(fill="x", before=siblings[0])
                         else:
                             header.pack(fill="x")
-                    header.pack_configure(pady=(0, 3 if short else 5))
+                    header.pack_configure(pady=(0, 2 if short or compact else 3))
                 elif header.winfo_ismapped():
                     header.pack_forget()
             if isinstance(title, tk.Label):
@@ -2330,7 +2330,7 @@ class DesktopApp:
 
             if kind == "delay_entry" and isinstance(unit, tk.Label):
                 frame.columnconfigure(0, minsize=info_col_width)
-                frame.columnconfigure(1, minsize=90 if not tiny else 70)
+                frame.columnconfigure(1, minsize=86 if not tiny else 70)
                 label.grid(row=0, column=0, sticky="w", padx=(0, 8))
                 entry.grid(row=0, column=1, sticky="ew", padx=(0, 6))
                 unit.grid(row=0, column=2, sticky="w", padx=(0, 12))
@@ -2340,27 +2340,27 @@ class DesktopApp:
 
             if narrow:
                 frame.columnconfigure(0, minsize=info_col_width)
-                frame.columnconfigure(2 if button is not None else 1, weight=1)
+                frame.columnconfigure(1, weight=1)
                 label.grid(row=0, column=0, sticky="w", padx=(0, 6))
                 if button is not None:
                     button.configure(width=4)
-                    frame.columnconfigure(1, minsize=button_col_width)
-                    button.grid(row=0, column=1, sticky="ew", padx=(0, 6))
-                    entry.grid(row=0, column=2, sticky="ew")
+                    frame.columnconfigure(2, minsize=button_col_width)
+                    entry.grid(row=0, column=1, sticky="ew", padx=(0, 6))
+                    button.grid(row=0, column=2, sticky="ew")
                 else:
                     entry.grid(row=0, column=1, columnspan=2, sticky="ew")
             else:
                 frame.columnconfigure(0, minsize=info_col_width)
-                frame.columnconfigure(2, weight=1)
+                frame.columnconfigure(1, weight=1)
                 label.grid(row=0, column=0, sticky="w", padx=(0, 14), pady=(0, 1 if row_show_desc else 0))
                 if row_show_desc:
                     desc.grid(row=1, column=0, columnspan=3, sticky="w", padx=(0, 14))
                 row_span = 1
                 if button is not None:
                     button.configure(width=5)
-                    frame.columnconfigure(1, minsize=button_col_width)
-                    button.grid(row=0, column=1, rowspan=row_span, padx=(0, 8))
-                    entry.grid(row=0, column=2, rowspan=row_span, sticky="ew")
+                    frame.columnconfigure(2, minsize=button_col_width)
+                    entry.grid(row=0, column=1, rowspan=row_span, sticky="ew", padx=(0, 8))
+                    button.grid(row=0, column=2, rowspan=row_span)
                 else:
                     entry.grid(row=0, column=1, columnspan=2, rowspan=row_span, sticky="ew")
 
@@ -2396,7 +2396,7 @@ class DesktopApp:
                 font=desc_font,
                 wraplength=max(240, available_width - 20),
             )
-            if tiny or short:
+            if tiny or short or compact:
                 self.settings_help_label.pack_forget()
             elif not self.settings_help_label.winfo_ismapped():
                 self.settings_help_label.pack(anchor="w")
@@ -2410,19 +2410,20 @@ class DesktopApp:
         logical_width = width / max(ui_scale, 1.0)
         logical_height = root_height / max(ui_scale, 1.0)
         tight = logical_width <= 620 or logical_height <= 540
+        compact = logical_width <= 780 or logical_height <= 640
         roomy = logical_width >= 760 and logical_height >= 600
         if logical_height <= 430 and width >= 520:
             columns = len(self.action_buttons)
         else:
             columns = len(self.action_buttons) if width >= 720 else 3 if width >= 500 else 2 if width >= 340 else 1
-        signature = (width // 24, root_height // 24, columns, tight, roomy)
+        signature = (width // 24, root_height // 24, columns, tight, compact, roomy)
         if not force and signature == self._action_layout_signature:
             return
         self._action_layout_signature = signature
         button_font = ("Microsoft YaHei UI", 8 if tight else 9)
-        button_padx = 2 if root_height <= 430 else 3 if tight else 6
-        button_pady = 0 if root_height <= 430 else 1 if tight else 4
-        self.action_buttons_frame.pack_configure(pady=(5 if tight else 12, 0 if tight else 12))
+        button_padx = 2 if root_height <= 430 else 3 if tight or compact else 6
+        button_pady = 0 if root_height <= 430 else 1 if tight or compact else 4
+        self.action_buttons_frame.pack_configure(pady=(5 if tight or compact else 10, 0 if tight or compact else 10))
         for column in range(6):
             self.action_buttons_frame.columnconfigure(column, weight=0)
         for button in self.action_buttons:

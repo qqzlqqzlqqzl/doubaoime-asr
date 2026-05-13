@@ -905,8 +905,8 @@ function Assert-DefaultScaleWindowComfortable {
   $ScreenWidth = [int]$Layout.display.screen_width
   $ScreenHeight = [int]$Layout.display.screen_height
   $WindowScale = [Math]::Min([Math]::Max($Scale, 1.0), 2.5)
-  $ExpectedWidth = [Math]::Min([int][Math]::Round(900 * $WindowScale), [int]($ScreenWidth * 0.9))
-  $ExpectedHeight = [Math]::Min([int][Math]::Round(680 * $WindowScale), [int]($ScreenHeight * 0.88))
+  $ExpectedWidth = [Math]::Min([int][Math]::Round(760 * $WindowScale), [int]($ScreenWidth * 0.9))
+  $ExpectedHeight = [Math]::Min([int][Math]::Round(520 * $WindowScale), [int]($ScreenHeight * 0.88))
   $RootWidth = [int]$Layout.root.width
   $RootHeight = [int]$Layout.root.height
   if ($RootWidth -lt ($ExpectedWidth - 32) -or $RootHeight -lt ($ExpectedHeight - 32)) {

@@ -20,6 +20,8 @@
 
 分发阻断备注：2026-05-13 最后一轮为恢复测试配置/授权状态重新打包后，本机 Windows 11 Smart App Control / Code Integrity 拦截了未签名主 EXE，事件日志提示 `did not meet Enterprise signing level requirements`。在此之前，同轮新增的安装版复杂剪贴板、启动脚本、授权断网测试已跑通；最后一轮源码级对应测试也已跑通。该阻断说明正式外部分发必须做可信代码签名，不能把当前未签名包视为已覆盖所有 Windows 11 安全策略环境。
 
+紧凑 UI 复测备注：2026-05-13 本轮将默认主窗口基准改为 `760x520`，热键行改成“标签 + 输入框 + 录制/选择按钮”的参考图顺序，并同步更新 200% 默认窗口断言。源码布局报告已重新生成并通过本地 JSON 断言：`source-ui-default-layout.json` 为 `root=1519x1039`、`content=1509x934`、`widgets=73`；`source-ui-compact-layout.json` 为 `root=760x567`、`content=754x557`、`widgets=50`；`source-ui-narrow-layout.json` 为 `root=760x567`、`content=754x470`；`source-ui-minimum-layout.json` 为 `root=756x567`、`content=750x557`。这些报告均为 `fits_horizontally=true` 且 `fits_vertically=true`。本轮 `build-desktop-exe.ps1` 成功重新生成安装包和免安装包，但 `test-desktop-exe.ps1` 与 `test-windows-compat.ps1` 启动新 EXE 时仍被“应用程序控制策略已阻止此文件”拦截，`Unblock-File` 后仍无法启动，因此本轮没有新的安装版 UI 截图证据。
+
 ## 汇总表
 
 | 编号 | 测试项 | 状态 | 证据 |
@@ -41,15 +43,15 @@
 | T15 | 干净电脑免安装闭环 | NOT_RUN | 未跑。需要一台无 Python、无项目环境的 Win10/Win11。当前机器是开发机，不符合“干净电脑”条件。 |
 | T16 | 卸载闭环 | PARTIAL | 新证据 `release/test-reports/isolated-uninstall-cleanup-test.json`：沙箱环境安装成功，开始菜单/桌面快捷方式和启动项均创建；运行卸载脚本后 `uninstall_exit_code=0`、`install_dir_removed=true`、`start_menu_dir_removed=true`、`desktop_shortcut_removed=true`、`startup_bat_removed=true`。该项仍未在真实用户开始菜单/真实开机自启动状态下人工验证，运行中进程处理只由脚本 smoke 覆盖。 |
 | T17 | 长时间后台稳定闭环 | NOT_RUN | 未跑。需要 2 到 8 小时后台运行和 50 到 100 次录音。 |
-| T18 | 多屏/DPI 真实机器闭环 | PARTIAL | 自动化 DPI 截图和布局 PASS：`release/test-reports/installed-ui-smoke-scale150-minimum-layout.json`、`installed-ui-smoke-scale200-default-layout.json` 等。真实 1080p/2K/4K、多屏、主副屏 DPI 不一致尚未跑。 |
+| T18 | 多屏/DPI 真实机器闭环 | PARTIAL | 旧安装版自动化 DPI 截图和布局曾 PASS：`release/test-reports/installed-ui-smoke-scale150-minimum-layout.json`、`installed-ui-smoke-scale200-default-layout.json` 等。本轮紧凑 UI 源码布局 PASS：`source-ui-default-layout.json`、`source-ui-compact-layout.json`、`source-ui-narrow-layout.json`、`source-ui-minimum-layout.json` 均不溢出；但新打包 EXE 被 Windows 应用控制策略阻止，未产出新安装版截图。真实 1080p/2K/4K、多屏、主副屏 DPI 不一致尚未跑。 |
 | T19 | 受控激活版闭环 | PARTIAL | 激活逻辑测试 PASS：`test-activation.ps1` 产生 12 passed；强制激活配置自测证据 `release/test-reports/activation-required-self-test.json`。真实受控分发 EXE、换电脑绑定、过期/停用人工流程尚未跑。 |
 | T20 | 网络异常闭环 | PARTIAL | 新证据 `release/test-reports/installed-license-network-test.json`：`ordinary_build_ok=true`、`required_build_blocks=true`、`cached_token_preserved=true`，服务器地址为不可达的 `http://127.0.0.1:9`。该项覆盖授权服务器不可达的打包版烟测，但仍未覆盖系统级断网/弱网、真实 ASR 服务异常和完整用户录音流程。 |
 
 ## 已完成的基础证据
 
 - 源码自测：`release/test-reports/e2e-source-self-test.json`，状态 PASS。
-- 打包 EXE/UI/托盘/安装版测试：`test-desktop-exe.ps1` 已通过，证据在 `release/test-reports/dist-self-test.json`、`portable-self-test.json`、`installed-self-test.json`、`installed-tray-self-test.json`、`installed-ui-smoke*.json/png`、`installed-clipboard-insert-test.json`、`installed-clipboard-complex-test.json`、`installed-startup-script-test.json`、`installed-license-network-test.json`、`isolated-uninstall-cleanup-test.json`。
-- 本机追加验证：在 `64e49f0` 之前的工作区运行过 `build-desktop-exe.ps1`、`test-desktop-exe.ps1`、`test-windows-compat.ps1`、`test-activation.ps1`、`test-license-stress.ps1`、`test-long-text-asr.ps1`；本次提交后也重新运行了 `build-desktop-exe.ps1`、`test-desktop-exe.ps1`、`test-windows-compat.ps1`、`test-activation.ps1`、`test-license-stress.ps1`、`test-long-text-asr.ps1`。桌面 EXE 测试覆盖 `820x680`、`760x520`、`560x420`、150% DPI、200% DPI 和默认 200% DPI 窗口。
+- 打包 EXE/UI/托盘/安装版测试：`test-desktop-exe.ps1` 曾通过，证据在 `release/test-reports/dist-self-test.json`、`portable-self-test.json`、`installed-self-test.json`、`installed-tray-self-test.json`、`installed-ui-smoke*.json/png`、`installed-clipboard-insert-test.json`、`installed-clipboard-complex-test.json`、`installed-startup-script-test.json`、`installed-license-network-test.json`、`isolated-uninstall-cleanup-test.json`。本轮紧凑 UI 重新打包后，完整 EXE 测试被 Windows 应用控制策略阻止，不能算新包通过。
+- 本机追加验证：在 `64e49f0` 之前的工作区运行过 `build-desktop-exe.ps1`、`test-desktop-exe.ps1`、`test-windows-compat.ps1`、`test-activation.ps1`、`test-license-stress.ps1`、`test-long-text-asr.ps1`。本轮紧凑 UI 后已重新运行 `python -m compileall doubaoime_asr`、`python -m pytest -q`、源码 UI 布局 JSON 断言、`build-desktop-exe.ps1`、`test-activation.ps1`、`test-license-stress.ps1`；`test-desktop-exe.ps1` 和 `test-windows-compat.ps1` 均被系统策略拦截在启动新 EXE 阶段。
 - 长文本文件 ASR：`release/test-reports/long-text-asr.json`，`ok=true`，识别 556 字，关键词 9 个。
 - 耳机声学 ASR：`release/test-reports/headset-loopback-asr.json`，`ok=true`，识别 552 字，关键词 9 个。
 
