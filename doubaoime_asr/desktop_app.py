@@ -81,6 +81,7 @@ FLOAT_MIN_WIDTH = 560
 FLOAT_MAX_WIDTH = 960
 FLOAT_MAX_LINES = 12
 APP_ICON_RELATIVE_PATH = Path("assets") / "app.ico"
+APP_USER_MODEL_ID = "DoubaoASRHelper.Desktop"
 _DPI_AWARENESS_CONFIGURED = False
 
 
@@ -101,6 +102,15 @@ def app_icon_path() -> Path | None:
         if bundled_icon.exists():
             return bundled_icon
     return None
+
+
+def configure_windows_app_identity() -> None:
+    if sys.platform != "win32":
+        return
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
+    except (AttributeError, OSError):
+        pass
 
 
 if sys.platform == "win32" and wintypes is not None:
@@ -842,6 +852,7 @@ class DesktopApp:
         ui_window_size: str | None = None,
         ui_scale_factor: float | None = None,
     ) -> None:
+        configure_windows_app_identity()
         configure_process_dpi_awareness()
         self.root = tk.Tk()
         self._quitting = False
@@ -1500,6 +1511,23 @@ class DesktopApp:
         normal_font = ("Microsoft YaHei UI", normal_size)
         desc_font = ("Microsoft YaHei UI", desc_size)
         label_font = ("Microsoft YaHei UI", normal_size, "bold")
+        button_font = ("Microsoft YaHei UI", 8 if tiny else 9, "bold")
+        label_font_metrics = tkfont.Font(root=self.root, font=label_font)
+        button_font_metrics = tkfont.Font(root=self.root, font=button_font)
+        label_col_width = max(
+            64,
+            max(
+                (
+                    label_font_metrics.measure(str(row["label"].cget("text"))) + (16 if tiny else 28)
+                    for row in self.settings_rows
+                    if isinstance(row.get("label"), tk.Label)
+                ),
+                default=64,
+            ),
+        )
+        desc_col_width = 0 if not show_desc else max(120, desc_wrap)
+        desc_label_wrap = max(90, desc_col_width - (14 if tiny else 24))
+        button_col_width = max(button_font_metrics.measure("选择") + 28, button_font_metrics.measure("录制") + 28, 56)
 
         if self.settings_outer is not None:
             self.settings_outer.configure(padx=outer_padx, pady=outer_pady)
@@ -1580,14 +1608,15 @@ class DesktopApp:
                     elif isinstance(widget, (tk.Entry, ttk.Entry)):
                         widget.configure(font=normal_font)
                     elif isinstance(widget, tk.Button):
-                        widget.configure(font=("Microsoft YaHei UI", 8 if tiny else 9, "bold"))
+                        widget.configure(font=button_font)
             for column in range(6):
                 frame.columnconfigure(column, weight=0, minsize=0)
 
             if isinstance(desc, tk.Label):
-                desc.configure(wraplength=desc_wrap)
+                desc.configure(wraplength=desc_label_wrap)
 
             if kind == "delay" and isinstance(scale, (tk.Scale, ttk.Scale)) and isinstance(unit, tk.Label):
+                frame.columnconfigure(0, minsize=label_col_width)
                 if narrow:
                     frame.columnconfigure(1, weight=1)
                     label.grid(row=0, column=0, sticky="w", padx=(0, 6))
@@ -1598,6 +1627,8 @@ class DesktopApp:
                     scale_column = 2 if show_desc else 1
                     entry_column = scale_column + 1
                     unit_column = entry_column + 1
+                    if show_desc:
+                        frame.columnconfigure(1, minsize=desc_col_width)
                     frame.columnconfigure(scale_column, weight=1)
                     label.grid(row=0, column=0, sticky="w", padx=(0, 12))
                     if show_desc:
@@ -1608,21 +1639,27 @@ class DesktopApp:
                 continue
 
             if narrow:
+                frame.columnconfigure(0, minsize=label_col_width)
                 frame.columnconfigure(2 if button is not None else 1, weight=1)
                 label.grid(row=0, column=0, sticky="w", padx=(0, 6))
                 if button is not None:
                     button.configure(width=4)
+                    frame.columnconfigure(1, minsize=button_col_width)
                     button.grid(row=0, column=1, sticky="ew", padx=(0, 6))
                     entry.grid(row=0, column=2, sticky="ew")
                 else:
                     entry.grid(row=0, column=1, columnspan=2, sticky="ew")
             else:
+                frame.columnconfigure(0, minsize=label_col_width)
+                if show_desc:
+                    frame.columnconfigure(1, minsize=desc_col_width)
                 frame.columnconfigure(3, weight=1)
                 label.grid(row=0, column=0, sticky="w", padx=(0, 12))
                 if show_desc:
                     desc.grid(row=0, column=1, sticky="w", padx=(0, 12))
                 if button is not None:
                     button.configure(width=5)
+                    frame.columnconfigure(2 if show_desc else 1, minsize=button_col_width)
                     button.grid(row=0, column=2 if show_desc else 1, padx=(0, 8))
                     entry.grid(row=0, column=3 if show_desc else 2, sticky="ew")
                 else:

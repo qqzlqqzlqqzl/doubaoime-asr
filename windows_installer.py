@@ -35,6 +35,7 @@ $shortcut.TargetPath = '{str(target).replace("'", "''")}'
 $shortcut.Arguments = '{arguments.replace("'", "''")}'
 $shortcut.WorkingDirectory = '{str(target.parent).replace("'", "''")}'
 $shortcut.Description = '{description.replace("'", "''")}'
+$shortcut.IconLocation = '{str(target).replace("'", "''")},0'
 $shortcut.Save()
 """
     subprocess.run(

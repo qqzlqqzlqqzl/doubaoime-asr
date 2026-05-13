@@ -6,6 +6,7 @@ $SetupExe = Join-Path $Root "dist\DoubaoASRHelperSetup.exe"
 $PortableExe = Join-Path $Root "release\DoubaoASRHelper-portable.exe"
 $PortableZip = Join-Path $Root "release\DoubaoASRHelper-Portable.zip"
 $ReleaseZip = Join-Path $Root "release\DoubaoASRHelper-Windows.zip"
+$AppIcon = Join-Path $Root "doubaoime_asr\assets\app.ico"
 $ReportsDir = Join-Path $Root "release\test-reports"
 New-Item -ItemType Directory -Force -Path $ReportsDir | Out-Null
 
@@ -68,6 +69,90 @@ $HwndBottom = [IntPtr](1)
 $SwpShowWindow = [uint32]0x0040
 $SwpNoActivate = [uint32]0x0010
 $MainWindowTitle = [string]::Concat([char]0x8C46, [char]0x5305, " ASR ", [char]0x52A9, [char]0x624B)
+
+function Assert-CustomAppIcon {
+  param([Parameter(Mandatory = $true)][string]$ExePath)
+
+  if (-not (Test-Path $AppIcon)) {
+    throw "Missing bundled app icon: $AppIcon"
+  }
+  if ((Get-Item -LiteralPath $AppIcon).Length -lt 10000) {
+    throw "Bundled app icon is too small to contain the multi-size custom icon: $AppIcon"
+  }
+  if (-not (Test-Path $ExePath)) {
+    throw "Missing executable for icon check: $ExePath"
+  }
+
+  $Icon = [System.Drawing.Icon]::ExtractAssociatedIcon($ExePath)
+  if ($null -eq $Icon) {
+    throw "Could not extract executable icon: $ExePath"
+  }
+  try {
+    $Bitmap = $Icon.ToBitmap()
+    try {
+      $BluePixels = 0
+      $GreenPixels = 0
+      $LightPixels = 0
+      for ($X = 0; $X -lt $Bitmap.Width; $X++) {
+        for ($Y = 0; $Y -lt $Bitmap.Height; $Y++) {
+          $Pixel = $Bitmap.GetPixel($X, $Y)
+          if ($Pixel.A -lt 160) {
+            continue
+          }
+          if ($Pixel.B -gt 150 -and $Pixel.G -gt 80 -and $Pixel.R -lt 120) {
+            $BluePixels++
+          }
+          if ($Pixel.G -gt 170 -and $Pixel.R -lt 190 -and $Pixel.B -lt 230) {
+            $GreenPixels++
+          }
+          if ($Pixel.R -gt 220 -and $Pixel.G -gt 220 -and $Pixel.B -gt 220) {
+            $LightPixels++
+          }
+        }
+      }
+      if ($BluePixels -lt 20 -or $GreenPixels -lt 4 -or $LightPixels -lt 10) {
+        throw "Executable icon does not look like the bundled Doubao ASR microphone icon: $ExePath"
+      }
+    }
+    finally {
+      $Bitmap.Dispose()
+    }
+  }
+  finally {
+    $Icon.Dispose()
+  }
+}
+
+function Assert-ShortcutUsesAppIcon {
+  param([Parameter(Mandatory = $true)][string]$TargetExe)
+
+  $Python = Join-Path $Root ".venv\Scripts\python.exe"
+  if (-not (Test-Path $Python)) {
+    throw "Missing test Python: $Python"
+  }
+  $Shortcut = Join-Path $ReportsDir "shortcut-icon-test.lnk"
+  Remove-Item -LiteralPath $Shortcut -Force -ErrorAction SilentlyContinue
+  $OldShortcutPath = $env:DOUBAO_SHORTCUT_TEST_PATH
+  $OldShortcutTarget = $env:DOUBAO_SHORTCUT_TEST_TARGET
+  try {
+    $env:DOUBAO_SHORTCUT_TEST_PATH = $Shortcut
+    $env:DOUBAO_SHORTCUT_TEST_TARGET = $TargetExe
+    & $Python -c "import os; from pathlib import Path; from windows_installer import create_shortcut; create_shortcut(Path(os.environ['DOUBAO_SHORTCUT_TEST_PATH']), Path(os.environ['DOUBAO_SHORTCUT_TEST_TARGET']), 'Doubao ASR icon smoke')"
+    if ($LASTEXITCODE -ne 0) {
+      throw "Shortcut icon smoke creation failed"
+    }
+  }
+  finally {
+    $env:DOUBAO_SHORTCUT_TEST_PATH = $OldShortcutPath
+    $env:DOUBAO_SHORTCUT_TEST_TARGET = $OldShortcutTarget
+  }
+  $Shell = New-Object -ComObject WScript.Shell
+  $Link = $Shell.CreateShortcut($Shortcut)
+  $Expected = "$TargetExe,0"
+  if ($Link.IconLocation -ne $Expected) {
+    throw "Shortcut does not pin the app icon. Expected '$Expected', got '$($Link.IconLocation)'"
+  }
+}
 
 function Invoke-AppSelfTest {
   param(
@@ -399,6 +484,22 @@ function Assert-UiLayoutFits {
       throw "UI layout report missing setting entry $Index"
     }
   }
+  $AlignedButtons = @($Layout.widgets | Where-Object { $_.name -match '^setting-(0|1|2|3|4|7)-button$' })
+  if ($AlignedButtons.Count -ge 2) {
+    $ButtonXs = @($AlignedButtons | ForEach-Object { [int]$_.x })
+    $ButtonSpread = ($ButtonXs | Measure-Object -Maximum).Maximum - ($ButtonXs | Measure-Object -Minimum).Minimum
+    if ($ButtonSpread -gt 8) {
+      throw "Setting record/select buttons are not vertically aligned: $($AlignedButtons.name -join ', ')"
+    }
+  }
+  $AlignedEntries = @($Layout.widgets | Where-Object { $_.name -match '^setting-(0|1|2|3|4|7)-entry$' })
+  if ($AlignedEntries.Count -ge 2) {
+    $EntryXs = @($AlignedEntries | ForEach-Object { [int]$_.x })
+    $EntrySpread = ($EntryXs | Measure-Object -Maximum).Maximum - ($EntryXs | Measure-Object -Minimum).Minimum
+    if ($EntrySpread -gt 8) {
+      throw "Setting text entries are not vertically aligned: $($AlignedEntries.name -join ', ')"
+    }
+  }
   $ExpectedActionButtons = 6
   $ActionButtons = @($Layout.widgets | Where-Object { $_.name -like "action-*" })
   if ($ActionButtons.Count -ne $ExpectedActionButtons) {
@@ -524,6 +625,9 @@ function Remove-WithRetry {
 
 Invoke-AppSelfTest -ExePath $DistExe -ReportName "dist-self-test.json" | Out-Host
 Invoke-AppSelfTest -ExePath $PortableExe -ReportName "portable-self-test.json" | Out-Host
+Assert-CustomAppIcon -ExePath $DistExe | Out-Host
+Assert-CustomAppIcon -ExePath $SetupExe | Out-Host
+Assert-CustomAppIcon -ExePath $PortableExe | Out-Host
 Invoke-TraySelfTest -ExePath $DistExe -ReportName "dist-tray-self-test.json" | Out-Host
 Invoke-TraySelfTest -ExePath $PortableExe -ReportName "portable-tray-self-test.json" | Out-Host
 
@@ -595,6 +699,8 @@ if ($Install.ExitCode -ne 0) {
 
 $InstalledExe = Join-Path $InstallTarget "DoubaoASRHelper.exe"
 Invoke-AppSelfTest -ExePath $InstalledExe -ReportName "installed-self-test.json" | Out-Host
+Assert-CustomAppIcon -ExePath $InstalledExe | Out-Host
+Assert-ShortcutUsesAppIcon -TargetExe $InstalledExe | Out-Host
 Invoke-TraySelfTest -ExePath $InstalledExe -ReportName "installed-tray-self-test.json" | Out-Host
 Invoke-FloatLayoutTest -ExePath $InstalledExe -ReportName "installed-float-layout-long-text.json" | Out-Host
 Assert-CloseToTrayKeepsAlive -ExePath $InstalledExe | Out-Host
