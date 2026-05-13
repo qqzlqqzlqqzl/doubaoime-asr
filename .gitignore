@@ -4,6 +4,7 @@ __pycache__/
 *.py[cod]
 build/
 dist/
+release/
 wheels/
 *.egg-info
 .pytest_cache/

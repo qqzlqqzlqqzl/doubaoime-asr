@@ -14,7 +14,7 @@ from typing import Iterable
 
 import sounddevice as sd
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import filedialog, messagebox
 from pynput import keyboard, mouse
 
 if getattr(sys, "frozen", False):
@@ -24,8 +24,11 @@ if getattr(sys, "frozen", False):
 from doubaoime_asr import ASRConfig, ResponseType, transcribe_realtime
 
 
-CONFIG_PATH = Path.home() / ".doubaoime-asr" / "desktop-config.json"
-STARTUP_BAT = Path.home() / "AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/doubaoime-asr.bat"
+APP_CONFIG_DIR = Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming")) / "DoubaoASRHelper"
+CONFIG_PATH = APP_CONFIG_DIR / "desktop-config.json"
+LEGACY_CONFIG_PATH = Path.home() / ".doubaoime-asr" / "desktop-config.json"
+DEFAULT_CREDENTIAL_PATH = APP_CONFIG_DIR / "credentials.json"
+STARTUP_BAT = Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming")) / "Microsoft/Windows/Start Menu/Programs/Startup/doubaoime-asr.bat"
 HOTKEY_LABELS = {
     "hold_key": "按着说触发键",
     "toggle_key": "自由说触发键",
@@ -46,17 +49,30 @@ class DesktopConfig:
     auto_send_delay_ms: int = 50
     protect_clipboard: bool = True
     startup: bool = False
-    credential_path: str = "credentials.json"
+    credential_path: str = str(DEFAULT_CREDENTIAL_PATH)
+
+
+def resolve_user_path(value: str | Path) -> Path:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = APP_CONFIG_DIR / path
+    return path
+
+
+def normalize_config(config: DesktopConfig) -> DesktopConfig:
+    config.credential_path = str(resolve_user_path(config.credential_path))
+    return config
 
 
 def load_config() -> DesktopConfig:
-    if not CONFIG_PATH.exists():
-        return DesktopConfig()
+    path = CONFIG_PATH if CONFIG_PATH.exists() else LEGACY_CONFIG_PATH
+    if not path.exists():
+        return normalize_config(DesktopConfig())
     try:
-        data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        return DesktopConfig(**{**asdict(DesktopConfig()), **data})
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return normalize_config(DesktopConfig(**{**asdict(DesktopConfig()), **data}))
     except Exception:
-        return DesktopConfig()
+        return normalize_config(DesktopConfig())
 
 
 def save_config(config: DesktopConfig) -> None:
@@ -239,6 +255,8 @@ class DesktopApp:
             self.entries[key] = entry
             if key.endswith("_key"):
                 tk.Button(value_frame, text="录制", command=lambda field=key: self.start_key_record(field), width=6).pack(side="left", padx=(6, 0))
+            elif key == "credential_path":
+                tk.Button(value_frame, text="选择", command=self.select_credential_file, width=6).pack(side="left", padx=(6, 0))
         table.columnconfigure(1, weight=1)
         table.columnconfigure(2, weight=0, minsize=180)
 
@@ -253,6 +271,7 @@ class DesktopApp:
         buttons.pack(fill="x", pady=(4, 16))
         tk.Button(buttons, text="保存配置", command=self.save_from_ui, width=14).pack(side="left")
         tk.Button(buttons, text="显示悬浮窗", command=lambda: self.show_float("")).pack(side="left", padx=10)
+        tk.Button(buttons, text="打开配置目录", command=self.open_config_dir, width=14).pack(side="left")
         tk.Button(buttons, text="隐藏窗口", command=self.root.withdraw, width=14).pack(side="right")
 
         help_text = (
@@ -265,6 +284,22 @@ class DesktopApp:
         self.recording_field = field
         self.active_keys.clear()
         self.status_var.set("请按下新的快捷键，支持键盘组合键或鼠标侧键")
+
+    def select_credential_file(self) -> None:
+        initial_dir = resolve_user_path(self.entries["credential_path"].get()).parent
+        initial_dir.mkdir(parents=True, exist_ok=True)
+        selected = filedialog.askopenfilename(
+            title="选择凭据缓存文件",
+            initialdir=str(initial_dir),
+            filetypes=[("JSON 文件", "*.json"), ("所有文件", "*.*")],
+        )
+        if selected:
+            self.entries["credential_path"].delete(0, "end")
+            self.entries["credential_path"].insert(0, selected)
+
+    def open_config_dir(self) -> None:
+        APP_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        os.startfile(APP_CONFIG_DIR)
 
     def _build_float_window(self) -> None:
         self.float_win = tk.Toplevel(self.root)
@@ -295,7 +330,14 @@ class DesktopApp:
         for key, entry in self.entries.items():
             value: str | int = entry.get().strip()
             if key.endswith("_ms"):
-                value = int(value)
+                try:
+                    value = int(value)
+                except ValueError:
+                    messagebox.showwarning("配置错误", f"{key} 必须是数字。")
+                    self.status_var.set("配置错误，请检查数字项")
+                    return
+            elif key == "credential_path":
+                value = str(resolve_user_path(value))
             setattr(self.config, key, value)
         self.config.protect_clipboard = self.vars["protect_clipboard"].get()
         self.config.startup = self.vars["startup"].get()
@@ -445,7 +487,7 @@ class DesktopApp:
                 yield chunk
 
         async def runner() -> None:
-            config = ASRConfig(credential_path=self.config.credential_path)
+            config = ASRConfig(credential_path=str(resolve_user_path(self.config.credential_path)))
             async for response in transcribe_realtime(source(), config=config):
                 if response.type in {ResponseType.INTERIM_RESULT, ResponseType.FINAL_RESULT} and response.text:
                     self.final_text = response.text

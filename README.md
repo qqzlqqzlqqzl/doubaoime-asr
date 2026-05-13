@@ -206,15 +206,24 @@ doubaoime-asr-desktop
 | 插入延迟 | `300ms` |
 | 自动发送延迟 | `50ms` |
 
-工具会在后台监听全局热键，录音时显示悬浮窗，识别完成后把文本粘贴回开始录音前的窗口。配置文件保存在 `~/.doubaoime-asr/desktop-config.json`。
+工具会在后台监听全局热键，录音时显示悬浮窗，识别完成后把文本粘贴回开始录音前的窗口。
+配置和凭据缓存默认保存在 `%APPDATA%\DoubaoASRHelper`，因此打包后不依赖项目目录。
 
 每个热键输入框右侧都有「录制」按钮，点击后直接按下想要的键盘组合键或鼠标侧键即可完成自定义。
 保存配置和录制快捷键时会检查工具内部的按键冲突，并在发现重复配置时弹窗提示。
 
-打包桌面版 exe：
+打包桌面版和 Windows 分发包：
 
 ```powershell
 .\build-desktop-exe.ps1
 ```
 
-产物会生成到 `dist\DoubaoASRHelper.exe`。
+产物：
+
+| 文件 | 用途 |
+|------|------|
+| `dist\DoubaoASRHelper.exe` | 主程序 one-file exe |
+| `dist\DoubaoASRHelperSetup.exe` | 当前用户安装器，会安装到 `%LOCALAPPDATA%\DoubaoASRHelper` 并创建快捷方式 |
+| `release\DoubaoASRHelper-Windows.zip` | 给其他电脑分发的压缩包，包含安装器、便携版和说明 |
+
+首次运行会自动在用户目录创建凭据缓存文件；也可以在 UI 里点击「选择」改用已有的 `credentials.json`。
