@@ -12,8 +12,13 @@
 - `T01-direct` 使用源码里的 `DesktopApp` 直接调起录音流程，不是打包 EXE 的完整热键闭环，也绕过了物理 `右 Ctrl` 热键层。它只能证明“真实记事本 + 外部麦克风 + ASR + 插入”这段核心链路，不证明用户双击 EXE 后按默认热键可用。
 - `T11` 是耳机声学链路和 ASR 服务闭环，不是桌面 UI/热键/插入目标应用的完整闭环。
 - `T09` 新增了安装版 `--clipboard-insert-test`，能证明文本剪贴板保护下“测试文本进入临时文本框且原文本剪贴板恢复”。但它使用临时 Tk 文本框和 paste 事件，不是录音热键触发，也不是真实外部应用前台焦点闭环。
+- `T10` 新增了安装版 `--clipboard-complex-test`，能证明常见图片 `CF_DIB` 和文件列表 `CF_HDROP` 在插入测试文本后恢复；它仍是临时 Tk 文本框烟测，不是真实录音热键和外部应用闭环。
+- `T13` 新增了安装版 `--startup-script-test`，能证明 Startup bat 写入当前 EXE 路径和 `--hidden` 后可删除；它没有重启 Windows，因此不算完整开机自启动闭环。
+- `T20` 新增了安装版 `--license-network-test`，能证明普通版授权断网不阻塞、受控版服务器不可达时保留本地 token 并给出错误；它没有覆盖系统级断网、弱网和真实 ASR 服务异常。
 
 音频约束：所有音频测试禁止使用电脑扬声器。已使用的输出端点是 `耳机 (2- Realtek(R) Audio)`，输入端点是 `外部麦克风 (2- Realtek(R) Audio)`。测试后确认 `扬声器 (2- Realtek(R) Audio)` 仍为 `volume=0.0, mute=true`。
+
+分发阻断备注：2026-05-13 最后一轮为恢复测试配置/授权状态重新打包后，本机 Windows 11 Smart App Control / Code Integrity 拦截了未签名主 EXE，事件日志提示 `did not meet Enterprise signing level requirements`。在此之前，同轮新增的安装版复杂剪贴板、启动脚本、授权断网测试已跑通；最后一轮源码级对应测试也已跑通。该阻断说明正式外部分发必须做可信代码签名，不能把当前未签名包视为已覆盖所有 Windows 11 安全策略环境。
 
 ## 汇总表
 
@@ -28,26 +33,26 @@
 | T07 | 热键录制保存闭环 | PARTIAL | 逻辑规则 PASS：`release/test-reports/e2e-source-self-test.json` 覆盖热键解析、显示、冲突规则和默认恢复。真实 UI 点击“录制”、保存、重启后生效尚未跑。 |
 | T08 | 热键冲突弹窗闭环 | PARTIAL | 逻辑规则 PASS：`release/test-reports/e2e-source-self-test.json` 覆盖重复/危险/保留热键检查。真实弹窗交互尚未跑。 |
 | T09 | 剪贴板文本保护闭环 | PARTIAL | 新证据 `release/test-reports/installed-clipboard-insert-test.json`：`text_inserted=true`、`clipboard_restored=true`、`restore_delay_ms=500`，目标是临时 Tk 文本框，`paste_method=clipboard helper plus Tk <<Paste>> event`。旧证据 `release/test-reports/e2e-t09-clipboard-text.json` 仍记录真实前台自动化未闭合，`text_inserted=false`。所以该项证明了文本剪贴板保护逻辑，但还不能算“录音 + 外部应用 + 物理热键”完整闭环。 |
-| T10 | 剪贴板图片/文件保护闭环 | NOT_RUN | 未跑。需要准备图片/文件剪贴板并人工判断复杂格式恢复行为。 |
+| T10 | 剪贴板图片/文件保护闭环 | PARTIAL | 新证据 `release/test-reports/installed-clipboard-complex-test.json`：`ok=true`，`CF_DIB image` 和 `CF_HDROP file list` 两个 case 均 `text_inserted=true`、`format_restored=true`；报告明确跳过 `CF_BITMAP` 和 `CF_DIBV5` 这类 Windows 派生/不可搬运格式。该项仍未覆盖“真实录音 + 物理热键 + 外部应用焦点”的完整闭环，也未覆盖富文本等所有复杂格式。 |
 | T11 | 耳机声学闭环 | PASS | `release/test-reports/headset-loopback-asr.json`：只用耳机输出和外部麦克风输入；`recognized_chars=552`、关键词 9 个、相关性 `0.7176`、`ok=true`。这证明音频和 ASR 闭环，不证明桌面热键/插入闭环。 |
 | T12 | 真人讲话闭环 | NOT_RUN | 未跑。需要真人对外部麦克风说正常音量/小声/长停顿/长句，不能由 TTS 完全替代。 |
-| T13 | 开机自启动闭环 | NOT_RUN | 未跑。需要真实重启 Windows 并登录后验证后台托盘、热键和单实例。 |
+| T13 | 开机自启动闭环 | PARTIAL | 新证据 `release/test-reports/installed-startup-script-test.json`：隔离 `APPDATA` 中 Startup bat 创建/删除均成功，内容包含安装版 EXE 路径和 `--hidden`。没有真实重启 Windows，也没有登录后验证托盘、热键和单实例，因此不能算完整 PASS。 |
 | T14 | 干净电脑安装包闭环 | NOT_RUN | 未跑。需要一台无 Python、无项目环境的 Win10/Win11。当前机器是开发机，不符合“干净电脑”条件。 |
 | T15 | 干净电脑免安装闭环 | NOT_RUN | 未跑。需要一台无 Python、无项目环境的 Win10/Win11。当前机器是开发机，不符合“干净电脑”条件。 |
 | T16 | 卸载闭环 | PARTIAL | 新证据 `release/test-reports/isolated-uninstall-cleanup-test.json`：沙箱环境安装成功，开始菜单/桌面快捷方式和启动项均创建；运行卸载脚本后 `uninstall_exit_code=0`、`install_dir_removed=true`、`start_menu_dir_removed=true`、`desktop_shortcut_removed=true`、`startup_bat_removed=true`。该项仍未在真实用户开始菜单/真实开机自启动状态下人工验证，运行中进程处理只由脚本 smoke 覆盖。 |
 | T17 | 长时间后台稳定闭环 | NOT_RUN | 未跑。需要 2 到 8 小时后台运行和 50 到 100 次录音。 |
 | T18 | 多屏/DPI 真实机器闭环 | PARTIAL | 自动化 DPI 截图和布局 PASS：`release/test-reports/installed-ui-smoke-scale150-minimum-layout.json`、`installed-ui-smoke-scale200-default-layout.json` 等。真实 1080p/2K/4K、多屏、主副屏 DPI 不一致尚未跑。 |
 | T19 | 受控激活版闭环 | PARTIAL | 激活逻辑测试 PASS：`test-activation.ps1` 产生 12 passed；强制激活配置自测证据 `release/test-reports/activation-required-self-test.json`。真实受控分发 EXE、换电脑绑定、过期/停用人工流程尚未跑。 |
-| T20 | 网络异常闭环 | NOT_RUN | 未跑。需要断网或授权服务器不可达环境，分别验证普通版和受控版行为。 |
+| T20 | 网络异常闭环 | PARTIAL | 新证据 `release/test-reports/installed-license-network-test.json`：`ordinary_build_ok=true`、`required_build_blocks=true`、`cached_token_preserved=true`，服务器地址为不可达的 `http://127.0.0.1:9`。该项覆盖授权服务器不可达的打包版烟测，但仍未覆盖系统级断网/弱网、真实 ASR 服务异常和完整用户录音流程。 |
 
 ## 已完成的基础证据
 
 - 源码自测：`release/test-reports/e2e-source-self-test.json`，状态 PASS。
-- 打包 EXE/UI/托盘/安装版测试：`test-desktop-exe.ps1` 已通过，证据在 `release/test-reports/dist-self-test.json`、`portable-self-test.json`、`installed-self-test.json`、`installed-tray-self-test.json`、`installed-ui-smoke*.json/png`、`installed-clipboard-insert-test.json`、`isolated-uninstall-cleanup-test.json`。
+- 打包 EXE/UI/托盘/安装版测试：`test-desktop-exe.ps1` 已通过，证据在 `release/test-reports/dist-self-test.json`、`portable-self-test.json`、`installed-self-test.json`、`installed-tray-self-test.json`、`installed-ui-smoke*.json/png`、`installed-clipboard-insert-test.json`、`installed-clipboard-complex-test.json`、`installed-startup-script-test.json`、`installed-license-network-test.json`、`isolated-uninstall-cleanup-test.json`。
 - 本机追加验证：在 `64e49f0` 之前的工作区运行过 `build-desktop-exe.ps1`、`test-desktop-exe.ps1`、`test-windows-compat.ps1`、`test-activation.ps1`、`test-license-stress.ps1`、`test-long-text-asr.ps1`；本次提交后也重新运行了 `build-desktop-exe.ps1`、`test-desktop-exe.ps1`、`test-windows-compat.ps1`、`test-activation.ps1`、`test-license-stress.ps1`、`test-long-text-asr.ps1`。桌面 EXE 测试覆盖 `820x680`、`760x520`、`560x420`、150% DPI、200% DPI 和默认 200% DPI 窗口。
 - 长文本文件 ASR：`release/test-reports/long-text-asr.json`，`ok=true`，识别 556 字，关键词 9 个。
 - 耳机声学 ASR：`release/test-reports/headset-loopback-asr.json`，`ok=true`，识别 552 字，关键词 9 个。
 
 ## 后续要真正补齐的项目
 
-优先级最高的是 T01 的物理右 Ctrl 热键人工验收、T02-T06 三种模式在真实目标窗口里的人工验收、T07-T10 的 UI/剪贴板人工验收。T13-T15、T17-T20 需要重启、干净电脑、长时间运行、多屏或授权服务器环境，必须单独安排；T16 已有沙箱卸载清理烟测，但仍建议真实安装后人工点一次。
+优先级最高的是 T01 的物理右 Ctrl 热键人工验收、T02-T06 三种模式在真实目标窗口里的人工验收、T07-T10 的 UI/剪贴板人工验收。T13-T15、T17-T20 仍需要重启、干净电脑、长时间运行、多屏、系统级网络异常或受控授权服务器环境，必须单独安排；T16 已有沙箱卸载清理烟测，但仍建议真实安装后人工点一次。

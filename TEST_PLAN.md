@@ -77,6 +77,9 @@
 | E16 | 字号和对齐一致性 | UI 布局报告断言标题字号不压过输入控件、三种模式块内的触发键/取消键 entry 和录制按钮纵向对齐、设置标签高度一致、说明文字对齐到对应标签下方，剪贴板保护/开机自启动开关不退回默认小 checkbox，避免主界面出现明显大小不一和列错位 |
 | E17 | 剪贴板文本插入/恢复烟测 | 安装版运行 `--clipboard-insert-test`，写出 `installed-clipboard-insert-test.json`，断言临时文本框成功粘贴测试文本且剪贴板恢复为原文本；该项不等价于真实录音热键闭环 |
 | E18 | 隔离卸载清理烟测 | 安装器在临时 `APPDATA`、`LOCALAPPDATA`、`USERPROFILE` 沙箱中创建快捷方式和启动项，再运行卸载脚本，写出 `isolated-uninstall-cleanup-test.json` 并断言安装目录、开始菜单、桌面快捷方式和启动项都被清理 |
+| E19 | 剪贴板图片/文件格式恢复烟测 | 安装版运行 `--clipboard-complex-test`，写出 `installed-clipboard-complex-test.json`，断言 `CF_DIB` 图片剪贴板和 `CF_HDROP` 文件列表在临时文本插入后恢复；跳过 Windows 自动派生的 `CF_BITMAP/CF_DIBV5`，避免冻结 EXE 读取不可搬运句柄 |
+| E20 | 开机启动脚本无重启烟测 | 安装版运行 `--startup-script-test`，写出 `installed-startup-script-test.json`，在隔离 `APPDATA` 中验证 Startup bat 会写入当前 EXE 路径和 `--hidden`，取消后能删除；该项不等价于真实重启闭环 |
+| E21 | 授权断网打包版烟测 | 安装版运行 `--license-network-test`，写出 `installed-license-network-test.json`，验证普通版不受授权断网影响，受控版服务器不可达时阻止使用但保留本地 token |
 
 ### 长文本 ASR 测试
 

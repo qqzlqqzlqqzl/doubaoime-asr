@@ -280,6 +280,129 @@ function Invoke-ClipboardInsertTest {
   return $ReportPath
 }
 
+function Invoke-ClipboardComplexTest {
+  param(
+    [Parameter(Mandatory = $true)][string]$ExePath,
+    [Parameter(Mandatory = $true)][string]$ReportName
+  )
+
+  if (-not (Test-Path $ExePath)) {
+    throw "Missing executable: $ExePath"
+  }
+
+  $ReportPath = Join-Path $ReportsDir $ReportName
+  Remove-Item -LiteralPath $ReportPath -Force -ErrorAction SilentlyContinue
+  $Process = Start-Process $ExePath -ArgumentList @("--clipboard-complex-test", "--clipboard-complex-report", $ReportPath) -Wait -PassThru
+  if ($Process.ExitCode -ne 0) {
+    throw "Complex clipboard test failed for $ExePath with exit code $($Process.ExitCode)"
+  }
+  if (-not (Test-Path $ReportPath)) {
+    throw "Complex clipboard report was not written: $ReportPath"
+  }
+
+  $Report = Get-Content -Raw -Encoding UTF8 -LiteralPath $ReportPath | ConvertFrom-Json
+  if (-not $Report.ok) {
+    throw "Complex clipboard report says ok=false: $ReportPath"
+  }
+  if (-not $Report.native_clipboard_available) {
+    throw "Complex clipboard report did not use native Windows clipboard APIs: $ReportPath"
+  }
+  if (@($Report.cases).Count -lt 2) {
+    throw "Complex clipboard report is missing image/file cases: $ReportPath"
+  }
+  foreach ($Case in $Report.cases) {
+    if (-not $Case.text_inserted -or -not $Case.format_restored) {
+      throw "Complex clipboard case did not prove insertion and format restore: $($Case.name)"
+    }
+  }
+  return $ReportPath
+}
+
+function Invoke-StartupScriptTest {
+  param(
+    [Parameter(Mandatory = $true)][string]$ExePath,
+    [Parameter(Mandatory = $true)][string]$ReportName
+  )
+
+  if (-not (Test-Path $ExePath)) {
+    throw "Missing executable: $ExePath"
+  }
+
+  $ReportPath = Join-Path $ReportsDir $ReportName
+  $Sandbox = Join-Path $ReportsDir "startup-script-sandbox"
+  Remove-Item -LiteralPath $Sandbox -Recurse -Force -ErrorAction SilentlyContinue
+  $LocalAppData = Join-Path $Sandbox "LocalAppData"
+  $AppData = Join-Path $Sandbox "AppData"
+  $UserProfile = Join-Path $Sandbox "UserProfile"
+  New-Item -ItemType Directory -Force -Path $LocalAppData, $AppData, $UserProfile | Out-Null
+
+  $EnvMap = @{
+    "LOCALAPPDATA" = $LocalAppData
+    "APPDATA" = $AppData
+    "USERPROFILE" = $UserProfile
+    "DOUBAO_ASR_CONFIG_DIR" = (Join-Path $Sandbox "Config")
+  }
+
+  $ExitCode = Start-IsolatedProcess -FileName $ExePath -Arguments "--startup-script-test --startup-script-report `"$ReportPath`"" -Environment $EnvMap -TimeoutSeconds 60
+  if ($ExitCode -ne 0) {
+    throw "Startup script test failed for $ExePath with exit code $ExitCode"
+  }
+  if (-not (Test-Path $ReportPath)) {
+    throw "Startup script report was not written: $ReportPath"
+  }
+
+  $Report = Get-Content -Raw -Encoding UTF8 -LiteralPath $ReportPath | ConvertFrom-Json
+  if (-not $Report.ok -or -not $Report.created -or -not $Report.removed) {
+    throw "Startup script report says startup create/remove failed: $ReportPath"
+  }
+  if (-not $Report.contains_executable -or -not $Report.contains_hidden_flag) {
+    throw "Startup script report did not prove executable path and --hidden flag: $ReportPath"
+  }
+  Remove-Item -LiteralPath $Sandbox -Recurse -Force -ErrorAction SilentlyContinue
+  return $ReportPath
+}
+
+function Invoke-LicenseNetworkTest {
+  param(
+    [Parameter(Mandatory = $true)][string]$ExePath,
+    [Parameter(Mandatory = $true)][string]$ReportName
+  )
+
+  if (-not (Test-Path $ExePath)) {
+    throw "Missing executable: $ExePath"
+  }
+
+  $ReportPath = Join-Path $ReportsDir $ReportName
+  $Sandbox = Join-Path $ReportsDir "license-network-sandbox"
+  Remove-Item -LiteralPath $Sandbox -Recurse -Force -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force -Path $Sandbox | Out-Null
+
+  $EnvMap = @{
+    "DOUBAO_ASR_CONFIG_DIR" = $Sandbox
+    "APPDATA" = (Join-Path $Sandbox "AppData")
+    "LOCALAPPDATA" = (Join-Path $Sandbox "LocalAppData")
+    "USERPROFILE" = (Join-Path $Sandbox "UserProfile")
+  }
+
+  $ExitCode = Start-IsolatedProcess -FileName $ExePath -Arguments "--license-network-test --license-network-report `"$ReportPath`"" -Environment $EnvMap -TimeoutSeconds 30
+  if ($ExitCode -ne 0) {
+    throw "License network test failed for $ExePath with exit code $ExitCode"
+  }
+  if (-not (Test-Path $ReportPath)) {
+    throw "License network report was not written: $ReportPath"
+  }
+
+  $Report = Get-Content -Raw -Encoding UTF8 -LiteralPath $ReportPath | ConvertFrom-Json
+  if (-not $Report.ok) {
+    throw "License network report says ok=false: $ReportPath"
+  }
+  if (-not $Report.ordinary_build_ok -or -not $Report.required_build_blocks -or -not $Report.cached_token_preserved) {
+    throw "License network report did not prove ordinary/controlled offline behavior: $ReportPath"
+  }
+  Remove-Item -LiteralPath $Sandbox -Recurse -Force -ErrorAction SilentlyContinue
+  return $ReportPath
+}
+
 function Start-IsolatedProcess {
   param(
     [Parameter(Mandatory = $true)][string]$FileName,
@@ -981,6 +1104,9 @@ Assert-ShortcutUsesAppIcon -TargetExe $InstalledExe | Out-Host
 Invoke-TraySelfTest -ExePath $InstalledExe -ReportName "installed-tray-self-test.json" | Out-Host
 Invoke-FloatLayoutTest -ExePath $InstalledExe -ReportName "installed-float-layout-long-text.json" | Out-Host
 Invoke-ClipboardInsertTest -ExePath $InstalledExe -ReportName "installed-clipboard-insert-test.json" | Out-Host
+Invoke-ClipboardComplexTest -ExePath $InstalledExe -ReportName "installed-clipboard-complex-test.json" | Out-Host
+Invoke-StartupScriptTest -ExePath $InstalledExe -ReportName "installed-startup-script-test.json" | Out-Host
+Invoke-LicenseNetworkTest -ExePath $InstalledExe -ReportName "installed-license-network-test.json" | Out-Host
 Assert-SingleInstanceGuard -PrimaryExePath $InstalledExe -SecondaryExePath $PortableExe | Out-Host
 Assert-CloseToTrayKeepsAlive -ExePath $InstalledExe | Out-Host
 

@@ -31,6 +31,14 @@ git pull --rebase --autostash
 
 这次提交已经推到 `origin/main`。另一台电脑继续工作前必须先拉到至少 `64e49f0`，否则很容易把已通过测试的响应式 UI 修复覆盖掉。
 
+2026-05-13，本轮继续补齐可自动化的端到端缺口：
+
+- 剪贴板保护从纯文本恢复升级为 Windows 原生格式快照恢复；当前自动覆盖文本、`CF_DIB` 图片和 `CF_HDROP` 文件列表。`CF_BITMAP/CF_DIBV5` 属于 Windows 派生或不可搬运句柄，冻结 EXE 中会跳过。
+- `test-desktop-exe.ps1` 新增安装版 `installed-clipboard-complex-test.json`、`installed-startup-script-test.json`、`installed-license-network-test.json` 三个报告。
+- `T10/T13/T20` 在 `E2E_TEST_EVIDENCE.md` 中从 `NOT_RUN` 更新为 `PARTIAL`。仍不要把它们当成真实物理热键、真实重启或系统级断网闭环。
+- 评审指出 `--startup-script-test` 和 `--license-network-test` 直接运行时可能碰真实配置；已改为执行前保存、结束后恢复原配置和授权状态。
+- 最后一次重新打包后，当前开发机的 Windows 11 Smart App Control / Code Integrity 拦截了未签名主 EXE，事件日志提示 `did not meet Enterprise signing level requirements`。这是分发风险，不是业务自测失败；正式外部分发需要可信代码签名。
+
 ## 1. 当前项目定位
 
 这个仓库最初是 `doubaoime-asr` Python 客户端，现在已经扩展成一个 Windows 桌面语音输入助手。
@@ -72,7 +80,7 @@ git pull --rebase --autostash
 
 1. 运行 `git status --short`，确认工作区是否干净。
 2. 阅读 `README.md` 的“桌面语音输入助手”部分。
-3. 阅读 `E2E_TEST_EVIDENCE.md`，先弄清哪些端到端项目是真的 PASS，哪些只是 PARTIAL 或 NOT_RUN；当前不能把 T01 默认热键闭环和 T09 剪贴板文本保护烟测算作完整录音热键闭环通过。
+3. 阅读 `E2E_TEST_EVIDENCE.md`，先弄清哪些端到端项目是真的 PASS，哪些只是 PARTIAL 或 NOT_RUN；当前不能把 T01 默认热键闭环、T09/T10 剪贴板烟测、T13 启动脚本烟测或 T20 授权断网烟测算作完整用户闭环通过。
 4. 阅读本文件的“核心文件地图”和“桌面应用架构”。
 5. 如果要改 UI 或分发包，先运行一次：
 
@@ -655,6 +663,11 @@ python -m doubaoime_asr.desktop_app --self-test --self-test-report release\test-
 - `release\test-reports\installed-ui-smoke-minimum.png`
 - `release\test-reports\installed-ui-smoke-scale200-default.png`
 - 对应的 `*-layout.json`
+- `release\test-reports\installed-clipboard-insert-test.json`
+- `release\test-reports\installed-clipboard-complex-test.json`
+- `release\test-reports\installed-startup-script-test.json`
+- `release\test-reports\installed-license-network-test.json`
+- `release\test-reports\isolated-uninstall-cleanup-test.json`
 
 ### 授权测试
 
@@ -769,9 +782,9 @@ git log --oneline -n 20
 
 ### 剪贴板保护不是完整剪贴板备份
 
-当前主要保护文本剪贴板。图片、文件列表、富文本可能无法完整恢复。
+当前会恢复文本剪贴板，并用 Windows 原生格式恢复常见图片 `CF_DIB` 和文件列表 `CF_HDROP`。`CF_BITMAP/CF_DIBV5` 是派生或不可搬运格式，冻结 EXE 中不要尝试重新发布；富文本等复杂格式仍可能无法完整恢复。
 
-`installed-clipboard-insert-test.json` 只能证明临时文本框里的文本粘贴和恢复逻辑，不证明物理热键、真人录音或外部应用焦点闭环。真实 T09 仍需要人工点测。
+`installed-clipboard-insert-test.json` 只能证明临时文本框里的文本粘贴和恢复逻辑，不证明物理热键、真人录音或外部应用焦点闭环。`installed-clipboard-complex-test.json` 只能证明 `CF_DIB/CF_HDROP` 这两个格式的恢复烟测，不证明所有剪贴板格式都完整。真实 T09/T10 仍需要人工点测。
 
 ### 系统托盘是 Win32 手写实现
 
@@ -794,7 +807,7 @@ git log --oneline -n 20
 
 ### 未签名 EXE
 
-SmartScreen 警告属于预期。正式发布要代码签名。
+SmartScreen 警告属于预期。Windows 11 Smart App Control 或企业 Code Integrity 策略还可能直接阻止未签名 EXE 运行。2026-05-13 本机最后一次重打包后出现过该拦截，Code Integrity 日志写的是 `did not meet Enterprise signing level requirements`。正式发布要做可信代码签名，否则部分电脑可能安装成功但主程序无法启动。
 
 ## 11. 改动时的检查清单
 

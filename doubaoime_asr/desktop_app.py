@@ -6,6 +6,7 @@ import ctypes
 import json
 import os
 import queue
+import struct
 import sys
 import tempfile
 import threading
@@ -88,6 +89,7 @@ APP_ICON_RELATIVE_PATH = Path("assets") / "app.ico"
 APP_USER_MODEL_ID = "DoubaoASRHelper.Desktop"
 SINGLE_INSTANCE_MUTEX_NAME = "Local\\DoubaoASRHelper.SingleInstance"
 _DPI_AWARENESS_CONFIGURED = False
+MAX_CLIPBOARD_SNAPSHOT_BYTES = 64 * 1024 * 1024
 
 
 async def _run_blocking(func: Callable, *args):
@@ -677,9 +679,15 @@ def save_config(config: DesktopConfig) -> None:
     sync_startup(config.startup)
 
 
+def startup_executable_path() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable)
+    return Path(__file__).resolve().parents[1] / ".venv" / "Scripts" / "doubaoime-asr-desktop.exe"
+
+
 def sync_startup(enabled: bool) -> None:
     if enabled:
-        exe = Path(sys.executable) if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[1] / ".venv" / "Scripts" / "doubaoime-asr-desktop.exe"
+        exe = startup_executable_path()
         STARTUP_BAT.parent.mkdir(parents=True, exist_ok=True)
         STARTUP_BAT.write_text(f'@echo off\r\nstart "" "{exe}" --hidden\r\n', encoding="utf-8")
     else:
@@ -1047,6 +1055,162 @@ def configure_process_dpi_awareness() -> None:
         pass
 
 
+@dataclass
+class ClipboardFormatData:
+    format_id: int
+    name: str
+    data: bytes
+
+
+@dataclass
+class ClipboardSnapshot:
+    formats: list[ClipboardFormatData]
+    skipped_formats: list[dict[str, object]]
+    text_fallback: str = ""
+    native: bool = False
+    error: str | None = None
+
+    def format_ids(self) -> set[int]:
+        return {item.format_id for item in self.formats}
+
+    def format_names(self) -> list[str]:
+        return [item.name for item in self.formats]
+
+    def data_by_format(self) -> dict[int, bytes]:
+        return {item.format_id: item.data for item in self.formats}
+
+
+STANDARD_CLIPBOARD_FORMAT_NAMES = {
+    1: "CF_TEXT",
+    2: "CF_BITMAP",
+    3: "CF_METAFILEPICT",
+    4: "CF_SYLK",
+    5: "CF_DIF",
+    6: "CF_TIFF",
+    7: "CF_OEMTEXT",
+    8: "CF_DIB",
+    13: "CF_UNICODETEXT",
+    14: "CF_ENHMETAFILE",
+    15: "CF_HDROP",
+    16: "CF_LOCALE",
+    17: "CF_DIBV5",
+}
+
+
+def clipboard_format_name(format_id: int) -> str:
+    if format_id in STANDARD_CLIPBOARD_FORMAT_NAMES:
+        return STANDARD_CLIPBOARD_FORMAT_NAMES[format_id]
+    if sys.platform == "win32" and hasattr(ctypes, "windll"):
+        buffer = ctypes.create_unicode_buffer(256)
+        try:
+            if ctypes.windll.user32.GetClipboardFormatNameW(format_id, buffer, len(buffer)):
+                return buffer.value
+        except OSError:
+            pass
+    return f"FORMAT_{format_id}"
+
+
+def open_windows_clipboard(hwnd: int | None = None, timeout: float = 1.0) -> None:
+    if sys.platform != "win32" or not hasattr(ctypes, "windll"):
+        raise RuntimeError("Windows clipboard APIs are not available.")
+    user32 = ctypes.windll.user32
+    user32.OpenClipboard.argtypes = [ctypes.c_void_p]
+    user32.OpenClipboard.restype = ctypes.c_bool
+    deadline = time.time() + timeout
+    owner = ctypes.c_void_p(hwnd or 0)
+    while time.time() < deadline:
+        if user32.OpenClipboard(owner):
+            return
+        time.sleep(0.025)
+    raise ctypes.WinError()
+
+
+def allocate_global_copy(data: bytes) -> int:
+    kernel32 = ctypes.windll.kernel32
+    kernel32.GlobalAlloc.argtypes = [ctypes.c_uint, ctypes.c_size_t]
+    kernel32.GlobalAlloc.restype = ctypes.c_void_p
+    kernel32.GlobalLock.argtypes = [ctypes.c_void_p]
+    kernel32.GlobalLock.restype = ctypes.c_void_p
+    kernel32.GlobalUnlock.argtypes = [ctypes.c_void_p]
+    kernel32.GlobalUnlock.restype = ctypes.c_bool
+    kernel32.GlobalFree.argtypes = [ctypes.c_void_p]
+    kernel32.GlobalFree.restype = ctypes.c_void_p
+    handle = kernel32.GlobalAlloc(0x0002, len(data))
+    if not handle:
+        raise ctypes.WinError()
+    pointer = kernel32.GlobalLock(handle)
+    if not pointer:
+        kernel32.GlobalFree(handle)
+        raise ctypes.WinError()
+    try:
+        ctypes.memmove(pointer, data, len(data))
+    finally:
+        kernel32.GlobalUnlock(handle)
+    return int(handle)
+
+
+def set_windows_clipboard_formats(format_payloads: dict[int, bytes], hwnd: int | None = None) -> None:
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    user32.EmptyClipboard.argtypes = []
+    user32.EmptyClipboard.restype = ctypes.c_bool
+    user32.SetClipboardData.argtypes = [ctypes.c_uint, ctypes.c_void_p]
+    user32.SetClipboardData.restype = ctypes.c_void_p
+    kernel32.GlobalFree.argtypes = [ctypes.c_void_p]
+    kernel32.GlobalFree.restype = ctypes.c_void_p
+    open_windows_clipboard(hwnd)
+    try:
+        if not user32.EmptyClipboard():
+            raise ctypes.WinError()
+        for format_id, payload in format_payloads.items():
+            handle = allocate_global_copy(payload)
+            if not user32.SetClipboardData(format_id, ctypes.c_void_p(handle)):
+                kernel32.GlobalFree(ctypes.c_void_p(handle))
+                raise ctypes.WinError()
+    finally:
+        user32.CloseClipboard()
+
+
+def read_windows_clipboard_format(format_id: int, hwnd: int | None = None) -> bytes | None:
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    user32.GetClipboardData.argtypes = [ctypes.c_uint]
+    user32.GetClipboardData.restype = ctypes.c_void_p
+    kernel32.GlobalSize.argtypes = [ctypes.c_void_p]
+    kernel32.GlobalSize.restype = ctypes.c_size_t
+    kernel32.GlobalLock.argtypes = [ctypes.c_void_p]
+    kernel32.GlobalLock.restype = ctypes.c_void_p
+    kernel32.GlobalUnlock.argtypes = [ctypes.c_void_p]
+    kernel32.GlobalUnlock.restype = ctypes.c_bool
+    open_windows_clipboard(hwnd)
+    try:
+        handle = user32.GetClipboardData(format_id)
+        if not handle:
+            return None
+        size = int(kernel32.GlobalSize(handle))
+        if size <= 0 or size > MAX_CLIPBOARD_SNAPSHOT_BYTES:
+            return None
+        pointer = kernel32.GlobalLock(handle)
+        if not pointer:
+            return None
+        try:
+            return ctypes.string_at(pointer, size)
+        finally:
+            kernel32.GlobalUnlock(handle)
+    finally:
+        user32.CloseClipboard()
+
+
+def build_test_dib_payload() -> bytes:
+    header = struct.pack("<IiiHHIIiiII", 40, 1, 1, 1, 24, 0, 4, 0, 0, 0, 0)
+    return header + b"\x00\x00\xff\x00"
+
+
+def build_test_hdrop_payload(path: Path) -> bytes:
+    encoded_path = str(path).encode("utf-16le")
+    return struct.pack("<IiiII", 20, 0, 0, 0, 1) + encoded_path + b"\x00\x00\x00\x00"
+
+
 class Clipboard:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -1062,6 +1226,89 @@ class Clipboard:
         self.root.clipboard_append(text)
         self.root.update_idletasks()
 
+    def create_snapshot(self) -> ClipboardSnapshot:
+        text_fallback = self.get_text()
+        if sys.platform != "win32" or not hasattr(ctypes, "windll"):
+            return ClipboardSnapshot([], [], text_fallback=text_fallback, native=False)
+
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        user32.EnumClipboardFormats.argtypes = [ctypes.c_uint]
+        user32.EnumClipboardFormats.restype = ctypes.c_uint
+        user32.GetClipboardData.argtypes = [ctypes.c_uint]
+        user32.GetClipboardData.restype = ctypes.c_void_p
+        kernel32.GlobalSize.argtypes = [ctypes.c_void_p]
+        kernel32.GlobalSize.restype = ctypes.c_size_t
+        kernel32.GlobalLock.argtypes = [ctypes.c_void_p]
+        kernel32.GlobalLock.restype = ctypes.c_void_p
+        kernel32.GlobalUnlock.argtypes = [ctypes.c_void_p]
+        kernel32.GlobalUnlock.restype = ctypes.c_bool
+
+        formats: list[ClipboardFormatData] = []
+        skipped: list[dict[str, object]] = []
+        try:
+            open_windows_clipboard(self.root.winfo_id())
+            try:
+                current = 0
+                while True:
+                    current = int(user32.EnumClipboardFormats(current))
+                    if current == 0:
+                        break
+                    name = clipboard_format_name(current)
+                    if current == 2:
+                        skipped.append({"format_id": current, "name": name, "reason": "bitmap_handle_not_portable"})
+                        continue
+                    if current == 17 and any(item.format_id == 8 for item in formats):
+                        skipped.append({"format_id": current, "name": name, "reason": "synthesized_from_CF_DIB"})
+                        continue
+                    handle = user32.GetClipboardData(current)
+                    if not handle:
+                        skipped.append({"format_id": current, "name": name, "reason": "no_handle"})
+                        continue
+                    size = int(kernel32.GlobalSize(handle))
+                    if size <= 0:
+                        skipped.append({"format_id": current, "name": name, "reason": "not_hglobal_or_empty"})
+                        continue
+                    if size > MAX_CLIPBOARD_SNAPSHOT_BYTES:
+                        skipped.append({"format_id": current, "name": name, "reason": "too_large", "bytes": size})
+                        continue
+                    pointer = kernel32.GlobalLock(handle)
+                    if not pointer:
+                        skipped.append({"format_id": current, "name": name, "reason": "lock_failed", "bytes": size})
+                        continue
+                    try:
+                        formats.append(ClipboardFormatData(current, name, ctypes.string_at(pointer, size)))
+                    finally:
+                        kernel32.GlobalUnlock(handle)
+            finally:
+                user32.CloseClipboard()
+            return ClipboardSnapshot(formats, skipped, text_fallback=text_fallback, native=True)
+        except Exception as exc:
+            return ClipboardSnapshot([], skipped, text_fallback=text_fallback, native=False, error=repr(exc))
+
+    def restore_snapshot(self, snapshot: ClipboardSnapshot) -> None:
+        if snapshot.native and sys.platform == "win32" and hasattr(ctypes, "windll"):
+            try:
+                payloads = {item.format_id: item.data for item in snapshot.formats}
+                if 8 in payloads and 17 in payloads:
+                    # Windows can synthesize CF_DIBV5 from CF_DIB. Re-publishing both raw
+                    # handles has proven fragile in frozen builds, so keep the source DIB.
+                    payloads.pop(17, None)
+                set_windows_clipboard_formats(
+                    payloads,
+                    hwnd=None,
+                )
+                self.root.update_idletasks()
+                return
+            except Exception:
+                if not snapshot.text_fallback:
+                    raise
+        if snapshot.text_fallback:
+            self.set_text(snapshot.text_fallback)
+        else:
+            self.root.clipboard_clear()
+            self.root.update_idletasks()
+
 
 def paste_text_with_clipboard_protection(
     clipboard: Clipboard,
@@ -1076,7 +1323,7 @@ def paste_text_with_clipboard_protection(
 ) -> bool:
     if not text:
         return False
-    original = clipboard.get_text() if protect_clipboard else ""
+    original = clipboard.create_snapshot() if protect_clipboard else None
     clipboard.set_text(text)
     if target_hwnd:
         set_foreground_window(target_hwnd)
@@ -1084,8 +1331,8 @@ def paste_text_with_clipboard_protection(
     send_ctrl_v()
     if auto_send:
         schedule_ui(auto_send_delay_ms, send_enter)
-    if protect_clipboard:
-        schedule_ui(restore_delay_ms, lambda: clipboard.set_text(original))
+    if protect_clipboard and original is not None:
+        schedule_ui(restore_delay_ms, lambda: clipboard.restore_snapshot(original))
     return True
 
 
@@ -3285,7 +3532,7 @@ def run_clipboard_insert_test(report_path: str | None = None) -> int:
         "error": None,
     }
     root: tk.Tk | None = None
-    previous_clipboard = ""
+    previous_snapshot: ClipboardSnapshot | None = None
     try:
         root = tk.Tk()
         root.title("Doubao ASR Clipboard Insert Test")
@@ -3303,7 +3550,7 @@ def run_clipboard_insert_test(report_path: str | None = None) -> int:
             time.sleep(0.1)
 
         clipboard = Clipboard(root)
-        previous_clipboard = clipboard.get_text()
+        previous_snapshot = clipboard.create_snapshot()
         original = "T09_ORIGINAL_CLIPBOARD_TEXT"
         inserted = "T09_INSERTED_TEXT_剪贴板保护"
         clipboard.set_text(original)
@@ -3342,13 +3589,288 @@ def run_clipboard_insert_test(report_path: str | None = None) -> int:
     finally:
         if root is not None:
             try:
-                Clipboard(root).set_text(previous_clipboard)
+                if previous_snapshot is not None:
+                    Clipboard(root).restore_snapshot(previous_snapshot)
             except Exception:
                 pass
             try:
                 root.destroy()
             except Exception:
                 pass
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return 0 if report["ok"] else 1
+
+
+def run_clipboard_complex_test(report_path: str | None = None) -> int:
+    destination = Path(report_path) if report_path else Path(tempfile.gettempdir()) / "DoubaoASRHelper-clipboard-complex.json"
+    report = {
+        "ok": False,
+        "test_id": "T10",
+        "name": "Complex clipboard format restore smoke",
+        "target": "temporary Tk text box",
+        "restore_delay_ms": DesktopConfig().clipboard_restore_delay_ms,
+        "native_clipboard_available": sys.platform == "win32" and hasattr(ctypes, "windll"),
+        "stage": "start",
+        "cases": [],
+        "error": None,
+    }
+    root: tk.Tk | None = None
+    previous_snapshot: ClipboardSnapshot | None = None
+    temp_dir: tempfile.TemporaryDirectory[str] | None = None
+    def write_report() -> None:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    try:
+        write_report()
+        if not report["native_clipboard_available"]:
+            raise RuntimeError("Windows native clipboard APIs are required for complex clipboard testing.")
+
+        report["stage"] = "create_tk_root"
+        write_report()
+        root = tk.Tk()
+        root.title("Doubao ASR Complex Clipboard Test")
+        root.geometry("460x160+100+100")
+        root.attributes("-topmost", True)
+        target = tk.Text(root, width=40, height=5)
+        target.pack(fill="both", expand=True)
+        for _ in range(5):
+            root.update()
+            root.deiconify()
+            root.lift()
+            set_foreground_window(root.winfo_id())
+            target.focus_force()
+            root.update()
+            time.sleep(0.1)
+
+        clipboard = Clipboard(root)
+        report["stage"] = "snapshot_previous"
+        write_report()
+        previous_snapshot = clipboard.create_snapshot()
+        temp_dir = tempfile.TemporaryDirectory(prefix="DoubaoASRClipboard-")
+        sample_file = Path(temp_dir.name) / "clipboard-file.txt"
+        sample_file.write_text("Doubao ASR clipboard file payload", encoding="utf-8")
+
+        cases = [
+            {
+                "name": "CF_DIB image",
+                "formats": {8: build_test_dib_payload()},
+                "inserted": "T10_INSERTED_TEXT_IMAGE_CLIPBOARD",
+            },
+            {
+                "name": "CF_HDROP file list",
+                "formats": {15: build_test_hdrop_payload(sample_file)},
+                "inserted": "T10_INSERTED_TEXT_FILE_CLIPBOARD",
+            },
+        ]
+
+        for case in cases:
+            report["stage"] = f"set_original_{case['name']}"
+            write_report()
+            target.delete("1.0", "end")
+            expected_formats: dict[int, bytes] = case["formats"]  # type: ignore[assignment]
+            set_windows_clipboard_formats(expected_formats, hwnd=root.winfo_id())
+            report["stage"] = f"snapshot_before_{case['name']}"
+            write_report()
+            before = clipboard.create_snapshot()
+
+            def schedule_ui(delay_ms: int, callback: Callable[[], None]) -> object:
+                return root.after(delay_ms, callback)
+
+            inserted = str(case["inserted"])
+            report["stage"] = f"paste_{case['name']}"
+            write_report()
+            paste_text_with_clipboard_protection(
+                clipboard,
+                inserted,
+                protect_clipboard=True,
+                restore_delay_ms=DesktopConfig().clipboard_restore_delay_ms,
+                target_hwnd=None,
+                schedule_ui=schedule_ui,
+            )
+            target.event_generate("<<Paste>>")
+
+            deadline = time.time() + 2.0
+            while time.time() < deadline:
+                root.update()
+                time.sleep(0.01)
+
+            report["stage"] = f"read_after_{case['name']}"
+            write_report()
+            target_text = target.get("1.0", "end").strip()
+            before_payloads = before.data_by_format()
+            after_payloads = {
+                format_id: read_windows_clipboard_format(format_id, hwnd=root.winfo_id())
+                for format_id in expected_formats
+            }
+            format_checks = {
+                str(format_id): before_payloads.get(format_id) == after_payloads.get(format_id) == payload
+                for format_id, payload in expected_formats.items()
+            }
+            case_report = {
+                "name": case["name"],
+                "before_formats": before.format_names(),
+                "after_formats_checked": [clipboard_format_name(format_id) for format_id in expected_formats],
+                "skipped_before": before.skipped_formats,
+                "text_inserted": inserted in target_text,
+                "format_restored": all(format_checks.values()),
+                "format_checks": format_checks,
+            }
+            report["cases"].append(case_report)
+            report["stage"] = f"case_done_{case['name']}"
+            write_report()
+
+        report["ok"] = bool(report["cases"]) and all(
+            bool(case["text_inserted"] and case["format_restored"]) for case in report["cases"]
+        )
+        report["stage"] = "done"
+    except Exception as exc:
+        report["error"] = repr(exc)
+    finally:
+        if root is not None:
+            try:
+                if previous_snapshot is not None:
+                    report["stage"] = "restore_previous"
+                    write_report()
+                    Clipboard(root).restore_snapshot(previous_snapshot)
+            except Exception:
+                pass
+            try:
+                root.destroy()
+            except Exception:
+                pass
+        if temp_dir is not None:
+            temp_dir.cleanup()
+        if report["ok"]:
+            report["stage"] = "done"
+        write_report()
+    return 0 if report["ok"] else 1
+
+
+def run_startup_script_test(report_path: str | None = None) -> int:
+    destination = Path(report_path) if report_path else Path(tempfile.gettempdir()) / "DoubaoASRHelper-startup-script.json"
+    report = {
+        "ok": False,
+        "test_id": "T13",
+        "name": "startup script write/remove smoke without reboot",
+        "startup_bat": str(STARTUP_BAT),
+        "executable": sys.executable,
+        "expected_startup_executable": str(startup_executable_path()),
+        "created": False,
+        "removed": False,
+        "contains_executable": False,
+        "contains_hidden_flag": False,
+        "error": None,
+    }
+    original_config_text: str | None = None
+    original_config_existed = CONFIG_PATH.exists()
+    original_startup_text: str | None = None
+    original_startup_existed = STARTUP_BAT.exists()
+    try:
+        if original_config_existed:
+            original_config_text = CONFIG_PATH.read_text(encoding="utf-8")
+        if original_startup_existed:
+            original_startup_text = STARTUP_BAT.read_text(encoding="utf-8")
+        config = reset_config_to_defaults(DesktopConfig())
+        config.startup = True
+        save_config(config)
+        content = STARTUP_BAT.read_text(encoding="utf-8") if STARTUP_BAT.exists() else ""
+        report.update(
+            {
+                "created": STARTUP_BAT.exists(),
+                "content": content,
+                "contains_executable": str(startup_executable_path()) in content,
+                "contains_hidden_flag": "--hidden" in content,
+            }
+        )
+        config.startup = False
+        save_config(config)
+        report["removed"] = not STARTUP_BAT.exists()
+        report["ok"] = bool(
+            report["created"]
+            and report["contains_executable"]
+            and report["contains_hidden_flag"]
+            and report["removed"]
+        )
+    except Exception as exc:
+        report["error"] = repr(exc)
+    finally:
+        try:
+            if original_config_existed and original_config_text is not None:
+                CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+                CONFIG_PATH.write_text(original_config_text, encoding="utf-8")
+            elif not original_config_existed:
+                CONFIG_PATH.unlink(missing_ok=True)
+            if original_startup_existed and original_startup_text is not None:
+                STARTUP_BAT.parent.mkdir(parents=True, exist_ok=True)
+                STARTUP_BAT.write_text(original_startup_text, encoding="utf-8")
+            elif not original_startup_existed:
+                STARTUP_BAT.unlink(missing_ok=True)
+        except Exception:
+            pass
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return 0 if report["ok"] else 1
+
+
+def run_license_network_test(report_path: str | None = None) -> int:
+    from doubaoime_asr import activation
+
+    destination = Path(report_path) if report_path else Path(tempfile.gettempdir()) / "DoubaoASRHelper-license-network.json"
+    bad_server_url = "http://127.0.0.1:9"
+    cached_token = "cached-token-for-network-smoke"
+    report = {
+        "ok": False,
+        "test_id": "T20",
+        "name": "packaged license network failure smoke",
+        "config_dir": str(activation.CONFIG_DIR),
+        "server_url": bad_server_url,
+        "ordinary_build_ok": False,
+        "required_build_blocks": False,
+        "cached_token_preserved": False,
+        "message": "",
+        "error": None,
+    }
+    previous_state: dict[str, object] | None = None
+    try:
+        previous_state = activation.load_license_state()
+        activation.clear_license_state()
+        ordinary = activation.verify_license(activation.LicenseConfig(server_url="", require_activation=False))
+        required_config = activation.LicenseConfig(server_url=bad_server_url, require_activation=True)
+        activation.save_license_state(
+            {
+                "server_url": bad_server_url,
+                "device_id": activation.device_fingerprint(),
+                "token": cached_token,
+            }
+        )
+        result = activation.verify_license(required_config)
+        state = activation.load_license_state()
+        report.update(
+            {
+                "ordinary_build_ok": ordinary.ok,
+                "required_build_blocks": not result.ok,
+                "cached_token_preserved": state.get("token") == cached_token,
+                "message": result.message,
+            }
+        )
+        report["ok"] = bool(
+            report["ordinary_build_ok"]
+            and report["required_build_blocks"]
+            and report["cached_token_preserved"]
+            and "授权校验失败" in result.message
+        )
+    except Exception as exc:
+        report["error"] = repr(exc)
+    finally:
+        try:
+            if previous_state:
+                activation.save_license_state(previous_state)
+            else:
+                activation.clear_license_state()
+        except Exception:
+            pass
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return 0 if report["ok"] else 1
@@ -3432,6 +3954,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--float-layout-text", help=argparse.SUPPRESS)
     parser.add_argument("--clipboard-insert-test", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--clipboard-insert-report", help=argparse.SUPPRESS)
+    parser.add_argument("--clipboard-complex-test", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--clipboard-complex-report", help=argparse.SUPPRESS)
+    parser.add_argument("--startup-script-test", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--startup-script-report", help=argparse.SUPPRESS)
+    parser.add_argument("--license-network-test", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--license-network-report", help=argparse.SUPPRESS)
     parser.add_argument("--long-text-test", action="store_true", help="Generate the long text stress sample and optionally run ASR.")
     parser.add_argument("--long-text-audio", help="Path for the generated long text WAV sample.")
     parser.add_argument("--long-text-report", help="Path for the long text JSON report.")
@@ -3448,6 +3976,12 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(run_float_layout_test(args.float_layout_report, args.float_layout_text))
     if args.clipboard_insert_test:
         raise SystemExit(run_clipboard_insert_test(args.clipboard_insert_report))
+    if args.clipboard_complex_test:
+        raise SystemExit(run_clipboard_complex_test(args.clipboard_complex_report))
+    if args.startup_script_test:
+        raise SystemExit(run_startup_script_test(args.startup_script_report))
+    if args.license_network_test:
+        raise SystemExit(run_license_network_test(args.license_network_report))
     if args.long_text_test:
         raise SystemExit(
             run_long_text_test(

@@ -2,6 +2,8 @@
 
 当前主发布包是 64 位 Windows 包，正式目标是 Windows 10/11 x64。近期审计基线为 Python 3.13 + PyInstaller 6.20；PyInstaller 版本以实际构建日志和 `release\test-reports\windows-compatibility.json` 为准。Win7/Win8/Win8.1 不提供支持。
 
+分发风险：未签名 PyInstaller EXE 可能被 Windows SmartScreen 或 Windows 11 Smart App Control / Code Integrity 拦截。2026-05-13 本机重打包后的主程序被 Smart App Control 以 “did not meet Enterprise signing level requirements” 拦截，事件日志位于 `Microsoft-Windows-CodeIntegrity/Operational`。正式外部分发前应做可信代码签名；仅靠安装器或 zip 不能保证绕过该策略。
+
 ## 支持矩阵
 
 | 系统 | 结论 | 说明 |
