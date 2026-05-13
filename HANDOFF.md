@@ -314,25 +314,33 @@ Python 层授权测试，调用 `tests/test_activation.py`。
 - 不要用固定绝对坐标。
 - 不要增加会撑爆最小窗口的长文案。
 - 底部 action buttons 当前有 6 个：
-  - 保存配置
+  - 保存
+  - 取消
   - 恢复默认
   - 显示悬浮窗
   - 使用说明
   - 打开配置目录
-  - 隐藏窗口
 
 布局关键函数：
 
 - `_build_settings_ui`
+- `_build_mode_group`
 - `layout_settings_controls`
 - `layout_action_buttons`
 - `write_ui_layout_report`
 
-系统区选项：
+设置界面结构：
+
+- 主界面按参考图的交互骨架组织：`【按着说】模式`、`【自由说】模式`、`【按着说+自动发送】模式` 三个模式块先出现。
+- 三个模式块之后是通用设置：`豆包快捷键`、`插入延迟`、`剪贴板保护`、`开机自启动`。
+- `高级设置` 放 `凭据文件`、`剪贴板超时`、`发送延迟`；极窄/极矮窗口下会隐藏标题、说明、凭据路径或高级区域来保证单页无滚动。
+- `insert_delay_ms` 用滑块并显示秒数；`clipboard_restore_delay_ms` 和 `auto_send_delay_ms` 用 ms 输入框，三者都按 50ms 吸附。
+
+通用设置选项：
 
 - `剪贴板保护` 和 `开机自启动` 使用 `tk.Checkbutton(indicatoron=False)` 做成大号开关，不再用默认 `ttk.Checkbutton` 小方框。
 - 相关 helper 是 `_create_option_toggle`、`_sync_option_toggle_style`、`_sync_option_toggle_styles`。
-- `settings_option_buttons` 会把两个开关按 key 保存，`write_ui_layout_report` 会输出 `option-protect_clipboard` 和 `option-startup` 的 bounds。
+- `settings_option_buttons` 会把两个开关按 key 保存，`settings_mode_groups` 会保存三个模式块，`write_ui_layout_report` 会输出 `mode-0/1/2`、`setting-<key>-entry/button/scale/value`、`option-protect_clipboard` 和 `option-startup` 的 bounds。
 - `test-desktop-exe.ps1` 会断言两个 option 开关存在、普通窗口不小于基础尺寸，高 DPI 下不小于 `120x38`，避免回退成默认小控件。
 
 已知优化：
@@ -346,7 +354,7 @@ Python 层授权测试，调用 `tests/test_activation.py`。
 
 1. 先检查 `layout_settings_controls` 的 tiny/short/narrow/compact 判断。
 2. 改底部按钮数量时同步 `test-desktop-exe.ps1` 的 `$ExpectedActionButtons`。
-3. 改系统区选项时同步 `settings_option_buttons`、`write_ui_layout_report` 和 `Assert-UiVisualSizeAtScale` 的尺寸断言。
+3. 改模式块、通用设置或系统选项时同步 `settings_mode_groups`、`settings_option_buttons`、`write_ui_layout_report` 和 `Assert-UiVisualSizeAtScale` 的语义化布局/尺寸断言。
 4. 重新跑 `.\test-desktop-exe.ps1`。
 5. 查看 `release\test-reports\installed-ui-smoke*.png` 和对应 layout JSON。
 
@@ -419,6 +427,7 @@ Python 层授权测试，调用 `tests/test_activation.py`。
 - 恢复：
   - 所有热键
   - 插入延迟
+  - 剪贴板超时
   - 自动发送延迟
   - 剪贴板保护
   - 开机自启动
@@ -658,6 +667,12 @@ release\test-reports\windows-compatibility.json
 ## 9. 最近关键改动
 
 最近重要提交：
+
+- 本轮 `Match desktop settings reference layout`
+  - 设置界面改成参考图式三模式块：按着说、自由说、按着说+自动发送。
+  - 通用区保留豆包快捷键、插入延迟、剪贴板保护和开机自启动；高级设置新增可配置的剪贴板超时。
+  - 布局报告和 EXE 测试改用 `mode-*`、`setting-<key>-*` 等语义化控件名，覆盖 150%/200% DPI、窄窗口和最小窗口。
+  - README、TEST_PLAN、内置 HELP 和 HANDOFF 同步更新。
 
 - `bfcfa16 Enlarge desktop option toggles`
   - 将“剪贴板保护 / 开机自启动”从默认小 checkbox 改成大号响应式开关。

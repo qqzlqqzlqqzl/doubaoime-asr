@@ -65,7 +65,7 @@
 | E04 | 分发 zip 完整性 | 完整包包含安装器、便携版、README 和 HELP；免安装包包含便携版、README 和 HELP |
 | E05 | 安装器静默安装 | 安装到临时目录成功 |
 | E06 | 安装后 EXE 自测 | 安装目录里的 EXE 自测通过 |
-| E07 | 安装后可见 UI 截图和布局报告 | 启动可见窗口并写出 `release\test-reports\installed-ui-smoke.png`、`installed-ui-smoke-narrow.png`、`installed-ui-smoke-minimum.png`、`installed-ui-smoke-scale200-default.png` 及对应 `*-layout.json`，自动断言正常/窄/最小窗口下主界面不需要滚动、控件不溢出、输入框、剪贴板保护/开机自启动开关和底部按钮都在单页可见区域内；同时用 `--ui-scale-factor` 模拟 150% 和 200% 缩放并断言布局仍不溢出、200% 控件物理尺寸不偏小，200% 默认窗口会按 DPI 放大而不是停留在固定 `900x680` |
+| E07 | 安装后可见 UI 截图和布局报告 | 启动可见窗口并写出 `release\test-reports\installed-ui-smoke.png`、`installed-ui-smoke-narrow.png`、`installed-ui-smoke-minimum.png`、`installed-ui-smoke-scale200-default.png` 及对应 `*-layout.json`，自动断言参考图式三模式块、豆包快捷键、插入延迟滑块、剪贴板保护/开机自启动开关和 6 个底部按钮都在单页可见区域内；正常/窄/最小窗口下主界面不需要滚动、控件不溢出，设置区 entry、录制/选择按钮、delay 控件和 hotkey 显示值都有语义化布局项；同时用 `--ui-scale-factor` 模拟 150% 和 200% 缩放并断言布局仍不溢出、200% 控件物理尺寸不偏小，200% 默认窗口会按 DPI 放大而不是停留在固定 `900x680` |
 | E08 | 托盘图标烟测 | `--tray-self-test` 能创建并删除 Windows 系统托盘图标，报告 `started=true`、`stopped=true` |
 | E09 | 关闭窗口后台保活 | 对安装后主窗口发送关闭消息后，进程保持运行且主窗口不可见 |
 | E10 | 安装后后台保活烟测 | `--hidden` 启动后进程保持运行，主窗口隐藏时可通过系统托盘继续后台监听 |
@@ -74,7 +74,7 @@
 | E13 | 普通打字和误触发热键保护 | `--self-test` 断言裸字母/数字、危险单修饰键、带额外按键的近似组合都不能作为空闲状态启动录音的全局快捷键，避免输入 `xian` 或按 `Ctrl + Alt + D` 时误触发 |
 | E14 | 按住说松开清理 | `--self-test` 断言通用 `Ctrl/Win` 松开事件能停止左右修饰键触发的按住说，且按住说/按住+发送松开后不会继续弹出悬浮窗；旧 ASR 会话回调会被忽略 |
 | E15 | 单实例托盘保护 | 启动安装版隐藏实例后再启动便携版，第二个进程必须快速退出，系统里只保留一个豆包 ASR 进程和一个托盘图标 |
-| E16 | 字号和对齐一致性 | UI 布局报告断言标题字号不压过输入控件、设置标签高度一致、说明文字对齐到对应标签下方，剪贴板保护/开机自启动开关不退回默认小 checkbox，避免主界面出现明显大小不一和列错位 |
+| E16 | 字号和对齐一致性 | UI 布局报告断言标题字号不压过输入控件、三种模式块内的触发键/取消键 entry 和录制按钮纵向对齐、设置标签高度一致、说明文字对齐到对应标签下方，剪贴板保护/开机自启动开关不退回默认小 checkbox，避免主界面出现明显大小不一和列错位 |
 
 ### 长文本 ASR 测试
 
@@ -107,12 +107,12 @@
 | U05 | 取消录音 | 录音过程中按默认 `Esc` | 本次输入取消，不插入也不自动发送 |
 | U06 | 快捷键自定义 | 点击“录制”并输入新组合键后保存 | 配置保存成功，重启后仍生效 |
 | U07 | 快捷键冲突 | 配置重复快捷键、裸字母键或 Windows 保留组合键，例如 `Alt + Tab` | 弹窗提示冲突或不可用风险，不能保存问题配置 |
-| U08 | 一键恢复默认 | 修改快捷键、延迟、剪贴板保护和开机自启动后点击“恢复默认” | 热键、延迟、剪贴板保护和启动项回到初始值并保存；凭据文件路径保留 |
+| U08 | 一键恢复默认 | 修改快捷键、插入延迟、剪贴板超时、发送延迟、剪贴板保护和开机自启动后点击“恢复默认” | 热键、延迟、剪贴板保护和启动项回到初始值并保存；凭据文件路径保留 |
 | U09 | 悬浮窗操作 | 录音后在悬浮窗点击清空、复制、插入 | 三个操作都生效，窗口不遮挡主流程 |
 | U10 | 帮助文档 | 打开“使用说明”和 release `HELP.md` | 能看到首次运行、默认快捷键、系统托盘、长文本测试、一键恢复默认和卸载说明 |
-| U11 | 延迟设置 | 调整插入延迟、发送延迟并保存后重启 | 数值保持在允许范围内，滑块和输入框同步显示 |
-| U12 | UI 截图复核 | 打开 `release\test-reports\installed-ui-smoke.png`、`installed-ui-smoke-narrow.png`、`installed-ui-smoke-minimum.png` 和对应 `*-layout.json`，再查看 `installed-ui-smoke-scale150-minimum-layout.json`、`installed-ui-smoke-scale200-narrow-layout.json`、`installed-ui-smoke-scale200-minimum-layout.json`、`installed-ui-smoke-scale200-default-layout.json` | 主界面没有滚动条，字号层级统一，文字、输入框、录制按钮和底部操作按钮不被截断，窄窗口、最小窗口、150% 和 200% 缩放下控件自动压缩和重排，200% 默认窗口不是小窗，布局报告显示 `fits_horizontally=true` 且 `fits_vertically=true` |
-| U13 | 系统托盘后台运行 | 点击主窗口 X 或“隐藏窗口”，再点击/右键托盘图标 | 主窗口隐藏后进程继续运行；左键托盘图标恢复窗口；右键菜单可显示、隐藏、打开配置目录和退出 |
+| U11 | 延迟设置 | 调整插入延迟、剪贴板超时、发送延迟并保存后重启 | 数值保持在允许范围内，插入延迟滑块按 50ms 吸附并显示秒数，两个高级延迟输入框按 50ms 吸附 |
+| U12 | UI 截图复核 | 打开 `release\test-reports\installed-ui-smoke.png`、`installed-ui-smoke-narrow.png`、`installed-ui-smoke-minimum.png` 和对应 `*-layout.json`，再查看 `installed-ui-smoke-scale150-minimum-layout.json`、`installed-ui-smoke-scale200-narrow-layout.json`、`installed-ui-smoke-scale200-minimum-layout.json`、`installed-ui-smoke-scale200-default-layout.json` | 主界面按参考图交互骨架显示三种模式块、通用设置和高级设置；没有滚动条，字号层级统一，文字、输入框、录制按钮和底部操作按钮不被截断，窄窗口、最小窗口、150% 和 200% 缩放下控件自动压缩和重排，200% 默认窗口不是小窗，布局报告显示 `fits_horizontally=true` 且 `fits_vertically=true` |
+| U13 | 系统托盘后台运行 | 点击主窗口 X 或“取消”，再点击/右键托盘图标 | 主窗口隐藏后进程继续运行；左键托盘图标恢复窗口；右键菜单可显示、隐藏、打开配置目录和退出 |
 | U14 | 重复启动保护 | 已经运行后再次双击安装版、免安装版或开机自启动脚本 | 不出现第二个主窗口和第二个托盘图标；已有窗口被唤醒或保持后台运行 |
 
 ## 发版前建议

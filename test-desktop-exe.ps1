@@ -474,7 +474,7 @@ function Assert-UiLayoutFits {
     $Names = ($Overflow | Select-Object -ExpandProperty name) -join ", "
     throw "UI widgets overflow the visible window: $Names"
   }
-  foreach ($Name in @("title", "status", "checks", "actions", "option-protect_clipboard", "option-startup")) {
+  foreach ($Name in @("status", "checks", "actions", "mode-0", "mode-1", "mode-2", "option-protect_clipboard", "option-startup")) {
     if (-not ($Layout.widgets | Where-Object { $_.name -eq $Name })) {
       throw "UI layout report missing required widget: $Name"
     }
@@ -516,12 +516,24 @@ function Assert-UiLayoutFits {
       }
     }
   }
-  for ($Index = 0; $Index -lt 8; $Index++) {
-    if (-not ($Layout.widgets | Where-Object { $_.name -eq "setting-$Index-entry" })) {
-      throw "UI layout report missing setting entry $Index"
+  $RequiredEntries = @(
+    "hold_key",
+    "toggle_key",
+    "hold_send_key",
+    "cancel_key",
+    "doubao_hotkey"
+  )
+  foreach ($Key in $RequiredEntries) {
+    if (-not ($Layout.widgets | Where-Object { $_.name -eq "setting-$Key-entry" })) {
+      throw "UI layout report missing setting entry: $Key"
     }
   }
-  $AlignedButtons = @($Layout.widgets | Where-Object { $_.name -match '^setting-(0|1|2|3|4|7)-button$' })
+  foreach ($Name in @("setting-insert_delay_ms-scale", "setting-insert_delay_ms-value")) {
+    if (-not ($Layout.widgets | Where-Object { $_.name -eq $Name })) {
+      throw "UI layout report missing insert delay control: $Name"
+    }
+  }
+  $AlignedButtons = @($Layout.widgets | Where-Object { $_.name -match '^setting-(hold_key|toggle_key|hold_send_key|cancel_key)-button$' })
   if ($AlignedButtons.Count -ge 2) {
     $ButtonXs = @($AlignedButtons | ForEach-Object { [int]$_.x })
     $ButtonSpread = ($ButtonXs | Measure-Object -Maximum).Maximum - ($ButtonXs | Measure-Object -Minimum).Minimum
@@ -529,7 +541,7 @@ function Assert-UiLayoutFits {
       throw "Setting record/select buttons are not vertically aligned: $($AlignedButtons.name -join ', ')"
     }
   }
-  $AlignedEntries = @($Layout.widgets | Where-Object { $_.name -match '^setting-(0|1|2|3|4|7)-entry$' })
+  $AlignedEntries = @($Layout.widgets | Where-Object { $_.name -match '^setting-(hold_key|toggle_key|hold_send_key|cancel_key)-entry$' })
   if ($AlignedEntries.Count -ge 2) {
     $EntryXs = @($AlignedEntries | ForEach-Object { [int]$_.x })
     $EntrySpread = ($EntryXs | Measure-Object -Maximum).Maximum - ($EntryXs | Measure-Object -Minimum).Minimum
@@ -537,7 +549,7 @@ function Assert-UiLayoutFits {
       throw "Setting text entries are not vertically aligned: $($AlignedEntries.name -join ', ')"
     }
   }
-  foreach ($DelayName in @("insert_delay_ms", "auto_send_delay_ms")) {
+  foreach ($DelayName in @("insert_delay_ms", "clipboard_restore_delay_ms", "auto_send_delay_ms")) {
     $Delay = $Layout.delays.$DelayName
     if ($null -eq $Delay) {
       throw "UI layout report missing delay value: $DelayName"
@@ -578,7 +590,7 @@ function Assert-UiVisualSizeAtScale {
   }
 
   $Title = $Layout.widgets | Where-Object { $_.name -eq "title" } | Select-Object -First 1
-  if ($null -eq $Title -or [int]$Title.height -lt 38) {
+  if ($Title -and [int]$Title.height -lt 30) {
     throw "High-DPI title is too small in layout report: $ReportPath"
   }
   $Entries = @($Layout.widgets | Where-Object { $_.name -like "setting-*-entry" })
