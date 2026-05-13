@@ -223,8 +223,8 @@ class DesktopApp:
     def __init__(self, hidden: bool = False, show_help: bool = False) -> None:
         self.root = tk.Tk()
         self.root.title("豆包 ASR 助手")
-        self.root.geometry("720x520")
-        self.root.minsize(680, 500)
+        self.root.geometry("900x680")
+        self.root.minsize(760, 520)
         self.root.protocol("WM_DELETE_WINDOW", self.root.withdraw)
         self.config = load_config()
         self.license_config = load_license_config()
@@ -242,6 +242,7 @@ class DesktopApp:
         self.final_text = ""
         self.entries: dict[str, tk.Entry] = {}
         self.vars: dict[str, tk.BooleanVar] = {}
+        self.settings_canvas: tk.Canvas | None = None
         self.help_win: tk.Toplevel | None = None
         self.activation_win: tk.Toplevel | None = None
         self.activation_code_var = tk.StringVar(value="")
@@ -262,8 +263,28 @@ class DesktopApp:
         self.root.mainloop()
 
     def _build_settings_ui(self) -> None:
-        outer = tk.Frame(self.root, padx=22, pady=18)
-        outer.pack(fill="both", expand=True)
+        shell = tk.Frame(self.root)
+        shell.pack(fill="both", expand=True)
+
+        canvas = tk.Canvas(shell, highlightthickness=0)
+        scrollbar = tk.Scrollbar(shell, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        self.settings_canvas = canvas
+
+        outer = tk.Frame(canvas, padx=22, pady=18)
+        window_id = canvas.create_window((0, 0), window=outer, anchor="nw")
+
+        def update_scroll_region(_event=None) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def fit_width(event) -> None:
+            canvas.itemconfigure(window_id, width=event.width)
+
+        outer.bind("<Configure>", update_scroll_region)
+        canvas.bind("<Configure>", fit_width)
+
         tk.Label(outer, text="豆包 ASR 助手", font=("Microsoft YaHei UI", 20, "bold")).pack(anchor="w")
         tk.Label(outer, textvariable=self.status_var, fg="#5d6b82").pack(anchor="w", pady=(4, 16))
 
@@ -279,21 +300,34 @@ class DesktopApp:
             ("auto_send_delay_ms", "自动发送延迟", "粘贴后等待发送的时间，毫秒"),
             ("credential_path", "凭据文件", "设备注册和 token 缓存文件"),
         ]
-        for row, (key, label, desc) in enumerate(fields):
-            tk.Label(table, text=label, width=18, anchor="w").grid(row=row, column=0, sticky="w", pady=6)
-            tk.Label(table, text=desc, anchor="w", fg="#5d6b82").grid(row=row, column=1, sticky="ew", padx=10)
-            value_frame = tk.Frame(table)
-            value_frame.grid(row=row, column=2, sticky="ew", pady=6)
-            entry = tk.Entry(value_frame)
+        for key, label, desc in fields:
+            row_frame = tk.Frame(table)
+            row_frame.pack(fill="x", pady=6)
+            text_frame = tk.Frame(row_frame)
+            text_frame.pack(fill="x")
+            tk.Label(text_frame, text=label, width=14, anchor="w").pack(side="left")
+            tk.Label(text_frame, text=desc, anchor="w", fg="#5d6b82", wraplength=360, justify="left").pack(
+                side="left",
+                fill="x",
+                expand=True,
+                padx=(10, 0),
+            )
+            value_frame = tk.Frame(row_frame)
+            value_frame.pack(fill="x", pady=(4, 0))
+            entry = tk.Entry(value_frame, width=12)
             entry.insert(0, str(getattr(self.config, key)))
-            entry.pack(side="left", fill="x", expand=True)
             self.entries[key] = entry
             if key.endswith("_key"):
-                tk.Button(value_frame, text="录制", command=lambda field=key: self.start_key_record(field), width=6).pack(side="left", padx=(6, 0))
+                tk.Button(value_frame, text="录制", command=lambda field=key: self.start_key_record(field), width=6).grid(row=0, column=0, padx=(0, 8))
+                value_frame.columnconfigure(1, weight=1)
+                entry.grid(row=0, column=1, sticky="ew")
             elif key == "credential_path":
-                tk.Button(value_frame, text="选择", command=self.select_credential_file, width=6).pack(side="left", padx=(6, 0))
-        table.columnconfigure(1, weight=1)
-        table.columnconfigure(2, weight=0, minsize=180)
+                tk.Button(value_frame, text="选择", command=self.select_credential_file, width=6).grid(row=0, column=0, padx=(0, 8))
+                value_frame.columnconfigure(1, weight=1)
+                entry.grid(row=0, column=1, sticky="ew")
+            else:
+                value_frame.columnconfigure(0, weight=1)
+                entry.grid(row=0, column=0, sticky="ew")
 
         checks = tk.Frame(outer)
         checks.pack(fill="x", pady=14)
@@ -304,18 +338,36 @@ class DesktopApp:
 
         buttons = tk.Frame(outer)
         buttons.pack(fill="x", pady=(4, 16))
-        tk.Button(buttons, text="保存配置", command=self.save_from_ui, width=14).pack(side="left")
-        tk.Button(buttons, text="显示悬浮窗", command=lambda: self.show_float("")).pack(side="left", padx=10)
-        tk.Button(buttons, text="使用说明", command=self.show_help, width=12).pack(side="left")
-        tk.Button(buttons, text="授权状态", command=self.show_activation_window, width=12).pack(side="left", padx=(10, 0))
-        tk.Button(buttons, text="打开配置目录", command=self.open_config_dir, width=14).pack(side="left", padx=10)
-        tk.Button(buttons, text="隐藏窗口", command=self.root.withdraw, width=14).pack(side="right")
+        actions = [
+            ("保存配置", self.save_from_ui),
+            ("显示悬浮窗", lambda: self.show_float("")),
+            ("使用说明", self.show_help),
+            ("授权状态", self.show_activation_window),
+            ("打开配置目录", self.open_config_dir),
+            ("隐藏窗口", self.root.withdraw),
+        ]
+        for index, (text, command) in enumerate(actions):
+            row, column = divmod(index, 3)
+            buttons.columnconfigure(column, weight=1)
+            tk.Button(buttons, text=text, command=command, width=14).grid(row=row, column=column, sticky="ew", padx=6, pady=4)
 
         help_text = (
             "默认热键：rctrl / xbutton1 / lctrl+lwin / z。"
             "录音结束后会把识别文字粘贴到开始录音前的窗口。"
         )
         tk.Label(outer, text=help_text, fg="#5d6b82", wraplength=660, justify="left").pack(anchor="w")
+        self._bind_settings_mousewheel(outer)
+
+    def _bind_settings_mousewheel(self, widget: tk.Widget) -> None:
+        widget.bind("<MouseWheel>", self._on_settings_mousewheel, add="+")
+        for child in widget.winfo_children():
+            self._bind_settings_mousewheel(child)
+
+    def _on_settings_mousewheel(self, event) -> None:
+        if self.settings_canvas is None:
+            return
+        step = -1 if event.delta > 0 else 1
+        self.settings_canvas.yview_scroll(step * 3, "units")
 
     def start_key_record(self, field: str) -> None:
         self.recording_field = field
