@@ -69,7 +69,7 @@ UI_SUCCESS_SOFT = "#ecfdf3"
 UI_INPUT = "#fbfdff"
 DELAY_SPECS = {
     "insert_delay_ms": (0, 1500, 50),
-    "auto_send_delay_ms": (0, 500, 10),
+    "auto_send_delay_ms": (0, 500, 50),
 }
 BASE_TK_SCALING = 96 / 72
 DEFAULT_WINDOW_WIDTH = 900
@@ -102,6 +102,14 @@ def app_icon_path() -> Path | None:
         if bundled_icon.exists():
             return bundled_icon
     return None
+
+
+def snap_delay_value(value: int | float, minimum: int, maximum: int, step: int) -> int:
+    snapped = int(round(float(value)))
+    snapped = max(minimum, min(maximum, snapped))
+    if step > 1:
+        snapped = minimum + int(math.floor(((snapped - minimum) / step) + 0.5)) * step
+    return max(minimum, min(maximum, snapped))
 
 
 def configure_windows_app_identity() -> None:
@@ -525,6 +533,8 @@ def normalize_config(config: DesktopConfig) -> DesktopConfig:
     for field in ("hold_key", "toggle_key", "hold_send_key", "cancel_key"):
         if not idle_start_hotkey_allowed(parse_hotkey(getattr(config, field))):
             setattr(config, field, getattr(defaults, field))
+    for field, (minimum, maximum, step) in DELAY_SPECS.items():
+        setattr(config, field, snap_delay_value(getattr(config, field), minimum, maximum, step))
     return config
 
 
@@ -1386,7 +1396,7 @@ class DesktopApp:
         frame = row["frame"]
         if not isinstance(frame, tk.Frame):
             return
-        value = int(getattr(self.config, key))
+        value = snap_delay_value(int(getattr(self.config, key)), minimum, maximum, step)
         var = tk.IntVar(value=value)
         self.delay_vars[key] = var
         scale = ttk.Scale(
@@ -1396,7 +1406,7 @@ class DesktopApp:
             orient="horizontal",
             variable=var,
             style="Modern.Horizontal.TScale",
-            command=lambda _value, field=key: self._sync_delay_entry(field),
+            command=lambda value, field=key, low=minimum, high=maximum, inc=step: self._sync_delay_from_scale(field, value, low, high, inc),
         )
         entry = ttk.Entry(
             frame,
@@ -1448,6 +1458,15 @@ class DesktopApp:
         entry.delete(0, "end")
         entry.insert(0, str(var.get()))
 
+    def _sync_delay_from_scale(self, field: str, value: str, minimum: int, maximum: int, step: int) -> None:
+        var = self.delay_vars.get(field)
+        if var is None:
+            return
+        snapped = snap_delay_value(float(value), minimum, maximum, step)
+        if var.get() != snapped:
+            var.set(snapped)
+        self._sync_delay_entry(field)
+
     def _sync_delay_from_entry(self, field: str, minimum: int, maximum: int, step: int) -> None:
         entry = self.entries.get(field)
         var = self.delay_vars.get(field)
@@ -1457,9 +1476,7 @@ class DesktopApp:
             value = int(entry.get().strip())
         except ValueError:
             value = var.get()
-        value = max(minimum, min(maximum, value))
-        if step > 1:
-            value = int(round(value / step) * step)
+        value = snap_delay_value(value, minimum, maximum, step)
         var.set(value)
         self._sync_delay_entry(field)
 
@@ -1802,6 +1819,14 @@ class DesktopApp:
                 "bottom": content_bottom,
                 "fits_horizontally": content_right <= root_width + 2,
                 "fits_vertically": content_bottom <= root_height + 2,
+            },
+            "delays": {
+                field: {
+                    "value": int(self.delay_vars[field].get()),
+                    "step": spec[2],
+                }
+                for field, spec in DELAY_SPECS.items()
+                if field in self.delay_vars
             },
             "widgets": widgets,
         }
@@ -2439,6 +2464,21 @@ def run_self_test(report_path: str | None = None) -> int:
             raise ValueError("default reset should preserve the credential path")
         return "configured hotkeys are valid, bare text start keys are rejected, xian typing is safe, Alt combos are captured, Windows conflicts are checked, and default reset is safe"
 
+    def delay_snap_check() -> str:
+        for field, (minimum, maximum, step) in DELAY_SPECS.items():
+            if step != 50:
+                raise ValueError(f"{field} should snap in 50ms steps")
+            if snap_delay_value(492, minimum, maximum, step) != 500:
+                raise ValueError(f"{field} did not snap 492ms to 500ms")
+            if snap_delay_value(92, minimum, maximum, step) != 100:
+                raise ValueError(f"{field} did not snap 92ms to 100ms")
+            if snap_delay_value(maximum + 100, minimum, maximum, step) != maximum:
+                raise ValueError(f"{field} did not clamp at max")
+        normalized = normalize_config(DesktopConfig(insert_delay_ms=492, auto_send_delay_ms=92))
+        if normalized.insert_delay_ms != 500 or normalized.auto_send_delay_ms != 100:
+            raise ValueError("loaded delay config values are not normalized to 50ms steps")
+        return "delay sliders snap to 50ms magnetic steps"
+
     def opus_check() -> str:
         encoder = AudioEncoder(ASRConfig(credential_path=str(credential_path)))
         frames = encoder.pcm_to_opus_frames(b"\x00" * 640)
@@ -2507,6 +2547,7 @@ def run_self_test(report_path: str | None = None) -> int:
     check("config_dir", config_dir_check)
     check("credential_path", credential_path_check)
     check("hotkeys", hotkey_check)
+    check("delay_snap", delay_snap_check)
     check("opus_encoder", opus_check)
     check("audio_devices", sounddevice_check)
     check("input_control", input_control_check)

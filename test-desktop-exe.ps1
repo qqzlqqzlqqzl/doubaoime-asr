@@ -500,6 +500,15 @@ function Assert-UiLayoutFits {
       throw "Setting text entries are not vertically aligned: $($AlignedEntries.name -join ', ')"
     }
   }
+  foreach ($DelayName in @("insert_delay_ms", "auto_send_delay_ms")) {
+    $Delay = $Layout.delays.$DelayName
+    if ($null -eq $Delay) {
+      throw "UI layout report missing delay value: $DelayName"
+    }
+    if ([int]$Delay.step -ne 50 -or ([int]$Delay.value % 50) -ne 0) {
+      throw "Delay slider does not snap to 50ms steps: $DelayName=$($Delay.value), step=$($Delay.step)"
+    }
+  }
   $ExpectedActionButtons = 6
   $ActionButtons = @($Layout.widgets | Where-Object { $_.name -like "action-*" })
   if ($ActionButtons.Count -ne $ExpectedActionButtons) {
