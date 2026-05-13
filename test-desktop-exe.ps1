@@ -476,6 +476,35 @@ finally {
   Stop-AppFromPath -ExePath $InstalledExe
 }
 
+$ScaleScenarios = @(
+  @{ Name = "installed-ui-smoke-scale150-minimum-layout.json"; Size = "560x420"; Scale = "1.5" },
+  @{ Name = "installed-ui-smoke-scale200-narrow-layout.json"; Size = "760x520"; Scale = "2.0" },
+  @{ Name = "installed-ui-smoke-scale200-minimum-layout.json"; Size = "560x420"; Scale = "2.0" }
+)
+foreach ($Scenario in $ScaleScenarios) {
+  $ScaleReport = Join-Path $ReportsDir $Scenario.Name
+  Remove-Item -LiteralPath $ScaleReport -Force -ErrorAction SilentlyContinue
+  $ScaleApp = Start-Process $InstalledExe -ArgumentList @(
+    "--background",
+    "--ui-layout-report", $ScaleReport,
+    "--ui-window-size", $Scenario.Size,
+    "--ui-scale-factor", $Scenario.Scale
+  ) -PassThru
+  try {
+    Assert-UiLayoutFits -ReportPath $ScaleReport | Out-Host
+    $ScaleLayout = Wait-UiLayoutReport -ReportPath $ScaleReport
+    $ActualScale = [double]$ScaleLayout.display.ui_scale_factor
+    $ExpectedScale = [double]$Scenario.Scale
+    if ([Math]::Abs($ActualScale - $ExpectedScale) -gt 0.05) {
+      throw "UI scale report expected $ExpectedScale, got $ActualScale"
+    }
+  }
+  finally {
+    Stop-Process -Id $ScaleApp.Id -Force -ErrorAction SilentlyContinue
+    Stop-AppFromPath -ExePath $InstalledExe
+  }
+}
+
 $App = Start-Process $InstalledExe -ArgumentList "--hidden" -PassThru
 Start-Sleep -Seconds 5
 if (-not (Get-Process -Id $App.Id -ErrorAction SilentlyContinue)) {

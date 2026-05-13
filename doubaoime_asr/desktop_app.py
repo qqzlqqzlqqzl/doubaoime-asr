@@ -64,6 +64,8 @@ DELAY_SPECS = {
     "insert_delay_ms": (0, 1500, 50),
     "auto_send_delay_ms": (0, 500, 10),
 }
+BASE_TK_SCALING = 96 / 72
+_DPI_AWARENESS_CONFIGURED = False
 
 
 @dataclass
@@ -220,6 +222,27 @@ def active_matches(active: set[str], target: frozenset[str]) -> bool:
     return target.issubset(expanded)
 
 
+def configure_process_dpi_awareness() -> None:
+    global _DPI_AWARENESS_CONFIGURED
+    if _DPI_AWARENESS_CONFIGURED or sys.platform != "win32":
+        return
+    _DPI_AWARENESS_CONFIGURED = True
+    try:
+        ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+        return
+    except (AttributeError, OSError):
+        pass
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        return
+    except (AttributeError, OSError):
+        pass
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except (AttributeError, OSError):
+        pass
+
+
 class Clipboard:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -244,11 +267,16 @@ class DesktopApp:
         background: bool = False,
         ui_layout_report: str | None = None,
         ui_window_size: str | None = None,
+        ui_scale_factor: float | None = None,
     ) -> None:
+        configure_process_dpi_awareness()
         self.root = tk.Tk()
+        if ui_scale_factor is not None:
+            self.root.tk.call("tk", "scaling", BASE_TK_SCALING * max(0.75, min(3.0, ui_scale_factor)))
         self.root.title("豆包 ASR 助手")
         self.root.geometry(ui_window_size or "900x680")
-        self.root.minsize(560, 420)
+        min_window_scale = min(max(self.current_ui_scale_factor(), 1.0), 1.35)
+        self.root.minsize(int(560 * min_window_scale), int(420 * min_window_scale))
         self.root.protocol("WM_DELETE_WINDOW", self.root.withdraw)
         self._configure_ttk_styles()
         self.config = load_config()
@@ -360,6 +388,12 @@ class DesktopApp:
             foreground=[("active", UI_TEXT)],
             indicatorbackground=[("selected", UI_PRIMARY), ("!selected", UI_INPUT)],
         )
+
+    def current_ui_scale_factor(self) -> float:
+        try:
+            return max(0.75, float(self.root.tk.call("tk", "scaling")) / BASE_TK_SCALING)
+        except (tk.TclError, ValueError):
+            return 1.0
 
     def show_main_window(self) -> None:
         self.root.deiconify()
@@ -705,19 +739,26 @@ class DesktopApp:
         root_width = max(self.root.winfo_width(), 1)
         root_height = max(self.root.winfo_height(), 1)
         available_width = max(self.settings_table.winfo_width(), root_width - 40, 1)
-        narrow = root_width <= 620
-        short = root_height <= 540
-        tiny = root_width <= 620 and root_height <= 430
+        ui_scale = self.current_ui_scale_factor()
+        high_scale = ui_scale >= 1.35
+        very_high_scale = ui_scale >= 1.75
+        narrow = root_width <= 620 or (high_scale and root_width <= 760)
+        short = root_height <= 540 or (high_scale and root_height <= 680)
+        tiny = (
+            (root_width <= 620 and root_height <= 430)
+            or (high_scale and root_height <= 600)
+            or (very_high_scale and root_height <= 680)
+        )
         compact = narrow or available_width < 760
         show_desc = not narrow
         show_section_headers = not tiny
         desc_wrap = max(130, min(260, available_width - (300 if compact else 540)))
-        outer_padx = 8 if tiny else 12 if short or compact else 22
-        outer_pady = 6 if tiny else 8 if short else 10 if compact else 18
-        row_pady = 1 if tiny else 2 if short else 3 if compact else 5
-        title_size = 14 if tiny else 17 if short or compact else 20
-        normal_size = 8 if tiny else 9 if short or compact else 10
-        desc_size = 8 if compact or short else 9
+        outer_padx = 6 if tiny else 10 if short or compact else 22
+        outer_pady = 4 if tiny else 7 if short else 10 if compact else 18
+        row_pady = 0 if tiny else 1 if short else 3 if compact else 5
+        title_size = 11 if tiny else 15 if short or compact else 20
+        normal_size = 7 if tiny else 8 if short else 9 if compact else 10
+        desc_size = 7 if tiny else 8 if compact or short else 9
         normal_font = ("Microsoft YaHei UI", normal_size)
         desc_font = ("Microsoft YaHei UI", desc_size)
         label_font = ("Microsoft YaHei UI", normal_size, "bold")
@@ -880,10 +921,13 @@ class DesktopApp:
         root_height = max(self.root.winfo_height(), 1)
         tight = width <= 620 or root_height <= 540
         roomy = width >= 760 and root_height >= 600
-        columns = 6 if width >= 720 else 3 if width >= 500 else 2 if width >= 340 else 1
+        if root_height <= 430 and width >= 520:
+            columns = len(self.action_buttons)
+        else:
+            columns = len(self.action_buttons) if width >= 720 else 3 if width >= 500 else 2 if width >= 340 else 1
         button_font = ("Microsoft YaHei UI", 8 if tight else 9)
-        button_padx = 3 if tight else 6
-        button_pady = 1 if tight else 4
+        button_padx = 2 if root_height <= 430 else 3 if tight else 6
+        button_pady = 0 if root_height <= 430 else 1 if tight else 4
         self.action_buttons_frame.pack_configure(pady=(5 if tight else 12, 0 if tight else 12))
         for column in range(6):
             self.action_buttons_frame.columnconfigure(column, weight=0)
@@ -955,6 +999,10 @@ class DesktopApp:
             "root": {
                 "width": root_width,
                 "height": root_height,
+            },
+            "display": {
+                "tk_scaling": float(self.root.tk.call("tk", "scaling")),
+                "ui_scale_factor": round(self.current_ui_scale_factor(), 3),
             },
             "content": {
                 "right": content_right,
@@ -1588,6 +1636,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--show-help", action="store_true", help="Open the desktop help window on startup.")
     parser.add_argument("--ui-layout-report", help=argparse.SUPPRESS)
     parser.add_argument("--ui-window-size", help=argparse.SUPPRESS)
+    parser.add_argument("--ui-scale-factor", type=float, help=argparse.SUPPRESS)
     parser.add_argument("--self-test", action="store_true", help="Run packaged app diagnostics and exit.")
     parser.add_argument("--self-test-report", help="Write self-test JSON report to this path.")
     parser.add_argument("--long-text-test", action="store_true", help="Generate the long text stress sample and optionally run ASR.")
@@ -1617,6 +1666,7 @@ def main(argv: list[str] | None = None) -> None:
         background=args.background,
         ui_layout_report=args.ui_layout_report,
         ui_window_size=args.ui_window_size,
+        ui_scale_factor=args.ui_scale_factor,
     )
     app.run()
 
