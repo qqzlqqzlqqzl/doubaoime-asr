@@ -74,6 +74,7 @@
 | E13 | 普通打字和误触发热键保护 | `--self-test` 断言裸字母/数字、危险单修饰键、带额外按键的近似组合都不能作为空闲状态启动录音的全局快捷键，避免输入 `xian` 或按 `Ctrl + Alt + D` 时误触发 |
 | E14 | 按住说松开清理 | `--self-test` 断言通用 `Ctrl/Win` 松开事件能停止左右修饰键触发的按住说，且按住说/按住+发送松开后不会继续弹出悬浮窗；旧 ASR 会话回调会被忽略 |
 | E15 | 单实例托盘保护 | 启动安装版隐藏实例后再启动便携版，第二个进程必须快速退出，系统里只保留一个豆包 ASR 进程和一个托盘图标 |
+| E16 | 字号和对齐一致性 | UI 布局报告断言标题字号不压过输入控件、设置标签高度一致、说明文字对齐到对应标签下方，避免主界面出现明显大小不一和列错位 |
 
 ### 长文本 ASR 测试
 
@@ -110,7 +111,7 @@
 | U09 | 悬浮窗操作 | 录音后在悬浮窗点击清空、复制、插入 | 三个操作都生效，窗口不遮挡主流程 |
 | U10 | 帮助文档 | 打开“使用说明”和 release `HELP.md` | 能看到首次运行、默认快捷键、系统托盘、长文本测试、一键恢复默认和卸载说明 |
 | U11 | 延迟设置 | 调整插入延迟、发送延迟并保存后重启 | 数值保持在允许范围内，滑块和输入框同步显示 |
-| U12 | UI 截图复核 | 打开 `release\test-reports\installed-ui-smoke.png`、`installed-ui-smoke-narrow.png`、`installed-ui-smoke-minimum.png` 和对应 `*-layout.json`，再查看 `installed-ui-smoke-scale150-minimum-layout.json`、`installed-ui-smoke-scale200-narrow-layout.json`、`installed-ui-smoke-scale200-minimum-layout.json`、`installed-ui-smoke-scale200-default-layout.json` | 主界面没有滚动条，文字、输入框、录制按钮和底部操作按钮不被截断，窄窗口、最小窗口、150% 和 200% 缩放下控件自动压缩和重排，200% 默认窗口不是小窗，布局报告显示 `fits_horizontally=true` 且 `fits_vertically=true` |
+| U12 | UI 截图复核 | 打开 `release\test-reports\installed-ui-smoke.png`、`installed-ui-smoke-narrow.png`、`installed-ui-smoke-minimum.png` 和对应 `*-layout.json`，再查看 `installed-ui-smoke-scale150-minimum-layout.json`、`installed-ui-smoke-scale200-narrow-layout.json`、`installed-ui-smoke-scale200-minimum-layout.json`、`installed-ui-smoke-scale200-default-layout.json` | 主界面没有滚动条，字号层级统一，文字、输入框、录制按钮和底部操作按钮不被截断，窄窗口、最小窗口、150% 和 200% 缩放下控件自动压缩和重排，200% 默认窗口不是小窗，布局报告显示 `fits_horizontally=true` 且 `fits_vertically=true` |
 | U13 | 系统托盘后台运行 | 点击主窗口 X 或“隐藏窗口”，再点击/右键托盘图标 | 主窗口隐藏后进程继续运行；左键托盘图标恢复窗口；右键菜单可显示、隐藏、打开配置目录和退出 |
 | U14 | 重复启动保护 | 已经运行后再次双击安装版、免安装版或开机自启动脚本 | 不出现第二个主窗口和第二个托盘图标；已有窗口被唤醒或保持后台运行 |
 

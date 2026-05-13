@@ -479,6 +479,38 @@ function Assert-UiLayoutFits {
       throw "UI layout report missing required widget: $Name"
     }
   }
+  $Title = $Layout.widgets | Where-Object { $_.name -eq "title" } | Select-Object -First 1
+  $EntriesForType = @($Layout.widgets | Where-Object { $_.name -match '^setting-\d+-entry$' })
+  if ($Title -and $EntriesForType.Count -gt 0) {
+    $EntryHeights = @($EntriesForType | ForEach-Object { [int]$_.height })
+    $AverageEntryHeight = ($EntryHeights | Measure-Object -Average).Average
+    if ([int]$Title.height -gt [Math]::Ceiling($AverageEntryHeight * 1.35)) {
+      throw "Title typography is too large compared with setting inputs: $ReportPath"
+    }
+  }
+  $LabelsForType = @($Layout.widgets | Where-Object { $_.name -match '^setting-\d+-label$' })
+  if ($LabelsForType.Count -gt 1) {
+    $LabelHeights = @($LabelsForType | ForEach-Object { [int]$_.height })
+    $LabelHeightSpread = ($LabelHeights | Measure-Object -Maximum).Maximum - ($LabelHeights | Measure-Object -Minimum).Minimum
+    if ($LabelHeightSpread -gt 8) {
+      throw "Setting label typography is inconsistent: $ReportPath"
+    }
+  }
+  $DescriptionsForType = @($Layout.widgets | Where-Object { $_.name -match '^setting-\d+-desc$' })
+  if ($DescriptionsForType.Count -gt 1) {
+    $DescriptionHeights = @($DescriptionsForType | ForEach-Object { [int]$_.height })
+    $DescriptionHeightSpread = ($DescriptionHeights | Measure-Object -Maximum).Maximum - ($DescriptionHeights | Measure-Object -Minimum).Minimum
+    if ($DescriptionHeightSpread -gt 8) {
+      throw "Setting descriptions wrap inconsistently across rows: $ReportPath"
+    }
+    foreach ($Description in $DescriptionsForType) {
+      $Index = [regex]::Match([string]$Description.name, '^setting-(\d+)-desc$').Groups[1].Value
+      $Label = $LabelsForType | Where-Object { $_.name -eq "setting-$Index-label" } | Select-Object -First 1
+      if ($Label -and [Math]::Abs([int]$Description.x - [int]$Label.x) -gt 4) {
+        throw "Setting description is not aligned under its label: $($Description.name)"
+      }
+    }
+  }
   for ($Index = 0; $Index -lt 8; $Index++) {
     if (-not ($Layout.widgets | Where-Object { $_.name -eq "setting-$Index-entry" })) {
       throw "UI layout report missing setting entry $Index"
