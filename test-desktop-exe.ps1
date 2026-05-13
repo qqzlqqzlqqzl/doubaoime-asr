@@ -474,10 +474,15 @@ function Assert-UiLayoutFits {
     $Names = ($Overflow | Select-Object -ExpandProperty name) -join ", "
     throw "UI widgets overflow the visible window: $Names"
   }
-  foreach ($Name in @("title", "status", "checks", "actions")) {
+  foreach ($Name in @("title", "status", "checks", "actions", "option-protect_clipboard", "option-startup")) {
     if (-not ($Layout.widgets | Where-Object { $_.name -eq $Name })) {
       throw "UI layout report missing required widget: $Name"
     }
+  }
+  $OptionToggles = @($Layout.widgets | Where-Object { $_.name -like "option-*" })
+  $SmallOptionToggles = @($OptionToggles | Where-Object { [int]$_.height -lt 28 -or [int]$_.width -lt 86 })
+  if ($SmallOptionToggles.Count -gt 0) {
+    throw "Settings option toggles are too small: $($SmallOptionToggles.name -join ', ')"
   }
   $Title = $Layout.widgets | Where-Object { $_.name -eq "title" } | Select-Object -First 1
   $EntriesForType = @($Layout.widgets | Where-Object { $_.name -match '^setting-\d+-entry$' })
@@ -590,6 +595,11 @@ function Assert-UiVisualSizeAtScale {
   $SmallActions = @($ActionButtons | Where-Object { [int]$_.height -lt 44 -or [int]$_.width -lt 110 })
   if ($SmallActions.Count -gt 0) {
     throw "High-DPI action buttons are too small: $($SmallActions.name -join ', ')"
+  }
+  $OptionToggles = @($Layout.widgets | Where-Object { $_.name -like "option-*" })
+  $SmallOptionToggles = @($OptionToggles | Where-Object { [int]$_.height -lt 38 -or [int]$_.width -lt 120 })
+  if ($SmallOptionToggles.Count -gt 0) {
+    throw "High-DPI option toggles are too small: $($SmallOptionToggles.name -join ', ')"
   }
   $Scales = @($Layout.widgets | Where-Object { $_.name -like "setting-*-scale" })
   $SmallScales = @($Scales | Where-Object { [int]$_.height -lt 18 })

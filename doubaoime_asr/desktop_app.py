@@ -67,6 +67,8 @@ UI_PRIMARY_SOFT = "#eff6ff"
 UI_SUCCESS = "#15803d"
 UI_SUCCESS_SOFT = "#ecfdf3"
 UI_INPUT = "#fbfdff"
+UI_TOGGLE_OFF = "#f8fafc"
+UI_TOGGLE_OFF_ACTIVE = "#e2e8f0"
 DELAY_SPECS = {
     "insert_delay_ms": (0, 1500, 50),
     "auto_send_delay_ms": (0, 500, 50),
@@ -1123,6 +1125,7 @@ class DesktopApp:
         self.settings_rows: list[dict[str, object]] = []
         self.settings_checks_frame: tk.Frame | None = None
         self.settings_checkbuttons: list[tk.Checkbutton] = []
+        self.settings_option_buttons: dict[str, tk.Checkbutton] = {}
         self.settings_help_label: tk.Label | None = None
         self.action_buttons_frame: tk.Frame | None = None
         self.action_buttons: list[tk.Button] = []
@@ -1443,20 +1446,11 @@ class DesktopApp:
         checks.pack(fill="x", pady=(4, 0))
         self.settings_checks_frame = checks
         self.settings_checkbuttons.clear()
+        self.settings_option_buttons.clear()
         self.vars["protect_clipboard"] = tk.BooleanVar(value=self.config.protect_clipboard)
         self.vars["startup"] = tk.BooleanVar(value=self.config.startup)
-        protect_clipboard = ttk.Checkbutton(
-            checks,
-            text="剪贴板保护",
-            variable=self.vars["protect_clipboard"],
-            style="Modern.TCheckbutton",
-        )
-        startup = ttk.Checkbutton(
-            checks,
-            text="开机自启动",
-            variable=self.vars["startup"],
-            style="Modern.TCheckbutton",
-        )
+        protect_clipboard = self._create_option_toggle(checks, "protect_clipboard", "剪贴板保护")
+        startup = self._create_option_toggle(checks, "startup", "开机自启动")
         protect_clipboard.pack(side="left")
         startup.pack(side="left", padx=18)
         self.settings_checkbuttons.extend([protect_clipboard, startup])
@@ -1660,6 +1654,50 @@ class DesktopApp:
             highlightthickness=1,
             highlightbackground=UI_PRIMARY if primary else UI_BORDER,
         )
+
+    def _create_option_toggle(self, parent: tk.Widget, key: str, text: str) -> tk.Checkbutton:
+        toggle = tk.Checkbutton(
+            parent,
+            text=text,
+            variable=self.vars[key],
+            indicatoron=False,
+            anchor="center",
+            bg=UI_TOGGLE_OFF,
+            fg=UI_TEXT,
+            activebackground=UI_TOGGLE_OFF_ACTIVE,
+            activeforeground=UI_TEXT,
+            selectcolor=UI_PRIMARY,
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=1,
+            highlightbackground=UI_BORDER,
+            highlightcolor=UI_PRIMARY,
+            cursor="hand2",
+            takefocus=True,
+            padx=14,
+            pady=6,
+            font=("Microsoft YaHei UI", 9, "bold"),
+        )
+        toggle.configure(command=lambda widget=toggle, option_key=key: self._sync_option_toggle_style(widget, option_key))
+        self.settings_option_buttons[key] = toggle
+        self._sync_option_toggle_style(toggle, key)
+        return toggle
+
+    def _sync_option_toggle_style(self, toggle: tk.Checkbutton, key: str) -> None:
+        var = self.vars.get(key)
+        selected = bool(var.get()) if var is not None else False
+        toggle.configure(
+            bg=UI_PRIMARY if selected else UI_TOGGLE_OFF,
+            fg="#ffffff" if selected else UI_TEXT,
+            activebackground=UI_PRIMARY_DARK if selected else UI_TOGGLE_OFF_ACTIVE,
+            activeforeground="#ffffff" if selected else UI_TEXT,
+            highlightbackground=UI_PRIMARY if selected else "#cbd5e1",
+            selectcolor=UI_PRIMARY if selected else UI_TOGGLE_OFF,
+        )
+
+    def _sync_option_toggle_styles(self) -> None:
+        for key, toggle in self.settings_option_buttons.items():
+            self._sync_option_toggle_style(toggle, key)
 
     def _sync_delay_entry(self, field: str) -> None:
         entry = self.entries.get(field)
@@ -1897,10 +1935,23 @@ class DesktopApp:
 
         if self.settings_checks_frame is not None:
             self.settings_checks_frame.pack_configure(pady=2 if tiny else 4 if short else 6)
+        stack_option_toggles = logical_available_width < 360
+        toggle_font = ("Microsoft YaHei UI", max(normal_size, 9), "bold")
+        toggle_padx = 11 if tiny else 14 if compact else 16
+        toggle_pady = 5 if tiny else 6
         for index, checkbutton in enumerate(self.settings_checkbuttons):
             if isinstance(checkbutton, tk.Checkbutton):
-                checkbutton.configure(font=normal_font)
-            checkbutton.pack_configure(padx=0 if index == 0 else 10 if tiny else 18)
+                checkbutton.configure(font=toggle_font, padx=toggle_padx, pady=toggle_pady)
+                option_key = next(
+                    (key for key, widget in self.settings_option_buttons.items() if widget is checkbutton),
+                    "",
+                )
+                if option_key:
+                    self._sync_option_toggle_style(checkbutton, option_key)
+            if stack_option_toggles:
+                checkbutton.pack_configure(side="top", fill="x", padx=0, pady=(0 if index == 0 else 4, 0))
+            else:
+                checkbutton.pack_configure(side="left", fill="none", padx=0 if index == 0 else 10 if tiny else 18, pady=0)
 
         self.layout_action_buttons(force=force)
         if self.settings_help_label is not None:
@@ -2002,6 +2053,10 @@ class DesktopApp:
                     widgets.append(bounds)
         for index, button in enumerate(self.action_buttons):
             bounds = self._widget_bounds(f"action-{index}", button)
+            if bounds is not None:
+                widgets.append(bounds)
+        for key, button in self.settings_option_buttons.items():
+            bounds = self._widget_bounds(f"option-{key}", button)
             if bounds is not None:
                 widgets.append(bounds)
 
@@ -2354,6 +2409,7 @@ class DesktopApp:
             self._sync_delay_entry(key)
         self.vars["protect_clipboard"].set(self.config.protect_clipboard)
         self.vars["startup"].set(self.config.startup)
+        self._sync_option_toggle_styles()
         save_config(self.config)
         self.status_var.set("已恢复默认设置，凭据文件路径已保留")
 
