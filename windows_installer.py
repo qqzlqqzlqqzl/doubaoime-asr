@@ -26,12 +26,13 @@ def desktop_dir() -> Path:
     return Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Desktop"
 
 
-def create_shortcut(shortcut: Path, target: Path, description: str) -> None:
+def create_shortcut(shortcut: Path, target: Path, description: str, arguments: str = "") -> None:
     shortcut.parent.mkdir(parents=True, exist_ok=True)
     script = f"""
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut('{str(shortcut).replace("'", "''")}')
 $shortcut.TargetPath = '{str(target).replace("'", "''")}'
+$shortcut.Arguments = '{arguments.replace("'", "''")}'
 $shortcut.WorkingDirectory = '{str(target.parent).replace("'", "''")}'
 $shortcut.Description = '{description.replace("'", "''")}'
 $shortcut.Save()
@@ -60,6 +61,7 @@ def write_uninstaller(install_dir: Path) -> Path:
                 "@echo off",
                 f'taskkill /IM "{APP_EXE}" /F >nul 2>nul',
                 'del "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Doubao ASR Helper\\Doubao ASR Helper.lnk" >nul 2>nul',
+                'del "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Doubao ASR Helper\\Help.lnk" >nul 2>nul',
                 'del "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Doubao ASR Helper\\Uninstall Doubao ASR Helper.lnk" >nul 2>nul',
                 'rmdir "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Doubao ASR Helper" >nul 2>nul',
                 'del "%USERPROFILE%\\Desktop\\Doubao ASR Helper.lnk" >nul 2>nul',
@@ -100,6 +102,7 @@ def install(target: Path, shortcuts: bool = True) -> Path:
 
     if shortcuts:
         create_shortcut(START_MENU_DIR / f"{APP_NAME}.lnk", target_exe, "Doubao ASR voice input helper")
+        create_shortcut(START_MENU_DIR / "Help.lnk", target_exe, "Doubao ASR Helper help", "--show-help")
         create_shortcut(desktop_dir() / f"{APP_NAME}.lnk", target_exe, "Doubao ASR voice input helper")
         create_shortcut(START_MENU_DIR / f"Uninstall {APP_NAME}.lnk", target / "uninstall.cmd", f"Uninstall {APP_NAME}")
 

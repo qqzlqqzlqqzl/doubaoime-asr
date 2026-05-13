@@ -37,6 +37,8 @@ $ReleaseDir = Join-Path $PSScriptRoot "release"
 New-Item -ItemType Directory -Force -Path $ReleaseDir | Out-Null
 Copy-Item -Force (Join-Path $PSScriptRoot "dist\DoubaoASRHelper.exe") (Join-Path $ReleaseDir "DoubaoASRHelper-portable.exe")
 Copy-Item -Force (Join-Path $PSScriptRoot "dist\DoubaoASRHelperSetup.exe") (Join-Path $ReleaseDir "DoubaoASRHelperSetup.exe")
+$HelpPath = Join-Path $ReleaseDir "HELP.md"
+python -m doubaoime_asr.desktop_help $HelpPath
 
 $Readme = @(
   "Doubao ASR Helper for Windows",
@@ -44,6 +46,7 @@ $Readme = @(
   "Recommended files:",
   "- DoubaoASRHelperSetup.exe: installer for the current Windows user. It creates Start Menu and Desktop shortcuts.",
   "- DoubaoASRHelper-portable.exe: portable one-file app. Run it directly without shortcuts.",
+  "- HELP.md: offline usage guide.",
   "",
   "Config and credential cache are saved under %APPDATA%\DoubaoASRHelper on first run.",
   "Windows SmartScreen may show an unknown publisher warning because this build is not code-signed."
@@ -54,7 +57,8 @@ $ZipPath = Join-Path $ReleaseDir "DoubaoASRHelper-Windows.zip"
 Compress-Archive -Force -Path @(
   (Join-Path $ReleaseDir "DoubaoASRHelperSetup.exe"),
   (Join-Path $ReleaseDir "DoubaoASRHelper-portable.exe"),
-  (Join-Path $ReleaseDir "README-Windows.txt")
+  (Join-Path $ReleaseDir "README-Windows.txt"),
+  $HelpPath
 ) -DestinationPath $ZipPath
 
 Write-Host "Built dist\DoubaoASRHelper.exe"

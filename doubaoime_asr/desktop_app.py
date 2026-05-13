@@ -15,7 +15,7 @@ from typing import Iterable
 
 import sounddevice as sd
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, scrolledtext
 from pynput import keyboard, mouse
 
 if getattr(sys, "frozen", False):
@@ -24,6 +24,7 @@ if getattr(sys, "frozen", False):
 
 from doubaoime_asr import ASRConfig, ResponseType, transcribe_realtime
 from doubaoime_asr.audio import AudioEncoder
+from doubaoime_asr.desktop_help import HELP_TEXT
 
 
 APP_CONFIG_DIR = Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming")) / "DoubaoASRHelper"
@@ -211,7 +212,7 @@ class Clipboard:
 
 
 class DesktopApp:
-    def __init__(self, hidden: bool = False) -> None:
+    def __init__(self, hidden: bool = False, show_help: bool = False) -> None:
         self.root = tk.Tk()
         self.root.title("豆包 ASR 助手")
         self.root.geometry("720x520")
@@ -229,6 +230,7 @@ class DesktopApp:
         self.final_text = ""
         self.entries: dict[str, tk.Entry] = {}
         self.vars: dict[str, tk.BooleanVar] = {}
+        self.help_win: tk.Toplevel | None = None
         self.recording_field: str | None = None
         self.status_var = tk.StringVar(value="已就绪")
         self.transcript_var = tk.StringVar(value="")
@@ -237,6 +239,8 @@ class DesktopApp:
         self._start_listeners()
         if hidden:
             self.root.withdraw()
+        if show_help:
+            self.root.after(100, self.show_help)
 
     def run(self) -> None:
         self.root.mainloop()
@@ -286,7 +290,8 @@ class DesktopApp:
         buttons.pack(fill="x", pady=(4, 16))
         tk.Button(buttons, text="保存配置", command=self.save_from_ui, width=14).pack(side="left")
         tk.Button(buttons, text="显示悬浮窗", command=lambda: self.show_float("")).pack(side="left", padx=10)
-        tk.Button(buttons, text="打开配置目录", command=self.open_config_dir, width=14).pack(side="left")
+        tk.Button(buttons, text="使用说明", command=self.show_help, width=12).pack(side="left")
+        tk.Button(buttons, text="打开配置目录", command=self.open_config_dir, width=14).pack(side="left", padx=10)
         tk.Button(buttons, text="隐藏窗口", command=self.root.withdraw, width=14).pack(side="right")
 
         help_text = (
@@ -315,6 +320,30 @@ class DesktopApp:
     def open_config_dir(self) -> None:
         APP_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         os.startfile(APP_CONFIG_DIR)
+
+    def show_help(self) -> None:
+        if self.help_win is not None and self.help_win.winfo_exists():
+            self.help_win.deiconify()
+            self.help_win.lift()
+            return
+
+        self.help_win = tk.Toplevel(self.root)
+        self.help_win.title("使用说明 - 豆包 ASR 助手")
+        self.help_win.geometry("760x620+420+220")
+        self.help_win.minsize(640, 480)
+        self.help_win.protocol("WM_DELETE_WINDOW", self.help_win.withdraw)
+
+        frame = tk.Frame(self.help_win, padx=14, pady=14)
+        frame.pack(fill="both", expand=True)
+        text = scrolledtext.ScrolledText(frame, wrap="word", font=("Microsoft YaHei UI", 10), borderwidth=1)
+        text.pack(fill="both", expand=True)
+        text.insert("1.0", HELP_TEXT)
+        text.configure(state="disabled")
+
+        actions = tk.Frame(frame)
+        actions.pack(fill="x", pady=(10, 0))
+        tk.Button(actions, text="打开配置目录", command=self.open_config_dir, width=14).pack(side="left")
+        tk.Button(actions, text="关闭", command=self.help_win.withdraw, width=12).pack(side="right")
 
     def _build_float_window(self) -> None:
         self.float_win = tk.Toplevel(self.root)
@@ -642,12 +671,20 @@ def run_self_test(report_path: str | None = None) -> int:
         get_foreground_window()
         return "keyboard, mouse, and foreground window APIs are available"
 
+    def help_text_check() -> str:
+        required = ["豆包 ASR 助手使用说明", "默认快捷键", "常见问题", "卸载"]
+        missing = [item for item in required if item not in HELP_TEXT]
+        if missing:
+            raise RuntimeError(f"Help text is missing required section(s): {missing}")
+        return f"embedded help has {len(HELP_TEXT)} characters"
+
     check("config_dir", config_dir_check)
     check("credential_path", credential_path_check)
     check("hotkeys", hotkey_check)
     check("opus_encoder", opus_check)
     check("audio_devices", sounddevice_check)
     check("input_control", input_control_check)
+    check("help_text", help_text_check)
 
     destination = Path(report_path) if report_path else Path(tempfile.gettempdir()) / "DoubaoASRHelper-self-test.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -658,12 +695,13 @@ def run_self_test(report_path: str | None = None) -> int:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run the Doubao ASR desktop helper.")
     parser.add_argument("--hidden", action="store_true")
+    parser.add_argument("--show-help", action="store_true", help="Open the desktop help window on startup.")
     parser.add_argument("--self-test", action="store_true", help="Run packaged app diagnostics and exit.")
     parser.add_argument("--self-test-report", help="Write self-test JSON report to this path.")
     args = parser.parse_args(argv)
     if args.self_test:
         raise SystemExit(run_self_test(args.self_test_report))
-    app = DesktopApp(hidden=args.hidden)
+    app = DesktopApp(hidden=args.hidden, show_help=args.show_help)
     app.run()
 
 

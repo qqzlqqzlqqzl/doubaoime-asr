@@ -67,7 +67,7 @@ if (-not (Test-Path $ReleaseZip)) {
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $Zip = [IO.Compression.ZipFile]::OpenRead($ReleaseZip)
 try {
-  $Expected = @("DoubaoASRHelperSetup.exe", "DoubaoASRHelper-portable.exe", "README-Windows.txt")
+  $Expected = @("DoubaoASRHelperSetup.exe", "DoubaoASRHelper-portable.exe", "README-Windows.txt", "HELP.md")
   foreach ($Name in $Expected) {
     if (-not ($Zip.Entries | Where-Object { $_.FullName -eq $Name -and $_.Length -gt 0 })) {
       throw "Release zip missing required entry: $Name"

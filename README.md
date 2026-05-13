@@ -211,6 +211,7 @@ doubaoime-asr-desktop
 
 每个热键输入框右侧都有「录制」按钮，点击后直接按下想要的键盘组合键或鼠标侧键即可完成自定义。
 保存配置和录制快捷键时会检查工具内部的按键冲突，并在发现重复配置时弹窗提示。
+EXE 内置「使用说明」窗口，安装后开始菜单也会生成 Help 快捷方式；分发包中还会包含离线 `HELP.md`。
 
 打包桌面版和 Windows 分发包：
 
@@ -230,6 +231,6 @@ doubaoime-asr-desktop
 |------|------|
 | `dist\DoubaoASRHelper.exe` | 主程序 one-file exe |
 | `dist\DoubaoASRHelperSetup.exe` | 当前用户安装器，会安装到 `%LOCALAPPDATA%\DoubaoASRHelper` 并创建快捷方式 |
-| `release\DoubaoASRHelper-Windows.zip` | 给其他电脑分发的压缩包，包含安装器、便携版和说明 |
+| `release\DoubaoASRHelper-Windows.zip` | 给其他电脑分发的压缩包，包含安装器、便携版、简短说明和离线 `HELP.md` |
 
 首次运行会自动在用户目录创建凭据缓存文件；也可以在 UI 里点击「选择」改用已有的 `credentials.json`。
