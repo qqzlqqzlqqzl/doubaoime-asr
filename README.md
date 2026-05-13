@@ -225,6 +225,14 @@ EXE 内置「使用说明」窗口，安装后开始菜单也会生成 Help 快�
 .\test-desktop-exe.ps1
 ```
 
+测试激活码、设备绑定和授权服务器边界场景：
+
+```powershell
+.\test-activation.ps1
+```
+
+完整测试项见 [TEST_PLAN.md](TEST_PLAN.md)。
+
 生成约 500 字中文长文本样本，并用打包后的 exe 跑断续音量起伏 ASR 测试：
 
 ```powershell

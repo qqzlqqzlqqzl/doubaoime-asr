@@ -35,6 +35,14 @@ class LicenseResult:
     code: str | None = None
 
 
+class LicenseServerError(RuntimeError):
+    def __init__(self, message: str, status_code: int, data: dict[str, Any]) -> None:
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+        self.data = data
+
+
 def _truthy(value: str | None) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -100,7 +108,7 @@ def _post_json(server_url: str, path: str, payload: dict[str, Any], timeout: flo
     except ValueError:
         data = {"ok": False, "message": response.text[:300]}
     if response.status_code >= 400:
-        raise RuntimeError(data.get("message") or f"HTTP {response.status_code}")
+        raise LicenseServerError(data.get("message") or f"HTTP {response.status_code}", response.status_code, data)
     return data
 
 
@@ -140,6 +148,8 @@ def activate_license(config: LicenseConfig, activation_code: str) -> LicenseResu
                 "app_version": APP_VERSION,
             },
         )
+    except LicenseServerError as exc:
+        return LicenseResult(False, f"激活失败：{exc.message}", code=exc.data.get("code"))
     except Exception as exc:
         return LicenseResult(False, f"激活失败：{exc}")
 
@@ -189,6 +199,10 @@ def verify_license(config: LicenseConfig) -> LicenseResult:
                 "app_version": APP_VERSION,
             },
         )
+    except LicenseServerError as exc:
+        if 400 <= exc.status_code < 500:
+            clear_license_state()
+        return LicenseResult(False, exc.message, code=exc.data.get("code"))
     except Exception as exc:
         return LicenseResult(False, f"授权校验失败：{exc}")
 
