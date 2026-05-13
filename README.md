@@ -186,3 +186,35 @@ config = ASRConfig(credential_path="~/.config/doubaoime-asr/credentials.json")
 ```
 
 这会启用 `.venv`、项目内 Rust/Cargo 工具链，以及 `.devtools` 下的便携构建工具。
+
+## 桌面语音输入助手
+
+启动桌面 UI：
+
+```powershell
+doubaoime-asr-desktop
+```
+
+默认配置：
+
+| 配置项 | 默认值 |
+|------|------|
+| 按着说触发键 | `rctrl` |
+| 自由说触发键 | `xbutton1` |
+| 按着说+自动发送触发键 | `lctrl+lwin` |
+| 取消键 | `z` |
+| 插入延迟 | `300ms` |
+| 自动发送延迟 | `50ms` |
+
+工具会在后台监听全局热键，录音时显示悬浮窗，识别完成后把文本粘贴回开始录音前的窗口。配置文件保存在 `~/.doubaoime-asr/desktop-config.json`。
+
+每个热键输入框右侧都有「录制」按钮，点击后直接按下想要的键盘组合键或鼠标侧键即可完成自定义。
+保存配置和录制快捷键时会检查工具内部的按键冲突，并在发现重复配置时弹窗提示。
+
+打包桌面版 exe：
+
+```powershell
+.\build-desktop-exe.ps1
+```
+
+产物会生成到 `dist\DoubaoASRHelper.exe`。
