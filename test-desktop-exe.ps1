@@ -618,11 +618,67 @@ function Assert-CloseToTrayKeepsAlive {
   }
 }
 
+function Assert-SingleInstanceGuard {
+  param(
+    [Parameter(Mandatory = $true)][string]$PrimaryExePath,
+    [string]$SecondaryExePath = $PrimaryExePath
+  )
+
+  Stop-AllDoubaoAppInstances
+  $First = Start-Process $PrimaryExePath -ArgumentList "--hidden" -PassThru
+  try {
+    Start-Sleep -Seconds 5
+    if (-not (Get-Process -Id $First.Id -ErrorAction SilentlyContinue)) {
+      throw "Primary app exited before the single-instance check could run"
+    }
+    $BeforeDuplicate = @(Get-CimInstance Win32_Process |
+      Where-Object { $_.ExecutablePath -like "*DoubaoASRHelper*.exe" })
+    if ($BeforeDuplicate.Count -lt 1) {
+      throw "Primary app did not leave any Doubao ASR process running"
+    }
+
+    $Second = Start-Process $SecondaryExePath -ArgumentList "--hidden" -PassThru
+    if (-not $Second.WaitForExit(8000)) {
+      Stop-Process -Id $Second.Id -Force -ErrorAction SilentlyContinue
+      throw "Second app instance did not exit after detecting the first instance"
+    }
+    $Second.Refresh()
+    if ($Second.ExitCode -ne 0) {
+      throw "Second app instance exited with code $($Second.ExitCode)"
+    }
+
+    Start-Sleep -Seconds 1
+    $Running = @(Get-CimInstance Win32_Process |
+      Where-Object { $_.ExecutablePath -like "*DoubaoASRHelper*.exe" })
+    if ($Running.Count -ne $BeforeDuplicate.Count) {
+      $Paths = ($Running | Select-Object -ExpandProperty ExecutablePath) -join ", "
+      throw "Duplicate launch changed the Doubao ASR process count from $($BeforeDuplicate.Count) to $($Running.Count): $Paths"
+    }
+    return [pscustomobject]@{
+      PrimaryProcessId = $First.Id
+      DuplicateExited = $true
+      RunningProcessCount = $Running.Count
+    }
+  }
+  finally {
+    Stop-Process -Id $First.Id -Force -ErrorAction SilentlyContinue
+    Stop-AllDoubaoAppInstances
+  }
+}
+
 function Stop-AppFromPath {
   param([Parameter(Mandatory = $true)][string]$ExePath)
 
   Get-CimInstance Win32_Process |
     Where-Object { $_.ExecutablePath -eq $ExePath } |
+    ForEach-Object {
+      Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Stop-AllDoubaoAppInstances {
+  Get-CimInstance Win32_Process |
+    Where-Object { $_.ExecutablePath -like "*DoubaoASRHelper*.exe" } |
     ForEach-Object {
       Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
     }
@@ -721,6 +777,7 @@ Assert-CustomAppIcon -ExePath $InstalledExe | Out-Host
 Assert-ShortcutUsesAppIcon -TargetExe $InstalledExe | Out-Host
 Invoke-TraySelfTest -ExePath $InstalledExe -ReportName "installed-tray-self-test.json" | Out-Host
 Invoke-FloatLayoutTest -ExePath $InstalledExe -ReportName "installed-float-layout-long-text.json" | Out-Host
+Assert-SingleInstanceGuard -PrimaryExePath $InstalledExe -SecondaryExePath $PortableExe | Out-Host
 Assert-CloseToTrayKeepsAlive -ExePath $InstalledExe | Out-Host
 
 $VisibleLayoutReport = Join-Path $ReportsDir "installed-ui-smoke-layout.json"

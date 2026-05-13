@@ -76,12 +76,14 @@ DEFAULT_WINDOW_WIDTH = 900
 DEFAULT_WINDOW_HEIGHT = 680
 MIN_WINDOW_WIDTH = 560
 MIN_WINDOW_HEIGHT = 420
+MAIN_WINDOW_TITLE = "豆包 ASR 助手"
 FLOAT_BASE_WIDTH = 760
 FLOAT_MIN_WIDTH = 560
 FLOAT_MAX_WIDTH = 960
 FLOAT_MAX_LINES = 12
 APP_ICON_RELATIVE_PATH = Path("assets") / "app.ico"
 APP_USER_MODEL_ID = "DoubaoASRHelper.Desktop"
+SINGLE_INSTANCE_MUTEX_NAME = "Local\\DoubaoASRHelper.SingleInstance"
 _DPI_AWARENESS_CONFIGURED = False
 
 
@@ -119,6 +121,96 @@ def configure_windows_app_identity() -> None:
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
     except (AttributeError, OSError):
         pass
+
+
+class SingleInstanceGuard:
+    ERROR_ALREADY_EXISTS = 183
+    SW_RESTORE = 9
+
+    def __init__(self, mutex_name: str = SINGLE_INSTANCE_MUTEX_NAME, window_title: str = MAIN_WINDOW_TITLE) -> None:
+        self.mutex_name = mutex_name
+        self.window_title = window_title
+        self.handle: int | None = None
+        self.already_running = False
+
+    @staticmethod
+    def is_supported() -> bool:
+        return sys.platform == "win32" and wintypes is not None and hasattr(ctypes, "windll")
+
+    def acquire(self) -> bool:
+        if not self.is_supported():
+            return True
+        kernel32 = ctypes.windll.kernel32
+        kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+        kernel32.CreateMutexW.restype = wintypes.HANDLE
+        kernel32.GetLastError.argtypes = []
+        kernel32.GetLastError.restype = wintypes.DWORD
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel32.CloseHandle.restype = wintypes.BOOL
+        handle = kernel32.CreateMutexW(None, False, self.mutex_name)
+        if not handle:
+            raise ctypes.WinError()
+        self.handle = int(handle)
+        self.already_running = kernel32.GetLastError() == self.ERROR_ALREADY_EXISTS
+        return not self.already_running
+
+    def release(self) -> None:
+        if self.handle is None or not self.is_supported():
+            return
+        try:
+            ctypes.windll.kernel32.CloseHandle(self.handle)
+        except OSError:
+            pass
+        self.handle = None
+
+    def signal_existing_instance(self) -> bool:
+        hwnd = find_main_window_by_title(self.window_title, exclude_pid=os.getpid())
+        if hwnd is None:
+            return False
+        try:
+            user32 = ctypes.windll.user32
+            user32.ShowWindow(hwnd, self.SW_RESTORE)
+            user32.SetForegroundWindow(hwnd)
+            return True
+        except (AttributeError, OSError):
+            return False
+
+
+def find_main_window_by_title(title: str, exclude_pid: int | None = None) -> int | None:
+    if sys.platform != "win32" or wintypes is None or not hasattr(ctypes, "windll"):
+        return None
+
+    user32 = ctypes.windll.user32
+    enum_proc_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    found_hwnd = ctypes.c_void_p()
+
+    user32.EnumWindows.argtypes = [enum_proc_type, wintypes.LPARAM]
+    user32.EnumWindows.restype = wintypes.BOOL
+    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    user32.GetWindowTextLengthW.restype = ctypes.c_int
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowTextW.restype = ctypes.c_int
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+
+    def enum_window(hwnd: int, _lparam: int) -> bool:
+        process_id = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
+        if exclude_pid is not None and process_id.value == exclude_pid:
+            return True
+        length = user32.GetWindowTextLengthW(hwnd)
+        if length <= 0:
+            return True
+        buffer = ctypes.create_unicode_buffer(length + 1)
+        user32.GetWindowTextW(hwnd, buffer, length + 1)
+        if buffer.value == title:
+            found_hwnd.value = int(hwnd)
+            return False
+        return True
+
+    callback = enum_proc_type(enum_window)
+    user32.EnumWindows(callback, 0)
+    return int(found_hwnd.value) if found_hwnd.value else None
 
 
 if sys.platform == "win32" and wintypes is not None:
@@ -985,7 +1077,7 @@ class DesktopApp:
         self.default_window_scaled = ui_window_size is None
         if ui_scale_factor is not None:
             self.root.tk.call("tk", "scaling", BASE_TK_SCALING * max(0.75, min(3.0, ui_scale_factor)))
-        self.root.title("豆包 ASR 助手")
+        self.root.title(MAIN_WINDOW_TITLE)
         icon_path = app_icon_path()
         if icon_path is not None:
             try:
@@ -2779,6 +2871,30 @@ def run_self_test(report_path: str | None = None) -> int:
         ctypes.windll.shell32.Shell_NotifyIconW
         return "Windows notification area APIs are available"
 
+    def single_instance_check() -> str:
+        if not SingleInstanceGuard.is_supported():
+            return "single-instance mutex is Windows-only; skipped on this platform"
+        mutex_name = f"Local\\DoubaoASRHelper.SelfTest.{os.getpid()}.{time.time_ns()}"
+        first = SingleInstanceGuard(mutex_name=mutex_name)
+        second = SingleInstanceGuard(mutex_name=mutex_name)
+        try:
+            if not first.acquire():
+                raise ValueError("first single-instance guard reported an existing instance")
+            if second.acquire():
+                raise ValueError("second single-instance guard acquired the same mutex")
+            if not second.already_running:
+                raise ValueError("second single-instance guard did not report already_running")
+        finally:
+            second.release()
+            first.release()
+        third = SingleInstanceGuard(mutex_name=mutex_name)
+        try:
+            if not third.acquire():
+                raise ValueError("single-instance mutex was not released after closing guards")
+        finally:
+            third.release()
+        return "single-instance mutex prevents duplicate desktop/tray processes"
+
     def app_icon_check() -> str:
         icon_path = app_icon_path()
         if icon_path is None:
@@ -2824,6 +2940,7 @@ def run_self_test(report_path: str | None = None) -> int:
     check("audio_devices", sounddevice_check)
     check("input_control", input_control_check)
     check("system_tray_api", tray_api_check)
+    check("single_instance", single_instance_check)
     check("app_icon", app_icon_check)
     check("help_text", help_text_check)
     check("license_config", license_config_check)
@@ -3002,15 +3119,25 @@ def main(argv: list[str] | None = None) -> None:
                 args.min_keywords,
             )
         )
-    app = DesktopApp(
-        hidden=args.hidden,
-        show_help=args.show_help,
-        background=args.background,
-        ui_layout_report=args.ui_layout_report,
-        ui_window_size=args.ui_window_size,
-        ui_scale_factor=args.ui_scale_factor,
-    )
-    app.run()
+    guard = SingleInstanceGuard()
+    if not guard.acquire():
+        try:
+            guard.signal_existing_instance()
+        finally:
+            guard.release()
+        raise SystemExit(0)
+    try:
+        app = DesktopApp(
+            hidden=args.hidden,
+            show_help=args.show_help,
+            background=args.background,
+            ui_layout_report=args.ui_layout_report,
+            ui_window_size=args.ui_window_size,
+            ui_scale_factor=args.ui_scale_factor,
+        )
+        app.run()
+    finally:
+        guard.release()
 
 
 if __name__ == "__main__":
