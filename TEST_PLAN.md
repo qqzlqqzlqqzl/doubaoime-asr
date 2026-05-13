@@ -71,7 +71,7 @@
 | E10 | 安装后后台保活烟测 | `--hidden` 启动后进程保持运行，主窗口隐藏时可通过系统托盘继续后台监听 |
 | E11 | Windows 兼容性审计 | `test-windows-compat.ps1` 写出 `release\test-reports\windows-compatibility.json`，明确 Win10/Win11 为正式目标、Win7/Win8 不支持 |
 | E12 | 悬浮窗长文本布局 | `--float-layout-test` 写出 `installed-float-layout-long-text.json`，断言类似实测截图长度的识别文本可完整显示且窗口不超出屏幕 |
-| E13 | 普通打字热键保护 | `--self-test` 断言裸字母/数字不能作为空闲状态启动录音的全局快捷键，避免输入 `xian` 这类拼音时误触发 |
+| E13 | 普通打字和误触发热键保护 | `--self-test` 断言裸字母/数字、危险单修饰键、带额外按键的近似组合都不能作为空闲状态启动录音的全局快捷键，避免输入 `xian` 或按 `Ctrl + Alt + D` 时误触发 |
 
 ### 长文本 ASR 测试
 

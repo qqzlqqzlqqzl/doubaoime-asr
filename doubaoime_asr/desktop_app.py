@@ -668,6 +668,7 @@ HOTKEY_DISPLAY_NAMES = {
 MODIFIER_KEYS = {"lctrl", "rctrl", "ctrl", "lalt", "ralt", "alt", "lshift", "rshift", "shift", "lwin", "rwin", "win"}
 MOUSE_HOTKEYS = {"xbutton1", "xbutton2", "middle"}
 CONTROL_HOTKEYS = {"esc", "enter", "tab", "space"}
+SAFE_SINGLE_MODIFIER_START_KEYS = {"rctrl"}
 VK_KEYS = {
     "esc": 0x1B,
     "tab": 0x09,
@@ -767,6 +768,15 @@ def is_plain_text_key(name: str) -> bool:
 def idle_start_hotkey_allowed(keys: frozenset[str]) -> bool:
     if not keys:
         return False
+    if len(keys) == 1:
+        key = next(iter(keys))
+        if key in SAFE_SINGLE_MODIFIER_START_KEYS | MOUSE_HOTKEYS | CONTROL_HOTKEYS:
+            return True
+        if key in MODIFIER_KEYS:
+            return False
+        if key.startswith("f") and key[1:].isdigit():
+            return True
+        return not is_plain_text_key(key)
     if keys & (MODIFIER_KEYS | MOUSE_HOTKEYS | CONTROL_HOTKEYS):
         return True
     if any(key.startswith("f") and key[1:].isdigit() for key in keys):
@@ -854,15 +864,21 @@ def active_matches(active: set[str], target: frozenset[str]) -> bool:
     return target.issubset(expanded)
 
 
+def active_matches_exact(active: set[str], target: frozenset[str]) -> bool:
+    if not active_matches(active, target):
+        return False
+    return generic_hotkey(active) == generic_hotkey(target)
+
+
 def idle_start_mode_for_active_keys(name: str, active_keys: set[str], config: DesktopConfig) -> str | None:
     toggle_key = parse_hotkey(config.toggle_key)
     hold_send_key = parse_hotkey(config.hold_send_key)
     hold_key = parse_hotkey(config.hold_key)
-    if idle_start_hotkey_allowed(hold_send_key) and name in hold_send_key and active_matches(active_keys, hold_send_key):
+    if idle_start_hotkey_allowed(hold_send_key) and name in hold_send_key and active_matches_exact(active_keys, hold_send_key):
         return "hold_send"
-    if idle_start_hotkey_allowed(hold_key) and name in hold_key and active_matches(active_keys, hold_key):
+    if idle_start_hotkey_allowed(hold_key) and name in hold_key and active_matches_exact(active_keys, hold_key):
         return "hold"
-    if idle_start_hotkey_allowed(toggle_key) and name in toggle_key and active_matches(active_keys, toggle_key):
+    if idle_start_hotkey_allowed(toggle_key) and name in toggle_key and active_matches_exact(active_keys, toggle_key):
         return "toggle"
     return None
 
@@ -2483,6 +2499,11 @@ def run_self_test(report_path: str | None = None) -> int:
             raise ValueError("bare text hotkey was not rejected")
         if idle_start_hotkey_allowed(parse_hotkey("x")):
             raise ValueError("single text key should not start recording while idle")
+        for risky_single_modifier in ("左 Ctrl", "Alt", "左 Alt", "Win", "左 Win", "Shift"):
+            values = {field: getattr(DesktopConfig(), field) for field in HOTKEY_LABELS}
+            values["hold_key"] = risky_single_modifier
+            if hotkey_conflict_from_values(values) is None:
+                raise ValueError(f"risky single modifier was not rejected: {risky_single_modifier}")
         dangerous_config = DesktopConfig(toggle_key="x")
         active: set[str] = set()
         for char in "xian":
@@ -2493,10 +2514,21 @@ def run_self_test(report_path: str | None = None) -> int:
         default_config = DesktopConfig()
         if idle_start_mode_for_active_keys("rctrl", {"rctrl"}, default_config) != "hold":
             raise ValueError("default hold key no longer starts hold recording")
+        if idle_start_mode_for_active_keys("rctrl", {"rctrl", "lalt"}, default_config):
+            raise ValueError("default hold key should require an exact active key set")
         if idle_start_mode_for_active_keys("xbutton1", {"xbutton1"}, default_config) != "toggle":
             raise ValueError("default mouse side key no longer starts toggle recording")
+        if idle_start_mode_for_active_keys("xbutton1", {"xbutton1", "lshift"}, default_config):
+            raise ValueError("mouse side key should not start while extra modifiers are held")
         if idle_start_mode_for_active_keys("lwin", {"lctrl", "lwin"}, default_config) != "hold_send":
             raise ValueError("default hold-send combo no longer starts hold_send recording")
+        if idle_start_mode_for_active_keys("lwin", {"lctrl", "lwin", "d"}, default_config):
+            raise ValueError("hold-send combo should not start when extra keys are already active")
+        strict_config = DesktopConfig(toggle_key="ctrl+d")
+        if idle_start_mode_for_active_keys("d", {"lctrl", "d"}, strict_config) != "toggle":
+            raise ValueError("generic Ctrl combo should match either physical Ctrl side")
+        if idle_start_mode_for_active_keys("d", {"lctrl", "lalt", "d"}, strict_config):
+            raise ValueError("Ctrl+D should not start from Ctrl+Alt+D")
         if key_name(keyboard.Key.alt) != "alt":
             raise ValueError("generic Alt key is not captured")
         if format_hotkey({key_name(keyboard.Key.alt), "m"}) != "alt+m":
@@ -2536,7 +2568,7 @@ def run_self_test(report_path: str | None = None) -> int:
                 raise ValueError(f"default reset did not restore {field}")
         if reset_config.credential_path != str(resolve_user_path(custom_config.credential_path)):
             raise ValueError("default reset should preserve the credential path")
-        return "configured hotkeys are valid, user-facing key labels are parsed, bare text start keys are rejected, xian typing is safe, Alt combos are captured, Windows conflicts are checked, and default reset is safe"
+        return "configured hotkeys are valid, user-facing key labels are parsed, risky single modifiers and extra-key matches are rejected, xian typing is safe, Alt combos are captured, Windows conflicts are checked, and default reset is safe"
 
     def delay_snap_check() -> str:
         for field, (minimum, maximum, step) in DELAY_SPECS.items():
