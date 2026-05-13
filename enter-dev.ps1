@@ -21,7 +21,8 @@ New-Item -ItemType Directory -Force `
 $localPaths = @(
   (Join-Path $Venv "Scripts"),
   (Join-Path $env:CARGO_HOME "bin"),
-  (Join-Path $DevTools "w64devkit\bin")
+  (Join-Path $DevTools "w64devkit\bin"),
+  (Join-Path $DevTools "opus\bin")
 )
 
 $existingPaths = $env:Path -split ";" | Where-Object { $_ -and ($localPaths -notcontains $_) }
