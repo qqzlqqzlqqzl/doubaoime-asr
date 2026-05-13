@@ -220,7 +220,13 @@ class Clipboard:
 
 
 class DesktopApp:
-    def __init__(self, hidden: bool = False, show_help: bool = False) -> None:
+    def __init__(
+        self,
+        hidden: bool = False,
+        show_help: bool = False,
+        scroll_bottom: bool = False,
+        ui_layout_report: str | None = None,
+    ) -> None:
         self.root = tk.Tk()
         self.root.title("豆包 ASR 助手")
         self.root.geometry("900x680")
@@ -243,6 +249,8 @@ class DesktopApp:
         self.entries: dict[str, tk.Entry] = {}
         self.vars: dict[str, tk.BooleanVar] = {}
         self.settings_canvas: tk.Canvas | None = None
+        self.keep_settings_scrolled_bottom = scroll_bottom
+        self.ui_layout_report = Path(ui_layout_report) if ui_layout_report else None
         self.help_win: tk.Toplevel | None = None
         self.activation_win: tk.Toplevel | None = None
         self.activation_code_var = tk.StringVar(value="")
@@ -256,11 +264,26 @@ class DesktopApp:
         self.root.after(150, self.check_license_on_startup)
         if hidden:
             self.root.withdraw()
+        else:
+            self.root.after(100, self.show_main_window)
         if show_help:
             self.root.after(100, self.show_help)
+        if scroll_bottom:
+            for delay_ms in (350, 750, 1250, 1800, 2600, 3800, 5200):
+                self.root.after(delay_ms, self.scroll_settings_bottom)
+        if self.ui_layout_report is not None:
+            self.root.after(6500, self.write_ui_layout_report)
 
     def run(self) -> None:
         self.root.mainloop()
+
+    def show_main_window(self) -> None:
+        self.root.deiconify()
+        self.root.lift()
+        try:
+            self.root.focus_force()
+        except tk.TclError:
+            pass
 
     def _build_settings_ui(self) -> None:
         shell = tk.Frame(self.root)
@@ -278,9 +301,11 @@ class DesktopApp:
 
         def update_scroll_region(_event=None) -> None:
             canvas.configure(scrollregion=canvas.bbox("all"))
+            self._request_settings_bottom_scroll()
 
         def fit_width(event) -> None:
             canvas.itemconfigure(window_id, width=event.width)
+            self._request_settings_bottom_scroll()
 
         outer.bind("<Configure>", update_scroll_region)
         canvas.bind("<Configure>", fit_width)
@@ -291,43 +316,44 @@ class DesktopApp:
         table = tk.Frame(outer)
         table.pack(fill="x")
         fields = [
-            ("hold_key", "按着说触发键", "按住说话，松开后识别并插入"),
-            ("toggle_key", "自由说触发键", "按一次开始，再按一次结束"),
-            ("hold_send_key", "按着说+自动发送触发键", "松开后插入并发送 Enter"),
+            ("hold_key", "按住说", "按住说话，松开后识别并插入"),
+            ("toggle_key", "自由说", "按一次开始，再按一次结束"),
+            ("hold_send_key", "按住+发送", "松开后插入并发送 Enter"),
             ("cancel_key", "取消键", "自动发送模式下取消本次输入"),
             ("doubao_hotkey", "豆包快捷键", "保留兼容配置，当前使用内置 ASR"),
-            ("insert_delay_ms", "插入延迟", "松开后等待识别完成的时间，毫秒"),
-            ("auto_send_delay_ms", "自动发送延迟", "粘贴后等待发送的时间，毫秒"),
+            ("insert_delay_ms", "插入延迟(ms)", "松开后等待识别完成的时间"),
+            ("auto_send_delay_ms", "发送延迟(ms)", "粘贴后等待发送的时间"),
             ("credential_path", "凭据文件", "设备注册和 token 缓存文件"),
         ]
         for key, label, desc in fields:
             row_frame = tk.Frame(table)
-            row_frame.pack(fill="x", pady=6)
-            text_frame = tk.Frame(row_frame)
-            text_frame.pack(fill="x")
-            tk.Label(text_frame, text=label, width=14, anchor="w").pack(side="left")
-            tk.Label(text_frame, text=desc, anchor="w", fg="#5d6b82", wraplength=360, justify="left").pack(
-                side="left",
-                fill="x",
-                expand=True,
-                padx=(10, 0),
-            )
-            value_frame = tk.Frame(row_frame)
-            value_frame.pack(fill="x", pady=(4, 0))
-            entry = tk.Entry(value_frame, width=12)
+            row_frame.pack(fill="x", pady=5)
+            row_frame.columnconfigure(3, weight=1)
+            tk.Label(
+                row_frame,
+                text=label,
+                anchor="w",
+                font=("Microsoft YaHei UI", 10, "bold"),
+            ).grid(row=0, column=0, sticky="w", padx=(0, 8))
+            tk.Label(
+                row_frame,
+                text=desc,
+                anchor="w",
+                fg="#5d6b82",
+                wraplength=170,
+                justify="left",
+            ).grid(row=0, column=1, sticky="w", padx=(0, 8))
+            entry = tk.Entry(row_frame, width=10)
             entry.insert(0, str(getattr(self.config, key)))
             self.entries[key] = entry
             if key.endswith("_key"):
-                tk.Button(value_frame, text="录制", command=lambda field=key: self.start_key_record(field), width=6).grid(row=0, column=0, padx=(0, 8))
-                value_frame.columnconfigure(1, weight=1)
-                entry.grid(row=0, column=1, sticky="ew")
+                tk.Button(row_frame, text="录制", command=lambda field=key: self.start_key_record(field), width=5).grid(row=0, column=2, padx=(0, 8))
+                entry.grid(row=0, column=3, sticky="ew")
             elif key == "credential_path":
-                tk.Button(value_frame, text="选择", command=self.select_credential_file, width=6).grid(row=0, column=0, padx=(0, 8))
-                value_frame.columnconfigure(1, weight=1)
-                entry.grid(row=0, column=1, sticky="ew")
+                tk.Button(row_frame, text="选择", command=self.select_credential_file, width=5).grid(row=0, column=2, padx=(0, 8))
+                entry.grid(row=0, column=3, sticky="ew")
             else:
-                value_frame.columnconfigure(0, weight=1)
-                entry.grid(row=0, column=0, sticky="ew")
+                entry.grid(row=0, column=2, columnspan=2, sticky="ew")
 
         checks = tk.Frame(outer)
         checks.pack(fill="x", pady=14)
@@ -368,6 +394,38 @@ class DesktopApp:
             return
         step = -1 if event.delta > 0 else 1
         self.settings_canvas.yview_scroll(step * 3, "units")
+
+    def _request_settings_bottom_scroll(self) -> None:
+        if self.keep_settings_scrolled_bottom and self.settings_canvas is not None:
+            self.root.after_idle(self.scroll_settings_bottom)
+
+    def scroll_settings_bottom(self) -> None:
+        if self.settings_canvas is not None:
+            self.root.update_idletasks()
+            self.settings_canvas.configure(scrollregion=self.settings_canvas.bbox("all"))
+            self.settings_canvas.yview_moveto(1.0)
+            self.settings_canvas.yview_scroll(1000, "units")
+            self.root.update_idletasks()
+
+    def write_ui_layout_report(self) -> None:
+        if self.settings_canvas is None or self.ui_layout_report is None:
+            return
+        self.root.update_idletasks()
+        report = {
+            "root": {
+                "width": self.root.winfo_width(),
+                "height": self.root.winfo_height(),
+            },
+            "canvas": {
+                "width": self.settings_canvas.winfo_width(),
+                "height": self.settings_canvas.winfo_height(),
+                "bbox": self.settings_canvas.bbox("all"),
+                "scrollregion": self.settings_canvas.cget("scrollregion"),
+                "yview": self.settings_canvas.yview(),
+            },
+        }
+        self.ui_layout_report.parent.mkdir(parents=True, exist_ok=True)
+        self.ui_layout_report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def start_key_record(self, field: str) -> None:
         self.recording_field = field
@@ -983,6 +1041,8 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run the Doubao ASR desktop helper.")
     parser.add_argument("--hidden", action="store_true")
     parser.add_argument("--show-help", action="store_true", help="Open the desktop help window on startup.")
+    parser.add_argument("--ui-scroll-bottom", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--ui-layout-report", help=argparse.SUPPRESS)
     parser.add_argument("--self-test", action="store_true", help="Run packaged app diagnostics and exit.")
     parser.add_argument("--self-test-report", help="Write self-test JSON report to this path.")
     parser.add_argument("--long-text-test", action="store_true", help="Generate the long text stress sample and optionally run ASR.")
@@ -1006,7 +1066,12 @@ def main(argv: list[str] | None = None) -> None:
                 args.min_keywords,
             )
         )
-    app = DesktopApp(hidden=args.hidden, show_help=args.show_help)
+    app = DesktopApp(
+        hidden=args.hidden,
+        show_help=args.show_help,
+        scroll_bottom=args.ui_scroll_bottom,
+        ui_layout_report=args.ui_layout_report,
+    )
     app.run()
 
 

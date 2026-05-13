@@ -8,6 +8,51 @@ $ReleaseZip = Join-Path $Root "release\DoubaoASRHelper-Windows.zip"
 $ReportsDir = Join-Path $Root "release\test-reports"
 New-Item -ItemType Directory -Force -Path $ReportsDir | Out-Null
 
+Add-Type -AssemblyName System.Drawing
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+public class DoubaoWin32Capture {
+  public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
+  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+  public static string GetWindowTitle(IntPtr hWnd) {
+    StringBuilder text = new StringBuilder(256);
+    GetWindowText(hWnd, text, text.Capacity);
+    return text.ToString();
+  }
+  public static IntPtr FindWindowForProcess(int expectedProcessId, string titleContains) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows(delegate(IntPtr hWnd, IntPtr lParam) {
+      if (found != IntPtr.Zero) {
+        return false;
+      }
+      uint windowProcessId;
+      GetWindowThreadProcessId(hWnd, out windowProcessId);
+      if (windowProcessId != (uint)expectedProcessId || !IsWindowVisible(hWnd)) {
+        return true;
+      }
+      string title = GetWindowTitle(hWnd);
+      if (!String.IsNullOrWhiteSpace(title) && (String.IsNullOrEmpty(titleContains) || title.Contains(titleContains))) {
+        found = hWnd;
+        return false;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
+}
+"@
+[DoubaoWin32Capture]::SetProcessDPIAware() | Out-Null
+
 function Invoke-AppSelfTest {
   param(
     [Parameter(Mandatory = $true)][string]$ExePath,
@@ -36,6 +81,76 @@ function Invoke-AppSelfTest {
     throw "Self-test report is missing license_config: $ReportPath"
   }
   return $ReportPath
+}
+
+function Wait-AppWindow {
+  param(
+    [Parameter(Mandatory = $true)][int]$ProcessId,
+    [Parameter(Mandatory = $true)][string]$ExePath,
+    [int]$TimeoutSeconds = 15
+  )
+
+  $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  while ((Get-Date) -lt $Deadline) {
+    $Candidates = @()
+    $StartedProcess = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+    if ($StartedProcess) {
+      $Candidates += $StartedProcess
+    }
+    $Candidates += Get-Process DoubaoASRHelper -ErrorAction SilentlyContinue |
+      Where-Object { $_.Path -eq $ExePath }
+
+    foreach ($Candidate in $Candidates) {
+      $WindowHandle = [DoubaoWin32Capture]::FindWindowForProcess($Candidate.Id, "")
+      if ($WindowHandle -ne [IntPtr]::Zero) {
+        return [pscustomobject]@{
+          Process = $Candidate
+          WindowHandle = $WindowHandle
+        }
+      }
+    }
+    Start-Sleep -Milliseconds 250
+  }
+  throw "Timed out waiting for app window from $ExePath"
+}
+
+function Save-AppWindowScreenshot {
+  param(
+    [Parameter(Mandatory = $true)][int]$ProcessId,
+    [Parameter(Mandatory = $true)][string]$ExePath,
+    [Parameter(Mandatory = $true)][string]$ReportName,
+    [int]$StabilizeMilliseconds = 3000
+  )
+
+  $Window = Wait-AppWindow -ProcessId $ProcessId -ExePath $ExePath
+  [DoubaoWin32Capture]::MoveWindow($Window.WindowHandle, 40, 80, 820, 680, $true) | Out-Null
+  [DoubaoWin32Capture]::SetForegroundWindow($Window.WindowHandle) | Out-Null
+  Start-Sleep -Milliseconds $StabilizeMilliseconds
+
+  $Rect = New-Object RECT
+  [DoubaoWin32Capture]::GetWindowRect($Window.WindowHandle, [ref]$Rect) | Out-Null
+  $Width = $Rect.Right - $Rect.Left
+  $Height = $Rect.Bottom - $Rect.Top
+  if ($Width -lt 600 -or $Height -lt 400) {
+    throw "Visible app window is unexpectedly small: ${Width}x${Height}"
+  }
+
+  $ScreenshotPath = Join-Path $ReportsDir $ReportName
+  Remove-Item -LiteralPath $ScreenshotPath -Force -ErrorAction SilentlyContinue
+  $Bitmap = New-Object System.Drawing.Bitmap $Width, $Height
+  $Graphics = [System.Drawing.Graphics]::FromImage($Bitmap)
+  try {
+    $Graphics.CopyFromScreen($Rect.Left, $Rect.Top, 0, 0, $Bitmap.Size)
+    $Bitmap.Save($ScreenshotPath, [System.Drawing.Imaging.ImageFormat]::Png)
+  }
+  finally {
+    $Graphics.Dispose()
+    $Bitmap.Dispose()
+  }
+  if (-not (Test-Path $ScreenshotPath)) {
+    throw "UI screenshot was not written: $ScreenshotPath"
+  }
+  return $ScreenshotPath
 }
 
 function Stop-AppFromPath {
@@ -116,6 +231,33 @@ if ($Install.ExitCode -ne 0) {
 
 $InstalledExe = Join-Path $InstallTarget "DoubaoASRHelper.exe"
 Invoke-AppSelfTest -ExePath $InstalledExe -ReportName "installed-self-test.json" | Out-Host
+
+$VisibleApp = Start-Process $InstalledExe -PassThru
+try {
+  Save-AppWindowScreenshot -ProcessId $VisibleApp.Id -ExePath $InstalledExe -ReportName "installed-ui-smoke.png" | Out-Host
+}
+finally {
+  Stop-Process -Id $VisibleApp.Id -Force -ErrorAction SilentlyContinue
+  Stop-AppFromPath -ExePath $InstalledExe
+}
+
+$BottomLayoutReport = Join-Path $ReportsDir "installed-ui-smoke-bottom-layout.json"
+Remove-Item -LiteralPath $BottomLayoutReport -Force -ErrorAction SilentlyContinue
+$BottomApp = Start-Process $InstalledExe -ArgumentList @("--ui-scroll-bottom", "--ui-layout-report", $BottomLayoutReport) -PassThru
+try {
+  Save-AppWindowScreenshot -ProcessId $BottomApp.Id -ExePath $InstalledExe -ReportName "installed-ui-smoke-bottom.png" -StabilizeMilliseconds 7000 | Out-Host
+  if (-not (Test-Path $BottomLayoutReport)) {
+    throw "Bottom UI layout report was not written: $BottomLayoutReport"
+  }
+  $BottomLayout = Get-Content -Raw -Encoding UTF8 -LiteralPath $BottomLayoutReport | ConvertFrom-Json
+  if ([double]$BottomLayout.canvas.yview[1] -lt 0.98) {
+    throw "Bottom UI screenshot did not reach the lower settings content: $BottomLayoutReport"
+  }
+}
+finally {
+  Stop-Process -Id $BottomApp.Id -Force -ErrorAction SilentlyContinue
+  Stop-AppFromPath -ExePath $InstalledExe
+}
 
 $App = Start-Process $InstalledExe -ArgumentList "--hidden" -PassThru
 Start-Sleep -Seconds 5
