@@ -250,9 +250,9 @@ EXE 内置「使用说明」窗口，安装后开始菜单也会生成 Help 快�
 .\test-license-stress.ps1
 ```
 
-完整测试项见 [TEST_PLAN.md](TEST_PLAN.md)。
+完整测试项见 [TEST_PLAN.md](TEST_PLAN.md)。真实端到端闭环证据和未闭合项见 [E2E_TEST_EVIDENCE.md](E2E_TEST_EVIDENCE.md)；其中会明确区分 `PASS`、`PARTIAL`、`BLOCKED` 和 `NOT_RUN`，不要把计划项误当作已通过项。
 
-如果要让另一个 AI 或开发者接手维护，请先阅读 [HANDOFF.md](HANDOFF.md)。它记录了当前桌面版架构、构建测试流程、近期关键改动和常见坑。
+如果要让另一个 AI 或开发者接手维护，请先阅读 [HANDOFF.md](HANDOFF.md) 和 [E2E_TEST_EVIDENCE.md](E2E_TEST_EVIDENCE.md)。它们记录了当前桌面版架构、构建测试流程、近期关键改动、常见坑，以及哪些闭环测试仍缺真实证据。
 
 生成约 500 字中文长文本样本，并用打包后的 exe 跑断续音量起伏 ASR 测试：
 

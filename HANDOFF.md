@@ -36,6 +36,7 @@
 
 - `README.md`：用户和开发者入口说明。
 - `TEST_PLAN.md`：自动化和手工验收清单。
+- `E2E_TEST_EVIDENCE.md`：真实端到端证据矩阵，包含已通过、部分通过、阻塞和未运行的项目；接手时不要只看测试计划。
 - `WINDOWS_COMPATIBILITY.md`：Windows 版本兼容结论。
 - `wave_protocol.md`：协议相关背景。
 - `HANDOFF.md`：当前交接文档。
@@ -46,8 +47,9 @@
 
 1. 运行 `git status --short`，确认工作区是否干净。
 2. 阅读 `README.md` 的“桌面语音输入助手”部分。
-3. 阅读本文件的“核心文件地图”和“桌面应用架构”。
-4. 如果要改 UI 或分发包，先运行一次：
+3. 阅读 `E2E_TEST_EVIDENCE.md`，先弄清哪些端到端项目是真的 PASS，哪些只是 PARTIAL 或 NOT_RUN；当前不能把 T01 默认热键闭环和 T09 剪贴板插入闭环算作通过。
+4. 阅读本文件的“核心文件地图”和“桌面应用架构”。
+5. 如果要改 UI 或分发包，先运行一次：
 
 ```powershell
 . .\enter-dev.ps1
@@ -55,7 +57,7 @@ python -m compileall -q doubaoime_asr
 python -m doubaoime_asr.desktop_app --self-test --self-test-report release\test-reports\source-self-test.json
 ```
 
-5. 修改后至少运行对应的源码自测。涉及 EXE、托盘、UI、安装器、打包资源时必须重新跑：
+6. 修改后至少运行对应的源码自测。涉及 EXE、托盘、UI、安装器、打包资源时必须重新跑：
 
 ```powershell
 .\build-desktop-exe.ps1
