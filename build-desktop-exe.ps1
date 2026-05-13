@@ -44,6 +44,7 @@ pyinstaller `
   --name DoubaoASRHelper `
   --add-binary ".devtools\opus\bin\opus.dll;." `
   --add-data "$GeneratedLicenseConfig;doubaoime_asr" `
+  --collect-data sv_ttk `
   --hidden-import doubaoime_asr.long_text_sample `
   --hidden-import pynput.keyboard._win32 `
   --hidden-import pynput.mouse._win32 `

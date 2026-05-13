@@ -15,8 +15,9 @@ from pathlib import Path
 from typing import Iterable
 
 import sounddevice as sd
+import sv_ttk
 import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext
+from tkinter import filedialog, messagebox, scrolledtext, ttk
 from pynput import keyboard, mouse
 
 if getattr(sys, "frozen", False):
@@ -57,6 +58,8 @@ UI_PRIMARY = "#2563eb"
 UI_PRIMARY_DARK = "#1d4ed8"
 UI_PRIMARY_SOFT = "#eff6ff"
 UI_SUCCESS = "#15803d"
+UI_SUCCESS_SOFT = "#ecfdf3"
+UI_INPUT = "#fbfdff"
 DELAY_SPECS = {
     "insert_delay_ms": (0, 1500, 50),
     "auto_send_delay_ms": (0, 500, 10),
@@ -247,6 +250,7 @@ class DesktopApp:
         self.root.geometry(ui_window_size or "900x680")
         self.root.minsize(560, 420)
         self.root.protocol("WM_DELETE_WINDOW", self.root.withdraw)
+        self._configure_ttk_styles()
         self.config = load_config()
         self.license_config = load_license_config()
         self.license_result: LicenseResult | None = None
@@ -303,6 +307,59 @@ class DesktopApp:
 
     def run(self) -> None:
         self.root.mainloop()
+
+    def _configure_ttk_styles(self) -> None:
+        style = ttk.Style(self.root)
+        try:
+            sv_ttk.set_theme("light")
+        except tk.TclError:
+            try:
+                style.theme_use("clam")
+            except tk.TclError:
+                pass
+        style.configure(".", font=("Microsoft YaHei UI", 9), background=UI_BG, foreground=UI_TEXT)
+        style.configure(
+            "Modern.TEntry",
+            fieldbackground=UI_INPUT,
+            background=UI_INPUT,
+            foreground=UI_TEXT,
+            bordercolor=UI_BORDER,
+            lightcolor=UI_BORDER,
+            darkcolor=UI_BORDER,
+            insertcolor=UI_TEXT,
+            relief="flat",
+            padding=(8, 4),
+        )
+        style.map(
+            "Modern.TEntry",
+            bordercolor=[("focus", UI_PRIMARY), ("!focus", UI_BORDER)],
+            lightcolor=[("focus", UI_PRIMARY), ("!focus", UI_BORDER)],
+            darkcolor=[("focus", UI_PRIMARY), ("!focus", UI_BORDER)],
+        )
+        style.configure(
+            "Modern.Horizontal.TScale",
+            background=UI_CARD,
+            troughcolor="#dbeafe",
+            bordercolor=UI_CARD,
+            lightcolor=UI_CARD,
+            darkcolor=UI_CARD,
+            sliderthickness=12,
+        )
+        style.configure(
+            "Modern.TCheckbutton",
+            background=UI_CARD,
+            foreground=UI_TEXT,
+            focuscolor=UI_CARD,
+            indicatorbackground=UI_INPUT,
+            indicatorforeground=UI_PRIMARY,
+            padding=(0, 3),
+        )
+        style.map(
+            "Modern.TCheckbutton",
+            background=[("active", UI_CARD)],
+            foreground=[("active", UI_TEXT)],
+            indicatorbackground=[("selected", UI_PRIMARY), ("!selected", UI_INPUT)],
+        )
 
     def show_main_window(self) -> None:
         self.root.deiconify()
@@ -363,8 +420,8 @@ class DesktopApp:
         self.settings_status_label = tk.Label(
             header,
             textvariable=self.status_var,
-            bg=UI_PRIMARY_SOFT,
-            fg=UI_PRIMARY_DARK,
+            bg=UI_SUCCESS_SOFT,
+            fg=UI_SUCCESS,
             anchor="center",
             justify="center",
             padx=12,
@@ -404,23 +461,17 @@ class DesktopApp:
         self.settings_checkbuttons.clear()
         self.vars["protect_clipboard"] = tk.BooleanVar(value=self.config.protect_clipboard)
         self.vars["startup"] = tk.BooleanVar(value=self.config.startup)
-        protect_clipboard = tk.Checkbutton(
+        protect_clipboard = ttk.Checkbutton(
             checks,
             text="剪贴板保护",
             variable=self.vars["protect_clipboard"],
-            bg=UI_CARD,
-            fg=UI_TEXT,
-            activebackground=UI_CARD,
-            selectcolor=UI_CARD,
+            style="Modern.TCheckbutton",
         )
-        startup = tk.Checkbutton(
+        startup = ttk.Checkbutton(
             checks,
             text="开机自启动",
             variable=self.vars["startup"],
-            bg=UI_CARD,
-            fg=UI_TEXT,
-            activebackground=UI_CARD,
-            selectcolor=UI_CARD,
+            style="Modern.TCheckbutton",
         )
         protect_clipboard.pack(side="left")
         startup.pack(side="left", padx=18)
@@ -538,16 +589,10 @@ class DesktopApp:
         frame = row["frame"]
         if not isinstance(frame, tk.Frame):
             return
-        entry = tk.Entry(
+        entry = ttk.Entry(
             frame,
             width=10,
-            relief="flat",
-            bg="#ffffff",
-            fg=UI_TEXT,
-            highlightthickness=1,
-            highlightbackground=UI_BORDER,
-            highlightcolor=UI_PRIMARY,
-            insertbackground=UI_TEXT,
+            style="Modern.TEntry",
         )
         entry.insert(0, str(getattr(self.config, key)))
         self.entries[key] = entry
@@ -579,34 +624,20 @@ class DesktopApp:
         value = int(getattr(self.config, key))
         var = tk.IntVar(value=value)
         self.delay_vars[key] = var
-        scale = tk.Scale(
+        scale = ttk.Scale(
             frame,
             from_=minimum,
             to=maximum,
             orient="horizontal",
             variable=var,
-            showvalue=False,
-            resolution=step,
-            sliderlength=14,
-            width=8,
-            borderwidth=0,
-            highlightthickness=0,
-            troughcolor="#dbeafe",
-            bg=UI_CARD,
-            activebackground=UI_PRIMARY,
+            style="Modern.Horizontal.TScale",
             command=lambda _value, field=key: self._sync_delay_entry(field),
         )
-        entry = tk.Entry(
+        entry = ttk.Entry(
             frame,
             width=5,
             justify="right",
-            relief="flat",
-            bg="#ffffff",
-            fg=UI_TEXT,
-            highlightthickness=1,
-            highlightbackground=UI_BORDER,
-            highlightcolor=UI_PRIMARY,
-            insertbackground=UI_TEXT,
+            style="Modern.TEntry",
         )
         entry.insert(0, str(value))
         entry.bind("<FocusOut>", lambda _event, field=key, low=minimum, high=maximum, inc=step: self._sync_delay_from_entry(field, low, high, inc))
@@ -767,7 +798,7 @@ class DesktopApp:
                         widget.grid_forget()
                     if isinstance(widget, tk.Label):
                         widget.configure(font=desc_font if widget is desc or widget is unit else label_font if widget is label else normal_font)
-                    elif isinstance(widget, tk.Entry):
+                    elif isinstance(widget, (tk.Entry, ttk.Entry)):
                         widget.configure(font=normal_font)
                     elif isinstance(widget, tk.Button):
                         widget.configure(font=("Microsoft YaHei UI", 8 if tiny else 9, "bold"))
@@ -777,7 +808,7 @@ class DesktopApp:
             if isinstance(desc, tk.Label):
                 desc.configure(wraplength=desc_wrap)
 
-            if kind == "delay" and isinstance(scale, tk.Scale) and isinstance(unit, tk.Label):
+            if kind == "delay" and isinstance(scale, (tk.Scale, ttk.Scale)) and isinstance(unit, tk.Label):
                 if narrow:
                     frame.columnconfigure(1, weight=1)
                     label.grid(row=0, column=0, sticky="w", padx=(0, 6))
@@ -821,7 +852,8 @@ class DesktopApp:
         if self.settings_checks_frame is not None:
             self.settings_checks_frame.pack_configure(pady=2 if tiny else 4 if short else 6)
         for index, checkbutton in enumerate(self.settings_checkbuttons):
-            checkbutton.configure(font=normal_font)
+            if isinstance(checkbutton, tk.Checkbutton):
+                checkbutton.configure(font=normal_font)
             checkbutton.pack_configure(padx=0 if index == 0 else 10 if tiny else 18)
 
         self.layout_action_buttons()
