@@ -1759,8 +1759,8 @@ class DesktopApp:
             highlightcolor=UI_PRIMARY,
             cursor="hand2",
             takefocus=True,
-            padx=0,
-            pady=2,
+            padx=8,
+            pady=5,
             font=("Microsoft YaHei UI", 9, "bold"),
         )
         toggle.configure(command=lambda widget=toggle, option_key=key: self._sync_option_toggle_style(widget, option_key))
@@ -1859,8 +1859,9 @@ class DesktopApp:
             or logical_height <= 430
         )
         compact = narrow or logical_available_width < 760
-        show_desc = not narrow
+        show_desc = not narrow and logical_height > 700
         show_section_headers = not tiny
+        hide_advanced_section = logical_height <= 700
         desc_wrap = int(
             min(
                 max(220 * ui_scale, available_width * 0.24),
@@ -1908,9 +1909,9 @@ class DesktopApp:
                 else:
                     self.settings_title_label.pack(anchor="w")
         if self.settings_subtitle_label is not None:
-            if tiny and self.settings_subtitle_label.winfo_ismapped():
+            if (tiny or short) and self.settings_subtitle_label.winfo_ismapped():
                 self.settings_subtitle_label.pack_forget()
-            elif not tiny and not self.settings_subtitle_label.winfo_ismapped():
+            elif not tiny and not short and not self.settings_subtitle_label.winfo_ismapped():
                 self.settings_subtitle_label.pack(anchor="w", pady=(2, 0))
         if self.settings_status_label is not None:
             self.settings_status_label.configure(
@@ -1944,8 +1945,10 @@ class DesktopApp:
             title = section.get("title")
             subtitle = section.get("subtitle")
             hide_section = (
-                tiny
-                and logical_height < 310
+                (
+                    hide_advanced_section
+                    or (tiny and logical_height < 310)
+                )
                 and isinstance(title, tk.Label)
                 and str(title.cget("text")) == "高级设置"
             )
@@ -2090,10 +2093,10 @@ class DesktopApp:
 
         if self.settings_checks_frame is not None:
             self.settings_checks_frame.pack_configure(pady=1 if tiny else 2 if short else 4)
-        inline_option_toggles = tiny and logical_height < 310 and logical_available_width > 360
+        inline_option_toggles = tiny and logical_available_width > 360
         toggle_font = ("Microsoft YaHei UI", max(normal_size, 9), "bold")
-        toggle_padx = 0
-        toggle_pady = 1 if tiny else 2
+        toggle_padx = 8
+        toggle_pady = 5
         for index, checkbutton in enumerate(self.settings_checkbuttons):
             if isinstance(checkbutton, tk.Checkbutton):
                 checkbutton.configure(font=toggle_font, padx=toggle_padx, pady=toggle_pady)
@@ -2120,7 +2123,7 @@ class DesktopApp:
                 font=desc_font,
                 wraplength=max(240, available_width - 20),
             )
-            if tiny:
+            if tiny or short:
                 self.settings_help_label.pack_forget()
             elif not self.settings_help_label.winfo_ismapped():
                 self.settings_help_label.pack(anchor="w")
