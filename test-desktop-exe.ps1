@@ -62,7 +62,9 @@ public class DoubaoWin32Capture {
 
 $HwndTopMost = [IntPtr](-1)
 $HwndNoTopMost = [IntPtr](-2)
+$HwndBottom = [IntPtr](1)
 $SwpShowWindow = [uint32]0x0040
+$SwpNoActivate = [uint32]0x0010
 $MainWindowTitle = [string]::Concat([char]0x8C46, [char]0x5305, " ASR ", [char]0x52A9, [char]0x624B)
 
 function Invoke-AppSelfTest {
@@ -134,7 +136,8 @@ function Save-AppWindowScreenshot {
     [int]$StabilizeMilliseconds = 3000,
     [int]$WindowWidth = 820,
     [int]$WindowHeight = 680,
-    [switch]$PreserveWindowSize
+    [switch]$PreserveWindowSize,
+    [switch]$Background
   )
 
   $Window = Wait-AppWindow -ProcessId $ProcessId -ExePath $ExePath
@@ -145,13 +148,20 @@ function Save-AppWindowScreenshot {
     $WindowHeight = $InitialRect.Bottom - $InitialRect.Top
   }
 
-  if (-not [DoubaoWin32Capture]::SetWindowPos($Window.WindowHandle, $HwndTopMost, 40, 80, $WindowWidth, $WindowHeight, $SwpShowWindow)) {
-    throw "Could not make app window topmost for screenshot"
+  if ($Background) {
+    if (-not [DoubaoWin32Capture]::SetWindowPos($Window.WindowHandle, $HwndBottom, 40, 80, $WindowWidth, $WindowHeight, ($SwpShowWindow -bor $SwpNoActivate))) {
+      throw "Could not position app window in background for screenshot"
+    }
   }
-  if (-not [DoubaoWin32Capture]::MoveWindow($Window.WindowHandle, 40, 80, $WindowWidth, $WindowHeight, $true)) {
-    throw "Could not move app window for screenshot"
+  else {
+    if (-not [DoubaoWin32Capture]::SetWindowPos($Window.WindowHandle, $HwndTopMost, 40, 80, $WindowWidth, $WindowHeight, $SwpShowWindow)) {
+      throw "Could not make app window topmost for screenshot"
+    }
+    if (-not [DoubaoWin32Capture]::MoveWindow($Window.WindowHandle, 40, 80, $WindowWidth, $WindowHeight, $true)) {
+      throw "Could not move app window for screenshot"
+    }
+    [DoubaoWin32Capture]::SetForegroundWindow($Window.WindowHandle) | Out-Null
   }
-  [DoubaoWin32Capture]::SetForegroundWindow($Window.WindowHandle) | Out-Null
   Start-Sleep -Milliseconds $StabilizeMilliseconds
 
   $Rect = New-Object RECT
@@ -185,7 +195,9 @@ function Save-AppWindowScreenshot {
   finally {
     $Graphics.Dispose()
     $Bitmap.Dispose()
-    [DoubaoWin32Capture]::SetWindowPos($Window.WindowHandle, $HwndNoTopMost, $Rect.Left, $Rect.Top, $Width, $Height, $SwpShowWindow) | Out-Null
+    $RestoreTarget = if ($Background) { $HwndBottom } else { $HwndNoTopMost }
+    $RestoreFlags = if ($Background) { $SwpShowWindow -bor $SwpNoActivate } else { $SwpShowWindow }
+    [DoubaoWin32Capture]::SetWindowPos($Window.WindowHandle, $RestoreTarget, $Rect.Left, $Rect.Top, $Width, $Height, $RestoreFlags) | Out-Null
   }
   if (-not (Test-Path $ScreenshotPath)) {
     throw "UI screenshot was not written: $ScreenshotPath"
@@ -408,9 +420,9 @@ Invoke-AppSelfTest -ExePath $InstalledExe -ReportName "installed-self-test.json"
 
 $VisibleLayoutReport = Join-Path $ReportsDir "installed-ui-smoke-layout.json"
 Remove-Item -LiteralPath $VisibleLayoutReport -Force -ErrorAction SilentlyContinue
-$VisibleApp = Start-Process $InstalledExe -ArgumentList @("--ui-layout-report", $VisibleLayoutReport, "--ui-window-size", "820x680") -PassThru
+$VisibleApp = Start-Process $InstalledExe -ArgumentList @("--background", "--ui-layout-report", $VisibleLayoutReport, "--ui-window-size", "820x680") -PassThru
 try {
-  Save-AppWindowScreenshot -ProcessId $VisibleApp.Id -ExePath $InstalledExe -ReportName "installed-ui-smoke.png" -PreserveWindowSize | Out-Host
+  Save-AppWindowScreenshot -ProcessId $VisibleApp.Id -ExePath $InstalledExe -ReportName "installed-ui-smoke.png" -PreserveWindowSize -Background | Out-Host
   Assert-UiLayoutFits -ReportPath $VisibleLayoutReport | Out-Host
 }
 finally {
@@ -420,9 +432,9 @@ finally {
 
 $NarrowLayoutReport = Join-Path $ReportsDir "installed-ui-smoke-narrow-layout.json"
 Remove-Item -LiteralPath $NarrowLayoutReport -Force -ErrorAction SilentlyContinue
-$NarrowApp = Start-Process $InstalledExe -ArgumentList @("--ui-layout-report", $NarrowLayoutReport, "--ui-window-size", "760x520") -PassThru
+$NarrowApp = Start-Process $InstalledExe -ArgumentList @("--background", "--ui-layout-report", $NarrowLayoutReport, "--ui-window-size", "760x520") -PassThru
 try {
-  Save-AppWindowScreenshot -ProcessId $NarrowApp.Id -ExePath $InstalledExe -ReportName "installed-ui-smoke-narrow.png" -PreserveWindowSize | Out-Host
+  Save-AppWindowScreenshot -ProcessId $NarrowApp.Id -ExePath $InstalledExe -ReportName "installed-ui-smoke-narrow.png" -PreserveWindowSize -Background | Out-Host
   Assert-UiLayoutFits -ReportPath $NarrowLayoutReport | Out-Host
 }
 finally {
@@ -432,9 +444,9 @@ finally {
 
 $MinimumLayoutReport = Join-Path $ReportsDir "installed-ui-smoke-minimum-layout.json"
 Remove-Item -LiteralPath $MinimumLayoutReport -Force -ErrorAction SilentlyContinue
-$MinimumApp = Start-Process $InstalledExe -ArgumentList @("--ui-layout-report", $MinimumLayoutReport, "--ui-window-size", "560x420") -PassThru
+$MinimumApp = Start-Process $InstalledExe -ArgumentList @("--background", "--ui-layout-report", $MinimumLayoutReport, "--ui-window-size", "560x420") -PassThru
 try {
-  Save-AppWindowScreenshot -ProcessId $MinimumApp.Id -ExePath $InstalledExe -ReportName "installed-ui-smoke-minimum.png" -PreserveWindowSize | Out-Host
+  Save-AppWindowScreenshot -ProcessId $MinimumApp.Id -ExePath $InstalledExe -ReportName "installed-ui-smoke-minimum.png" -PreserveWindowSize -Background | Out-Host
   Assert-UiLayoutFits -ReportPath $MinimumLayoutReport | Out-Host
 }
 finally {

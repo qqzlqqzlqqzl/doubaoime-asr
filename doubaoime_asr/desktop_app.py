@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import ctypes
 import json
 import os
 import queue
@@ -46,6 +47,19 @@ HOTKEY_LABELS = {
     "hold_send_key": "按着说+自动发送触发键",
     "cancel_key": "取消键",
     "doubao_hotkey": "豆包快捷键",
+}
+UI_BG = "#f4f7fb"
+UI_CARD = "#ffffff"
+UI_BORDER = "#dbe3ef"
+UI_TEXT = "#111827"
+UI_MUTED = "#64748b"
+UI_PRIMARY = "#2563eb"
+UI_PRIMARY_DARK = "#1d4ed8"
+UI_PRIMARY_SOFT = "#eff6ff"
+UI_SUCCESS = "#15803d"
+DELAY_SPECS = {
+    "insert_delay_ms": (0, 1500, 50),
+    "auto_send_delay_ms": (0, 500, 10),
 }
 
 
@@ -224,6 +238,7 @@ class DesktopApp:
         self,
         hidden: bool = False,
         show_help: bool = False,
+        background: bool = False,
         ui_layout_report: str | None = None,
         ui_window_size: str | None = None,
     ) -> None:
@@ -250,14 +265,17 @@ class DesktopApp:
         self.vars: dict[str, tk.BooleanVar] = {}
         self.settings_outer: tk.Frame | None = None
         self.settings_title_label: tk.Label | None = None
+        self.settings_subtitle_label: tk.Label | None = None
         self.settings_status_label: tk.Label | None = None
         self.settings_table: tk.Frame | None = None
-        self.settings_rows: list[dict[str, tk.Widget | None]] = []
+        self.settings_sections: list[dict[str, tk.Widget]] = []
+        self.settings_rows: list[dict[str, object]] = []
         self.settings_checks_frame: tk.Frame | None = None
         self.settings_checkbuttons: list[tk.Checkbutton] = []
         self.settings_help_label: tk.Label | None = None
         self.action_buttons_frame: tk.Frame | None = None
         self.action_buttons: list[tk.Button] = []
+        self.delay_vars: dict[str, tk.IntVar] = {}
         self.ui_layout_report = Path(ui_layout_report) if ui_layout_report else None
         self.help_win: tk.Toplevel | None = None
         self.activation_win: tk.Toplevel | None = None
@@ -270,8 +288,12 @@ class DesktopApp:
         self._build_float_window()
         self._start_listeners()
         self.root.after(150, self.check_license_on_startup)
-        if hidden:
+        if hidden or background:
             self.root.withdraw()
+        if hidden:
+            pass
+        elif background:
+            self.root.after(100, self.show_main_window_background)
         else:
             self.root.after(100, self.show_main_window)
         if show_help:
@@ -290,84 +312,122 @@ class DesktopApp:
         except tk.TclError:
             pass
 
+    def show_main_window_background(self) -> None:
+        if sys.platform == "win32":
+            try:
+                self.root.deiconify()
+                self.root.update_idletasks()
+                hwnd = int(self.root.winfo_id())
+                user32 = ctypes.windll.user32
+                user32.ShowWindow(hwnd, 4)  # SW_SHOWNOACTIVATE
+                user32.SetWindowPos(hwnd, 1, 0, 0, 0, 0, 0x0010 | 0x0002 | 0x0001)
+                return
+            except (OSError, tk.TclError, AttributeError):
+                pass
+        self.root.deiconify()
+        try:
+            self.root.lower()
+        except tk.TclError:
+            pass
+
     def _build_settings_ui(self) -> None:
-        shell = tk.Frame(self.root)
+        shell = tk.Frame(self.root, bg=UI_BG)
         shell.pack(fill="both", expand=True)
 
-        outer = tk.Frame(shell, padx=22, pady=18)
+        outer = tk.Frame(shell, padx=22, pady=18, bg=UI_BG)
         outer.pack(fill="both", expand=True)
         outer.bind("<Configure>", lambda _event: self.root.after_idle(self.layout_settings_controls))
         self.root.bind("<Configure>", lambda _event: self.root.after_idle(self.layout_settings_controls), add="+")
         self.settings_outer = outer
 
-        self.settings_title_label = tk.Label(outer, text="豆包 ASR 助手", font=("Microsoft YaHei UI", 20, "bold"))
+        header = tk.Frame(outer, bg=UI_BG)
+        header.pack(fill="x")
+        header_left = tk.Frame(header, bg=UI_BG)
+        header_left.pack(side="left", fill="x", expand=True)
+        self.settings_title_label = tk.Label(
+            header_left,
+            text="豆包 ASR 助手",
+            font=("Microsoft YaHei UI", 20, "bold"),
+            bg=UI_BG,
+            fg=UI_TEXT,
+        )
         self.settings_title_label.pack(anchor="w")
-        self.settings_status_label = tk.Label(outer, textvariable=self.status_var, fg="#5d6b82", anchor="w", justify="left")
-        self.settings_status_label.pack(anchor="w", fill="x", pady=(4, 16))
+        self.settings_subtitle_label = tk.Label(
+            header_left,
+            text="快捷键、发送时序和授权状态",
+            bg=UI_BG,
+            fg=UI_MUTED,
+            font=("Microsoft YaHei UI", 9),
+        )
+        self.settings_subtitle_label.pack(anchor="w", pady=(2, 0))
+        self.settings_status_label = tk.Label(
+            header,
+            textvariable=self.status_var,
+            bg=UI_PRIMARY_SOFT,
+            fg=UI_PRIMARY_DARK,
+            anchor="center",
+            justify="center",
+            padx=12,
+            pady=4,
+            font=("Microsoft YaHei UI", 9, "bold"),
+        )
+        self.settings_status_label.pack(side="right", anchor="n", padx=(14, 0))
 
-        table = tk.Frame(outer)
-        table.pack(fill="x")
+        table = tk.Frame(outer, bg=UI_BG)
+        table.pack(fill="x", pady=(14, 0))
         self.settings_table = table
+        self.settings_sections.clear()
         self.settings_rows.clear()
-        fields = [
+        self.delay_vars.clear()
+
+        shortcut_body = self._build_settings_section(table, "快捷键模式", "参考常用语音助手的三种说话方式")
+        shortcut_fields = [
             ("hold_key", "按住说", "按住说话，松开后识别并插入"),
             ("toggle_key", "自由说", "按一次开始，再按一次结束"),
             ("hold_send_key", "按住+发送", "松开后插入并发送 Enter"),
             ("cancel_key", "取消键", "自动发送模式下取消本次输入"),
             ("doubao_hotkey", "豆包快捷键", "保留兼容配置，当前使用内置 ASR"),
-            ("insert_delay_ms", "插入延迟(ms)", "松开后等待识别完成的时间"),
-            ("auto_send_delay_ms", "发送延迟(ms)", "粘贴后等待发送的时间"),
-            ("credential_path", "凭据文件", "设备注册和 token 缓存文件"),
         ]
-        for key, label, desc in fields:
-            row_frame = tk.Frame(table)
-            row_frame.pack(fill="x", pady=5)
-            label_widget = tk.Label(
-                row_frame,
-                text=label,
-                anchor="w",
-                font=("Microsoft YaHei UI", 10, "bold"),
-            )
-            desc_widget = tk.Label(
-                row_frame,
-                text=desc,
-                anchor="w",
-                fg="#5d6b82",
-                wraplength=170,
-                justify="left",
-            )
-            entry = tk.Entry(row_frame, width=10)
-            entry.insert(0, str(getattr(self.config, key)))
-            self.entries[key] = entry
-            button: tk.Button | None = None
-            if key.endswith("_key"):
-                button = tk.Button(row_frame, text="录制", command=lambda field=key: self.start_key_record(field), width=5)
-            elif key == "credential_path":
-                button = tk.Button(row_frame, text="选择", command=self.select_credential_file, width=5)
-            self.settings_rows.append(
-                {
-                    "frame": row_frame,
-                    "label": label_widget,
-                    "desc": desc_widget,
-                    "button": button,
-                    "entry": entry,
-                }
-            )
+        for key, label, desc in shortcut_fields:
+            self._create_setting_row(shortcut_body, key, label, desc, row_type="hotkey")
 
-        checks = tk.Frame(outer)
-        checks.pack(fill="x", pady=14)
+        timing_body = self._build_settings_section(table, "时序", "按实际输入环境微调粘贴和发送节奏")
+        self._create_delay_row(timing_body, "insert_delay_ms", "插入延迟", "松开后等待识别完成", *DELAY_SPECS["insert_delay_ms"])
+        self._create_delay_row(timing_body, "auto_send_delay_ms", "发送延迟", "粘贴后等待 Enter 发送", *DELAY_SPECS["auto_send_delay_ms"])
+
+        system_body = self._build_settings_section(table, "系统", "凭据、剪贴板保护和启动项")
+        self._create_setting_row(system_body, "credential_path", "凭据文件", "设备注册和 token 缓存文件", row_type="path")
+
+        checks = tk.Frame(system_body, bg=UI_CARD)
+        checks.pack(fill="x", pady=(4, 0))
         self.settings_checks_frame = checks
         self.settings_checkbuttons.clear()
         self.vars["protect_clipboard"] = tk.BooleanVar(value=self.config.protect_clipboard)
         self.vars["startup"] = tk.BooleanVar(value=self.config.startup)
-        protect_clipboard = tk.Checkbutton(checks, text="剪贴板保护", variable=self.vars["protect_clipboard"])
-        startup = tk.Checkbutton(checks, text="开机自启动", variable=self.vars["startup"])
+        protect_clipboard = tk.Checkbutton(
+            checks,
+            text="剪贴板保护",
+            variable=self.vars["protect_clipboard"],
+            bg=UI_CARD,
+            fg=UI_TEXT,
+            activebackground=UI_CARD,
+            selectcolor=UI_CARD,
+        )
+        startup = tk.Checkbutton(
+            checks,
+            text="开机自启动",
+            variable=self.vars["startup"],
+            bg=UI_CARD,
+            fg=UI_TEXT,
+            activebackground=UI_CARD,
+            selectcolor=UI_CARD,
+        )
         protect_clipboard.pack(side="left")
         startup.pack(side="left", padx=18)
         self.settings_checkbuttons.extend([protect_clipboard, startup])
 
-        buttons = tk.Frame(outer)
-        buttons.pack(fill="x", pady=(4, 16))
+        buttons = tk.Frame(outer, bg=UI_BG)
+        buttons.pack(fill="x", pady=(12, 12))
         self.action_buttons_frame = buttons
         self.action_buttons.clear()
         actions = [
@@ -378,16 +438,235 @@ class DesktopApp:
             ("打开配置目录", self.open_config_dir),
             ("隐藏窗口", self.root.withdraw),
         ]
-        for text, command in actions:
-            self.action_buttons.append(tk.Button(buttons, text=text, command=command, width=12))
+        for index, (text, command) in enumerate(actions):
+            button = tk.Button(buttons, text=text, command=command, width=12)
+            self._style_action_button(button, primary=index == 0)
+            self.action_buttons.append(button)
 
         help_text = (
             "默认热键：rctrl / xbutton1 / lctrl+lwin / z。"
             "录音结束后会把识别文字粘贴到开始录音前的窗口。"
         )
-        self.settings_help_label = tk.Label(outer, text=help_text, fg="#5d6b82", wraplength=660, justify="left")
+        self.settings_help_label = tk.Label(
+            outer,
+            text=help_text,
+            bg=UI_BG,
+            fg=UI_MUTED,
+            wraplength=660,
+            justify="left",
+        )
         self.settings_help_label.pack(anchor="w")
         self.root.after_idle(self.layout_settings_controls)
+
+    def _build_settings_section(self, parent: tk.Widget, title: str, subtitle: str) -> tk.Frame:
+        section = tk.Frame(parent, bg=UI_CARD, highlightthickness=1, highlightbackground=UI_BORDER)
+        section.pack(fill="x", pady=4)
+        body = tk.Frame(section, bg=UI_CARD, padx=12, pady=8)
+        body.pack(fill="x")
+        header = tk.Frame(body, bg=UI_CARD)
+        header.pack(fill="x", pady=(0, 5))
+        title_label = tk.Label(
+            header,
+            text=title,
+            bg=UI_CARD,
+            fg=UI_TEXT,
+            font=("Microsoft YaHei UI", 10, "bold"),
+            anchor="w",
+        )
+        title_label.pack(side="left")
+        subtitle_label = tk.Label(
+            header,
+            text=subtitle,
+            bg=UI_CARD,
+            fg=UI_MUTED,
+            font=("Microsoft YaHei UI", 8),
+            anchor="w",
+        )
+        subtitle_label.pack(side="left", padx=(10, 0), fill="x", expand=True)
+        self.settings_sections.append(
+            {
+                "section": section,
+                "body": body,
+                "header": header,
+                "title": title_label,
+                "subtitle": subtitle_label,
+            }
+        )
+        return body
+
+    def _create_base_row(
+        self,
+        parent: tk.Widget,
+        key: str,
+        label: str,
+        desc: str,
+        row_type: str,
+    ) -> dict[str, tk.Widget | None]:
+        row_frame = tk.Frame(parent, bg=UI_CARD)
+        row_frame.pack(fill="x", pady=3)
+        label_widget = tk.Label(
+            row_frame,
+            text=label,
+            anchor="w",
+            bg=UI_CARD,
+            fg=UI_TEXT,
+            font=("Microsoft YaHei UI", 9, "bold"),
+        )
+        desc_widget = tk.Label(
+            row_frame,
+            text=desc,
+            anchor="w",
+            bg=UI_CARD,
+            fg=UI_MUTED,
+            wraplength=170,
+            justify="left",
+            font=("Microsoft YaHei UI", 8),
+        )
+        row: dict[str, object] = {
+            "frame": row_frame,
+            "label": label_widget,
+            "desc": desc_widget,
+            "button": None,
+            "entry": None,
+            "scale": None,
+            "unit": None,
+            "kind": row_type,
+        }
+        return row
+
+    def _create_setting_row(self, parent: tk.Widget, key: str, label: str, desc: str, row_type: str) -> None:
+        row = self._create_base_row(parent, key, label, desc, row_type)
+        frame = row["frame"]
+        if not isinstance(frame, tk.Frame):
+            return
+        entry = tk.Entry(
+            frame,
+            width=10,
+            relief="flat",
+            bg="#ffffff",
+            fg=UI_TEXT,
+            highlightthickness=1,
+            highlightbackground=UI_BORDER,
+            highlightcolor=UI_PRIMARY,
+            insertbackground=UI_TEXT,
+        )
+        entry.insert(0, str(getattr(self.config, key)))
+        self.entries[key] = entry
+        button: tk.Button | None = None
+        if key in HOTKEY_LABELS:
+            button = tk.Button(frame, text="录制", command=lambda field=key: self.start_key_record(field), width=5)
+            self._style_small_button(button)
+        elif key == "credential_path":
+            button = tk.Button(frame, text="选择", command=self.select_credential_file, width=5)
+            self._style_small_button(button)
+        row["button"] = button
+        row["entry"] = entry
+        self.settings_rows.append(row)
+
+    def _create_delay_row(
+        self,
+        parent: tk.Widget,
+        key: str,
+        label: str,
+        desc: str,
+        minimum: int,
+        maximum: int,
+        step: int,
+    ) -> None:
+        row = self._create_base_row(parent, key, label, desc, "delay")
+        frame = row["frame"]
+        if not isinstance(frame, tk.Frame):
+            return
+        value = int(getattr(self.config, key))
+        var = tk.IntVar(value=value)
+        self.delay_vars[key] = var
+        scale = tk.Scale(
+            frame,
+            from_=minimum,
+            to=maximum,
+            orient="horizontal",
+            variable=var,
+            showvalue=False,
+            resolution=step,
+            sliderlength=14,
+            width=8,
+            borderwidth=0,
+            highlightthickness=0,
+            troughcolor="#dbeafe",
+            bg=UI_CARD,
+            activebackground=UI_PRIMARY,
+            command=lambda _value, field=key: self._sync_delay_entry(field),
+        )
+        entry = tk.Entry(
+            frame,
+            width=5,
+            justify="right",
+            relief="flat",
+            bg="#ffffff",
+            fg=UI_TEXT,
+            highlightthickness=1,
+            highlightbackground=UI_BORDER,
+            highlightcolor=UI_PRIMARY,
+            insertbackground=UI_TEXT,
+        )
+        entry.insert(0, str(value))
+        entry.bind("<FocusOut>", lambda _event, field=key, low=minimum, high=maximum, inc=step: self._sync_delay_from_entry(field, low, high, inc))
+        entry.bind("<Return>", lambda _event, field=key, low=minimum, high=maximum, inc=step: self._sync_delay_from_entry(field, low, high, inc))
+        unit = tk.Label(frame, text="ms", bg=UI_CARD, fg=UI_MUTED, font=("Microsoft YaHei UI", 8))
+        self.entries[key] = entry
+        row["entry"] = entry
+        row["scale"] = scale
+        row["unit"] = unit
+        self.settings_rows.append(row)
+
+    def _style_small_button(self, button: tk.Button) -> None:
+        button.configure(
+            bg=UI_PRIMARY_SOFT,
+            fg=UI_PRIMARY_DARK,
+            activebackground="#dbeafe",
+            activeforeground=UI_PRIMARY_DARK,
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            font=("Microsoft YaHei UI", 9, "bold"),
+        )
+
+    def _style_action_button(self, button: tk.Button, primary: bool = False) -> None:
+        button.configure(
+            bg=UI_PRIMARY if primary else UI_CARD,
+            fg="#ffffff" if primary else UI_TEXT,
+            activebackground=UI_PRIMARY_DARK if primary else UI_PRIMARY_SOFT,
+            activeforeground="#ffffff" if primary else UI_TEXT,
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            font=("Microsoft YaHei UI", 9, "bold" if primary else "normal"),
+            highlightthickness=1,
+            highlightbackground=UI_PRIMARY if primary else UI_BORDER,
+        )
+
+    def _sync_delay_entry(self, field: str) -> None:
+        entry = self.entries.get(field)
+        var = self.delay_vars.get(field)
+        if entry is None or var is None:
+            return
+        entry.delete(0, "end")
+        entry.insert(0, str(var.get()))
+
+    def _sync_delay_from_entry(self, field: str, minimum: int, maximum: int, step: int) -> None:
+        entry = self.entries.get(field)
+        var = self.delay_vars.get(field)
+        if entry is None or var is None:
+            return
+        try:
+            value = int(entry.get().strip())
+        except ValueError:
+            value = var.get()
+        value = max(minimum, min(maximum, value))
+        if step > 1:
+            value = int(round(value / step) * step)
+        var.set(value)
+        self._sync_delay_entry(field)
 
     def layout_settings_controls(self) -> None:
         if self.settings_table is None:
@@ -399,26 +678,76 @@ class DesktopApp:
         narrow = root_width <= 620
         short = root_height <= 540
         tiny = root_width <= 620 and root_height <= 430
-        compact = narrow or available_width < 720
-        desc_inline = short and not narrow
-        single_line = narrow
-        desc_wrap = max(150, min(320, available_width - (220 if compact else 520)))
+        compact = narrow or available_width < 760
+        show_desc = not narrow
+        show_section_headers = not tiny
+        desc_wrap = max(130, min(260, available_width - (300 if compact else 540)))
         outer_padx = 8 if tiny else 12 if short or compact else 22
         outer_pady = 6 if tiny else 8 if short else 10 if compact else 18
         row_pady = 1 if tiny else 2 if short else 3 if compact else 5
-        title_size = 14 if tiny else 16 if short or compact else 20
+        title_size = 14 if tiny else 17 if short or compact else 20
         normal_size = 8 if tiny else 9 if short or compact else 10
         desc_size = 8 if compact or short else 9
         normal_font = ("Microsoft YaHei UI", normal_size)
         desc_font = ("Microsoft YaHei UI", desc_size)
+        label_font = ("Microsoft YaHei UI", normal_size, "bold")
 
         if self.settings_outer is not None:
             self.settings_outer.configure(padx=outer_padx, pady=outer_pady)
         if self.settings_title_label is not None:
             self.settings_title_label.configure(font=("Microsoft YaHei UI", title_size, "bold"))
+        if self.settings_subtitle_label is not None:
+            if tiny and self.settings_subtitle_label.winfo_ismapped():
+                self.settings_subtitle_label.pack_forget()
+            elif not tiny and not self.settings_subtitle_label.winfo_ismapped():
+                self.settings_subtitle_label.pack(anchor="w", pady=(2, 0))
         if self.settings_status_label is not None:
-            self.settings_status_label.configure(font=normal_font, wraplength=max(240, available_width - 20))
-            self.settings_status_label.pack_configure(pady=(1 if tiny else 3, 4 if short else 10 if compact else 16))
+            self.settings_status_label.configure(
+                font=normal_font,
+                wraplength=max(160, available_width - 20),
+                padx=8 if tiny else 12,
+                pady=2 if tiny else 4,
+            )
+            self.settings_status_label.pack_configure(padx=(8 if tiny else 14, 0))
+
+        if self.settings_table is not None:
+            self.settings_table.pack_configure(pady=(3 if tiny else 10 if short else 14, 0))
+
+        for section in self.settings_sections:
+            section_frame = section.get("section")
+            body = section.get("body")
+            header = section.get("header")
+            title = section.get("title")
+            subtitle = section.get("subtitle")
+            if isinstance(section_frame, tk.Frame):
+                section_frame.configure(highlightthickness=0 if tiny else 1)
+                section_frame.pack_configure(pady=0 if tiny else 3 if short else 4)
+            if isinstance(body, tk.Frame):
+                body.configure(padx=8 if tiny else 10 if short else 12, pady=0 if tiny else 5 if short else 8)
+            if isinstance(header, tk.Frame):
+                if show_section_headers:
+                    if not header.winfo_ismapped():
+                        siblings = [child for child in body.winfo_children() if child is not header]
+                        if siblings:
+                            header.pack(fill="x", before=siblings[0])
+                        else:
+                            header.pack(fill="x")
+                    header.pack_configure(pady=(0, 3 if short else 5))
+                elif header.winfo_ismapped():
+                    header.pack_forget()
+            if isinstance(title, tk.Label):
+                title.configure(font=("Microsoft YaHei UI", 9 if short else 10, "bold"))
+                if show_section_headers and not title.winfo_ismapped():
+                    title.pack(side="left")
+                elif not show_section_headers and title.winfo_ismapped():
+                    title.pack_forget()
+            if isinstance(subtitle, tk.Label):
+                subtitle.configure(font=desc_font, wraplength=max(180, available_width - 220))
+                should_show_subtitle = show_section_headers and not short and not compact
+                if should_show_subtitle and not subtitle.winfo_ismapped():
+                    subtitle.pack(side="left", padx=(10, 0), fill="x", expand=True)
+                elif not should_show_subtitle and subtitle.winfo_ismapped():
+                    subtitle.pack_forget()
 
         for row in self.settings_rows:
             frame = row["frame"]
@@ -426,19 +755,50 @@ class DesktopApp:
             desc = row["desc"]
             button = row["button"]
             entry = row["entry"]
+            scale = row.get("scale")
+            unit = row.get("unit")
+            kind = row.get("kind")
             if not isinstance(frame, tk.Frame) or label is None or desc is None or entry is None:
                 continue
 
             frame.pack_configure(pady=row_pady)
-            for widget in (label, desc, button, entry):
+            for widget in (label, desc, button, entry, scale, unit):
                 if widget is not None:
-                    widget.grid_forget()
-                    widget.configure(font=desc_font if widget is desc else normal_font)
-            for column in range(4):
+                    if isinstance(widget, tk.Widget):
+                        widget.grid_forget()
+                    if isinstance(widget, tk.Label):
+                        widget.configure(font=desc_font if widget is desc or widget is unit else label_font if widget is label else normal_font)
+                    elif isinstance(widget, tk.Entry):
+                        widget.configure(font=normal_font)
+                    elif isinstance(widget, tk.Button):
+                        widget.configure(font=("Microsoft YaHei UI", 8 if tiny else 9, "bold"))
+            for column in range(6):
                 frame.columnconfigure(column, weight=0, minsize=0)
 
-            desc.configure(wraplength=desc_wrap)
-            if single_line:
+            if isinstance(desc, tk.Label):
+                desc.configure(wraplength=desc_wrap)
+
+            if kind == "delay" and isinstance(scale, tk.Scale) and isinstance(unit, tk.Label):
+                if narrow:
+                    frame.columnconfigure(1, weight=1)
+                    label.grid(row=0, column=0, sticky="w", padx=(0, 6))
+                    scale.grid(row=0, column=1, sticky="ew", padx=(0, 6))
+                    entry.grid(row=0, column=2, sticky="ew", padx=(0, 4))
+                    unit.grid(row=0, column=3, sticky="w")
+                else:
+                    scale_column = 2 if show_desc else 1
+                    entry_column = scale_column + 1
+                    unit_column = entry_column + 1
+                    frame.columnconfigure(scale_column, weight=1)
+                    label.grid(row=0, column=0, sticky="w", padx=(0, 12))
+                    if show_desc:
+                        desc.grid(row=0, column=1, sticky="w", padx=(0, 12))
+                    scale.grid(row=0, column=scale_column, sticky="ew", padx=(0, 8))
+                    entry.grid(row=0, column=entry_column, sticky="ew", padx=(0, 4))
+                    unit.grid(row=0, column=unit_column, sticky="w")
+                continue
+
+            if narrow:
                 frame.columnconfigure(2 if button is not None else 1, weight=1)
                 label.grid(row=0, column=0, sticky="w", padx=(0, 6))
                 if button is not None:
@@ -447,29 +807,20 @@ class DesktopApp:
                     entry.grid(row=0, column=2, sticky="ew")
                 else:
                     entry.grid(row=0, column=1, columnspan=2, sticky="ew")
-            elif compact and not desc_inline:
-                frame.columnconfigure(1, weight=1)
-                label.grid(row=0, column=0, sticky="w", padx=(0, 8), pady=(0, 2))
-                desc.grid(row=0, column=1, sticky="ew", pady=(0, 2))
-                if button is not None:
-                    button.configure(width=5)
-                    button.grid(row=1, column=0, sticky="ew", padx=(0, 8), pady=(2, 0))
-                    entry.grid(row=1, column=1, sticky="ew", pady=(2, 0))
-                else:
-                    entry.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(2, 0))
             else:
                 frame.columnconfigure(3, weight=1)
-                label.grid(row=0, column=0, sticky="w", padx=(0, 14))
-                desc.grid(row=0, column=1, sticky="w", padx=(0, 14))
+                label.grid(row=0, column=0, sticky="w", padx=(0, 12))
+                if show_desc:
+                    desc.grid(row=0, column=1, sticky="w", padx=(0, 12))
                 if button is not None:
                     button.configure(width=5)
-                    button.grid(row=0, column=2, padx=(0, 8))
-                    entry.grid(row=0, column=3, sticky="ew")
+                    button.grid(row=0, column=2 if show_desc else 1, padx=(0, 8))
+                    entry.grid(row=0, column=3 if show_desc else 2, sticky="ew")
                 else:
-                    entry.grid(row=0, column=2, columnspan=2, sticky="ew")
+                    entry.grid(row=0, column=2 if show_desc else 1, columnspan=2, sticky="ew")
 
         if self.settings_checks_frame is not None:
-            self.settings_checks_frame.pack_configure(pady=4 if tiny else 7 if short else 9 if compact else 14)
+            self.settings_checks_frame.pack_configure(pady=2 if tiny else 4 if short else 6)
         for index, checkbutton in enumerate(self.settings_checkbuttons):
             checkbutton.configure(font=normal_font)
             checkbutton.pack_configure(padx=0 if index == 0 else 10 if tiny else 18)
@@ -498,11 +849,12 @@ class DesktopApp:
         root_height = max(self.root.winfo_height(), 1)
         tight = width <= 620 or root_height <= 540
         roomy = width >= 760 and root_height >= 600
-        columns = 3 if width >= 500 else 2 if width >= 340 else 1
+        columns = 6 if width >= 720 else 3 if width >= 500 else 2 if width >= 340 else 1
         button_font = ("Microsoft YaHei UI", 8 if tight else 9)
         button_padx = 3 if tight else 6
-        button_pady = 2 if tight else 4
-        for column in range(3):
+        button_pady = 1 if tight else 4
+        self.action_buttons_frame.pack_configure(pady=(5 if tight else 12, 0 if tight else 12))
+        for column in range(6):
             self.action_buttons_frame.columnconfigure(column, weight=0)
         for button in self.action_buttons:
             button.grid_forget()
@@ -554,7 +906,7 @@ class DesktopApp:
             if bounds is not None:
                 widgets.append(bounds)
         for index, row in enumerate(self.settings_rows):
-            for key in ("label", "desc", "button", "entry"):
+            for key in ("label", "desc", "button", "entry", "scale", "unit"):
                 widget = row.get(key)
                 bounds = self._widget_bounds(f"setting-{index}-{key}", widget if isinstance(widget, tk.Widget) else None)
                 if bounds is not None:
@@ -778,6 +1130,8 @@ class DesktopApp:
             messagebox.showwarning("快捷键冲突", conflict)
             self.status_var.set("快捷键冲突，请调整后再保存")
             return
+        for field, (minimum, maximum, step) in DELAY_SPECS.items():
+            self._sync_delay_from_entry(field, minimum, maximum, step)
         for key, entry in self.entries.items():
             value: str | int = entry.get().strip()
             if key.endswith("_ms"):
@@ -1199,6 +1553,7 @@ def run_long_text_test(
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run the Doubao ASR desktop helper.")
     parser.add_argument("--hidden", action="store_true")
+    parser.add_argument("--background", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--show-help", action="store_true", help="Open the desktop help window on startup.")
     parser.add_argument("--ui-layout-report", help=argparse.SUPPRESS)
     parser.add_argument("--ui-window-size", help=argparse.SUPPRESS)
@@ -1228,6 +1583,7 @@ def main(argv: list[str] | None = None) -> None:
     app = DesktopApp(
         hidden=args.hidden,
         show_help=args.show_help,
+        background=args.background,
         ui_layout_report=args.ui_layout_report,
         ui_window_size=args.ui_window_size,
     )
