@@ -6,6 +6,7 @@ import json
 import os
 import queue
 import sys
+import tempfile
 import threading
 import time
 from dataclasses import asdict, dataclass
@@ -22,6 +23,7 @@ if getattr(sys, "frozen", False):
     os.environ["PATH"] = str(bundle_dir) + os.pathsep + os.environ.get("PATH", "")
 
 from doubaoime_asr import ASRConfig, ResponseType, transcribe_realtime
+from doubaoime_asr.audio import AudioEncoder
 
 
 APP_CONFIG_DIR = Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming")) / "DoubaoASRHelper"
@@ -62,6 +64,19 @@ def resolve_user_path(value: str | Path) -> Path:
 def normalize_config(config: DesktopConfig) -> DesktopConfig:
     config.credential_path = str(resolve_user_path(config.credential_path))
     return config
+
+
+def hotkey_conflict_from_values(values: dict[str, str]) -> str | None:
+    seen: dict[frozenset[str], str] = {}
+    for field, label in HOTKEY_LABELS.items():
+        value = values[field].strip()
+        parsed = parse_hotkey(value)
+        if not parsed:
+            return f"{label} 不能为空。"
+        if parsed in seen:
+            return f"{label} 与 {seen[parsed]} 使用了同一个快捷键：{value}"
+        seen[parsed] = label
+    return None
 
 
 def load_config() -> DesktopConfig:
@@ -345,16 +360,7 @@ class DesktopApp:
         self.status_var.set("配置已保存")
 
     def find_hotkey_conflict(self) -> str | None:
-        seen: dict[frozenset[str], str] = {}
-        for field, label in HOTKEY_LABELS.items():
-            value = self.entries[field].get().strip()
-            parsed = parse_hotkey(value)
-            if not parsed:
-                return f"{label} 不能为空。"
-            if parsed in seen:
-                return f"{label} 与 {seen[parsed]} 使用了同一个快捷键：{value}"
-            seen[parsed] = label
-        return None
+        return hotkey_conflict_from_values({field: self.entries[field].get() for field in HOTKEY_LABELS})
 
     def _start_listeners(self) -> None:
         self.keyboard_listener = keyboard.Listener(on_press=self._on_key_press, on_release=self._on_key_release)
@@ -574,10 +580,89 @@ def send_enter() -> None:
     send_key(0x0D, up=True)
 
 
+def run_self_test(report_path: str | None = None) -> int:
+    report = {
+        "ok": True,
+        "executable": sys.executable,
+        "frozen": bool(getattr(sys, "frozen", False)),
+        "app_config_dir": str(APP_CONFIG_DIR),
+        "checks": [],
+    }
+
+    def check(name: str, func, required: bool = True) -> None:
+        try:
+            detail = func()
+            report["checks"].append({"name": name, "ok": True, "required": required, "detail": detail})
+        except Exception as exc:
+            report["checks"].append({"name": name, "ok": False, "required": required, "error": repr(exc)})
+            if required:
+                report["ok"] = False
+
+    config = load_config()
+    credential_path = resolve_user_path(config.credential_path)
+    report["credential_path"] = str(credential_path)
+
+    def config_dir_check() -> str:
+        APP_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        marker = APP_CONFIG_DIR / ".self-test.tmp"
+        marker.write_text("ok", encoding="utf-8")
+        marker.unlink(missing_ok=True)
+        return "config directory is writable"
+
+    def credential_path_check() -> str:
+        credential_path.parent.mkdir(parents=True, exist_ok=True)
+        marker = credential_path.parent / ".credential-write-test.tmp"
+        marker.write_text("ok", encoding="utf-8")
+        marker.unlink(missing_ok=True)
+        return "credential cache directory is writable"
+
+    def hotkey_check() -> str:
+        conflict = hotkey_conflict_from_values({field: getattr(config, field) for field in HOTKEY_LABELS})
+        if conflict:
+            raise ValueError(conflict)
+        return "configured hotkeys are valid"
+
+    def opus_check() -> str:
+        encoder = AudioEncoder(ASRConfig(credential_path=str(credential_path)))
+        frames = encoder.pcm_to_opus_frames(b"\x00" * 640)
+        if not frames:
+            raise RuntimeError("Opus encoder returned no frames")
+        return f"encoded {len(frames)} frame(s)"
+
+    def sounddevice_check() -> str:
+        devices = sd.query_devices()
+        input_count = sum(1 for device in devices if int(device.get("max_input_channels", 0)) > 0)
+        if input_count == 0:
+            raise RuntimeError("No input audio devices found")
+        return f"{input_count} input audio device(s) found"
+
+    def input_control_check() -> str:
+        keyboard.Controller()
+        mouse.Controller()
+        get_foreground_window()
+        return "keyboard, mouse, and foreground window APIs are available"
+
+    check("config_dir", config_dir_check)
+    check("credential_path", credential_path_check)
+    check("hotkeys", hotkey_check)
+    check("opus_encoder", opus_check)
+    check("audio_devices", sounddevice_check)
+    check("input_control", input_control_check)
+
+    destination = Path(report_path) if report_path else Path(tempfile.gettempdir()) / "DoubaoASRHelper-self-test.json"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return 0 if report["ok"] else 1
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run the Doubao ASR desktop helper.")
     parser.add_argument("--hidden", action="store_true")
+    parser.add_argument("--self-test", action="store_true", help="Run packaged app diagnostics and exit.")
+    parser.add_argument("--self-test-report", help="Write self-test JSON report to this path.")
     args = parser.parse_args(argv)
+    if args.self_test:
+        raise SystemExit(run_self_test(args.self_test_report))
     app = DesktopApp(hidden=args.hidden)
     app.run()
 

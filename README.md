@@ -218,6 +218,12 @@ doubaoime-asr-desktop
 .\build-desktop-exe.ps1
 ```
 
+测试已打包的 exe、安装器和分发 zip：
+
+```powershell
+.\test-desktop-exe.ps1
+```
+
 产物：
 
 | 文件 | 用途 |
