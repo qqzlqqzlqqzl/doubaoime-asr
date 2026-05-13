@@ -68,7 +68,7 @@ python -m doubaoime_asr.desktop_help $HelpPath
 $ActivationReadme = if ($RequireActivation) {
   "Activation: this build requires an activation code and talks to $LicenseServerUrl."
 } else {
-  "Activation: this development build does not require activation. Set DOUBAO_ASR_REQUIRE_ACTIVATION=1 and DOUBAO_ASR_LICENSE_URL before building a controlled release."
+  "Activation: this build does not require an activation code and opens directly to the voice input workflow."
 }
 $Readme = @(
   "Doubao ASR Helper for Windows",

@@ -331,7 +331,12 @@ function Assert-UiLayoutFits {
       throw "UI layout report missing setting entry $Index"
     }
   }
-  for ($Index = 0; $Index -lt 6; $Index++) {
+  $ExpectedActionButtons = 5
+  $ActionButtons = @($Layout.widgets | Where-Object { $_.name -like "action-*" })
+  if ($ActionButtons.Count -ne $ExpectedActionButtons) {
+    throw "UI layout report expected $ExpectedActionButtons action buttons, found $($ActionButtons.Count)"
+  }
+  for ($Index = 0; $Index -lt $ExpectedActionButtons; $Index++) {
     if (-not ($Layout.widgets | Where-Object { $_.name -eq "action-$Index" })) {
       throw "UI layout report missing action button $Index"
     }

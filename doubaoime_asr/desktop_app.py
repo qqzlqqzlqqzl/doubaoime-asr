@@ -354,7 +354,7 @@ class DesktopApp:
         self.settings_title_label.pack(anchor="w")
         self.settings_subtitle_label = tk.Label(
             header_left,
-            text="快捷键、发送时序和授权状态",
+            text="快捷键、发送时序和输入体验",
             bg=UI_BG,
             fg=UI_MUTED,
             font=("Microsoft YaHei UI", 9),
@@ -434,7 +434,6 @@ class DesktopApp:
             ("保存配置", self.save_from_ui),
             ("显示悬浮窗", lambda: self.show_float("")),
             ("使用说明", self.show_help),
-            ("授权状态", self.show_activation_window),
             ("打开配置目录", self.open_config_dir),
             ("隐藏窗口", self.root.withdraw),
         ]
@@ -985,10 +984,10 @@ class DesktopApp:
 
     def check_license_on_startup(self) -> None:
         result = self.verify_current_license()
-        self.status_var.set(self.format_license_status(result))
         if self.license_config.require_activation and not result.ok:
-            self.root.deiconify()
-            self.show_activation_window(result.message)
+            self.status_var.set("需要激活后使用")
+            return
+        self.status_var.set("已就绪")
 
     def verify_current_license(self, force: bool = False) -> LicenseResult:
         now = time.time()
@@ -1014,11 +1013,11 @@ class DesktopApp:
         message = result.message if result else "尚未校验"
         return f"授权：{message}"
 
-    def ensure_license(self, show_dialog: bool = True) -> bool:
+    def ensure_license(self, show_dialog: bool = False) -> bool:
         result = self.verify_current_license()
         if result.ok:
             return True
-        self.status_var.set(self.format_license_status(result))
+        self.status_var.set("需要激活后使用")
         if show_dialog:
             self.root.after(0, lambda message=result.message: self.show_activation_window(message))
         return False
@@ -1234,7 +1233,7 @@ class DesktopApp:
             self.stop_recording()
 
     def start_recording(self, mode: str) -> None:
-        if not self.ensure_license(show_dialog=True):
+        if not self.ensure_license(show_dialog=False):
             return
         self.target_hwnd = get_foreground_window()
         self.recording_mode = mode
@@ -1449,7 +1448,7 @@ def run_self_test(report_path: str | None = None) -> int:
         return "keyboard, mouse, and foreground window APIs are available"
 
     def help_text_check() -> str:
-        required = ["豆包 ASR 助手使用说明", "默认快捷键", "授权激活", "常见问题", "卸载"]
+        required = ["豆包 ASR 助手使用说明", "首次运行", "默认快捷键", "常见问题", "卸载"]
         missing = [item for item in required if item not in HELP_TEXT]
         if missing:
             raise RuntimeError(f"Help text is missing required section(s): {missing}")
