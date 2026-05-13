@@ -61,7 +61,7 @@
 | E01 | `dist\DoubaoASRHelper.exe --self-test` | 自测报告 `ok=true` |
 | E02 | `release\DoubaoASRHelper-portable.exe --self-test` | 自测报告 `ok=true` |
 | E03 | 强制激活配置自测 | 报告里 `license_config.require_activation=true`，未激活状态不让主流程通过 |
-| E04 | 分发 zip 完整性 | zip 包含安装器、便携版、README 和 HELP |
+| E04 | 分发 zip 完整性 | 完整包包含安装器、便携版、README 和 HELP；免安装包包含便携版、README 和 HELP |
 | E05 | 安装器静默安装 | 安装到临时目录成功 |
 | E06 | 安装后 EXE 自测 | 安装目录里的 EXE 自测通过 |
 | E07 | 安装后可见 UI 截图和布局报告 | 启动可见窗口并写出 `release\test-reports\installed-ui-smoke.png`、`installed-ui-smoke-narrow.png`、`installed-ui-smoke-minimum.png` 及对应 `*-layout.json`，自动断言正常/窄/最小窗口下主界面不需要滚动、控件不溢出、输入框和底部按钮都在单页可见区域内 |

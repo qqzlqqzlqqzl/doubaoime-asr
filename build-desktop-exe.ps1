@@ -85,6 +85,27 @@ $Readme = @(
 ) -join [Environment]::NewLine
 $Readme | Set-Content -Encoding UTF8 (Join-Path $ReleaseDir "README-Windows.txt")
 
+$PortableReadmePath = Join-Path $ReleaseDir "README-Portable.txt"
+$PortableReadme = @(
+  "Doubao ASR Helper Portable",
+  "",
+  "How to run:",
+  "1. Extract this zip to any folder.",
+  "2. Double-click DoubaoASRHelper-portable.exe.",
+  "3. Windows may show a SmartScreen warning because this build is not code-signed.",
+  "",
+  "No installer is required. Config and credential cache are saved under %APPDATA%\DoubaoASRHelper on first run.",
+  $ActivationReadme
+) -join [Environment]::NewLine
+$PortableReadme | Set-Content -Encoding UTF8 $PortableReadmePath
+
+$PortableZipPath = Join-Path $ReleaseDir "DoubaoASRHelper-Portable.zip"
+Compress-Archive -Force -Path @(
+  (Join-Path $ReleaseDir "DoubaoASRHelper-portable.exe"),
+  $PortableReadmePath,
+  $HelpPath
+) -DestinationPath $PortableZipPath
+
 $ZipPath = Join-Path $ReleaseDir "DoubaoASRHelper-Windows.zip"
 Compress-Archive -Force -Path @(
   (Join-Path $ReleaseDir "DoubaoASRHelperSetup.exe"),
@@ -95,4 +116,5 @@ Compress-Archive -Force -Path @(
 
 Write-Host "Built dist\DoubaoASRHelper.exe"
 Write-Host "Built dist\DoubaoASRHelperSetup.exe"
+Write-Host "Built release\DoubaoASRHelper-Portable.zip"
 Write-Host "Built release\DoubaoASRHelper-Windows.zip"

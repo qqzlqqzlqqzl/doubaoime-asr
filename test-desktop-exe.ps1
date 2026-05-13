@@ -4,6 +4,7 @@ $Root = $PSScriptRoot
 $DistExe = Join-Path $Root "dist\DoubaoASRHelper.exe"
 $SetupExe = Join-Path $Root "dist\DoubaoASRHelperSetup.exe"
 $PortableExe = Join-Path $Root "release\DoubaoASRHelper-portable.exe"
+$PortableZip = Join-Path $Root "release\DoubaoASRHelper-Portable.zip"
 $ReleaseZip = Join-Path $Root "release\DoubaoASRHelper-Windows.zip"
 $ReportsDir = Join-Path $Root "release\test-reports"
 New-Item -ItemType Directory -Force -Path $ReportsDir | Out-Null
@@ -394,6 +395,9 @@ finally {
 if (-not (Test-Path $ReleaseZip)) {
   throw "Missing release zip: $ReleaseZip"
 }
+if (-not (Test-Path $PortableZip)) {
+  throw "Missing portable zip: $PortableZip"
+}
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $Zip = [IO.Compression.ZipFile]::OpenRead($ReleaseZip)
 try {
@@ -401,6 +405,19 @@ try {
   foreach ($Name in $Expected) {
     if (-not ($Zip.Entries | Where-Object { $_.FullName -eq $Name -and $_.Length -gt 0 })) {
       throw "Release zip missing required entry: $Name"
+    }
+  }
+}
+finally {
+  $Zip.Dispose()
+}
+
+$Zip = [IO.Compression.ZipFile]::OpenRead($PortableZip)
+try {
+  $Expected = @("DoubaoASRHelper-portable.exe", "README-Portable.txt", "HELP.md")
+  foreach ($Name in $Expected) {
+    if (-not ($Zip.Entries | Where-Object { $_.FullName -eq $Name -and $_.Length -gt 0 })) {
+      throw "Portable zip missing required entry: $Name"
     }
   }
 }
