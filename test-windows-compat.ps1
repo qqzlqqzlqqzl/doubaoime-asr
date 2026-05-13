@@ -157,7 +157,7 @@ report = {
     },
     "vm_runtime_tests": {
         "executed": False,
-        "reason": "No Win7/Win8 VM runner or image was available in this workspace.",
+        "reason": "No VM runner is configured for additional Windows 10/11 matrix testing in this workspace.",
         "detected_vm_tools": [item for item in os.environ.get("COMPAT_VM_TOOLS", "").split(os.pathsep) if item],
     },
     "official_support_basis": [
@@ -215,13 +215,11 @@ report = {
         },
         {
             "os": "Windows 8.1 x64",
-            "supported": "conditional",
+            "supported": False,
             "runtime_tested": False,
-            "expected_result": "runtime should be compatible by Python/PyInstaller policy, but not release-certified without a VM smoke test",
+            "expected_result": "unsupported by project policy",
             "reasons": [
-                "Python 3.13 documentation supports Windows 8.1 and newer.",
-                "The current build is 64-bit only.",
-                "No Windows 8.1 VM runtime test was available in this workspace.",
+                "The project only targets Windows 10/11 x64 for desktop releases.",
             ],
         },
         {
@@ -244,13 +242,9 @@ report = {
         },
     ],
     "recommendation": {
-        "current_minimum_supported_os": "Windows 10 x64 recommended; Windows 8.1 x64 is conditional/static-only.",
-        "do_not_claim_support": ["Windows 7", "Windows 8.0", "32-bit Windows"],
-        "if_win7_or_win8_0_is_required": [
-            "Build a separate legacy package with an older Python runtime and matching dependency set.",
-            "Expect feature downgrades, especially for modern TLS/crypto, DPI, and global input hooks.",
-            "Run real VM smoke tests on the target OS before distribution.",
-        ],
+        "current_minimum_supported_os": "Windows 10 x64.",
+        "primary_release_targets": ["Windows 10 x64", "Windows 11 x64"],
+        "do_not_claim_support": ["Windows 7", "Windows 8.x", "32-bit Windows"],
     },
 }
 

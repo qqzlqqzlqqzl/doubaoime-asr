@@ -69,30 +69,9 @@
 | E08 | 托盘图标烟测 | `--tray-self-test` 能创建并删除 Windows 系统托盘图标，报告 `started=true`、`stopped=true` |
 | E09 | 关闭窗口后台保活 | 对安装后主窗口发送关闭消息后，进程保持运行且主窗口不可见 |
 | E10 | 安装后后台保活烟测 | `--hidden` 启动后进程保持运行，主窗口隐藏时可通过系统托盘继续后台监听 |
-| E11 | Windows 兼容性审计 | `test-windows-compat.ps1` 写出 `release\test-reports\windows-compatibility.json`，明确 Win7/Win8.0 不支持、Win8.1 条件兼容、Win10/Win11 为推荐目标 |
-
-### 可选 Win7/Win8 Legacy 包测试
-
-Win7/Win8 不作为主支持目标。只有确实要给老系统用户发实验包时，才需要跑这一组测试；主发版优先看上面的 EXE、安装器、UI 缩放、托盘和兼容性审计。
-
-运行：
-
-```powershell
-.\build-desktop-exe-legacy.ps1
-.\test-windows-compat-legacy.ps1
-```
-
-覆盖项：
-
-| 编号 | 测试项 | 预期 |
-|------|------|------|
-| W01 | Python 3.8 legacy 源码编译 | `compileall` 通过，证明代码语法可被 Python 3.8 解析 |
-| W02 | legacy 依赖安装 | `.venv-win7` 使用 `requirements-win7-legacy.txt` 安装固定版本依赖，不污染主 `.venv` |
-| W03 | legacy EXE 自测 | `dist-legacy\DoubaoASRHelper.exe --self-test` 报告 `ok=true` |
-| W04 | legacy 托盘自测 | `--tray-self-test` 能创建并删除 Windows 系统托盘图标 |
-| W05 | legacy 静态兼容审计 | 报告 `release\test-reports\windows-compatibility-legacy.json`，确认打包运行时使用 `python38.dll` 且不再导入主包里的 Win8.1+ PSS API |
-| W06 | legacy 分发包完整性 | `release\legacy` 生成安装包 zip、免安装 zip、README 和 HELP |
-| W07 | Win7/Win8 VM 实跑 | 在干净 Win7 SP1 x64、Win8.0 x64、Win8.1 x64 VM 里手工跑启动、托盘、热键、录音、ASR、安装、卸载；当前工作区没有 VM 时标记为未认证 |
+| E11 | Windows 兼容性审计 | `test-windows-compat.ps1` 写出 `release\test-reports\windows-compatibility.json`，明确 Win10/Win11 为正式目标、Win7/Win8 不支持 |
+| E12 | 悬浮窗长文本布局 | `--float-layout-test` 写出 `installed-float-layout-long-text.json`，断言类似实测截图长度的识别文本可完整显示且窗口不超出屏幕 |
+| E13 | 普通打字热键保护 | `--self-test` 断言裸字母/数字不能作为空闲状态启动录音的全局快捷键，避免输入 `xian` 这类拼音时误触发 |
 
 ### 长文本 ASR 测试
 
@@ -122,7 +101,7 @@ Win7/Win8 不作为主支持目标。只有确实要给老系统用户发实验�
 | U02 | 按住说录音 | 在文本框里按住默认 `rctrl` 说话后松开 | 识别文字插入回原窗口，悬浮窗显示过程状态 |
 | U03 | 自由说录音 | 按一次默认 `xbutton1` 开始，再按一次结束 | 录音开始/结束可靠，识别文字插入回原窗口 |
 | U04 | 按住+发送 | 在聊天输入框里按住默认 `lctrl+lwin` 后松开 | 识别文字插入并按发送延迟触发 Enter |
-| U05 | 取消录音 | 录音过程中按默认 `z` | 本次输入取消，不插入也不自动发送 |
+| U05 | 取消录音 | 录音过程中按默认 `esc` | 本次输入取消，不插入也不自动发送 |
 | U06 | 快捷键自定义 | 点击“录制”并输入新组合键后保存 | 配置保存成功，重启后仍生效 |
 | U07 | 快捷键冲突 | 配置重复快捷键 | 弹窗提示冲突，不能保存重复配置 |
 | U08 | 悬浮窗操作 | 录音后在悬浮窗点击清空、复制、插入 | 三个操作都生效，窗口不遮挡主流程 |
@@ -137,6 +116,5 @@ Win7/Win8 不作为主支持目标。只有确实要给老系统用户发实验�
 2. 跑 `.\test-license-stress.ps1`。
 3. 再按正式授权服务器设置环境变量，跑 `.\build-desktop-exe.ps1`。
 4. 跑 `.\test-desktop-exe.ps1`。
-5. 如果确实需要老系统实验包，再跑 `.\build-desktop-exe-legacy.ps1` 和 `.\test-windows-compat-legacy.ps1`，并放进 Win7/Win8 VM 实跑；这一步不阻塞 Win10/Win11 主包发版。
-6. 有 ASR 凭据时跑 `.\test-long-text-asr.ps1`。
-7. 手工验收 U01-U12，重点看首次启动无登录/授权弹窗、语音输入闭环、主界面缩放截图和系统托盘后台运行。
+5. 有 ASR 凭据时跑 `.\test-long-text-asr.ps1`。
+6. 手工验收 U01-U12，重点看首次启动无登录/授权弹窗、语音输入闭环、主界面缩放截图和系统托盘后台运行。

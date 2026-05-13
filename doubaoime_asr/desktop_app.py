@@ -10,6 +10,7 @@ import sys
 import tempfile
 import threading
 import time
+import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable, Iterable
@@ -17,6 +18,7 @@ from typing import Callable, Iterable
 import sounddevice as sd
 import sv_ttk
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from pynput import keyboard, mouse
 
@@ -74,6 +76,10 @@ DEFAULT_WINDOW_WIDTH = 900
 DEFAULT_WINDOW_HEIGHT = 680
 MIN_WINDOW_WIDTH = 560
 MIN_WINDOW_HEIGHT = 420
+FLOAT_BASE_WIDTH = 760
+FLOAT_MIN_WIDTH = 560
+FLOAT_MAX_WIDTH = 960
+FLOAT_MAX_LINES = 12
 _DPI_AWARENESS_CONFIGURED = False
 
 
@@ -451,7 +457,7 @@ class DesktopConfig:
     hold_key: str = "rctrl"
     toggle_key: str = "xbutton1"
     hold_send_key: str = "lctrl+lwin"
-    cancel_key: str = "z"
+    cancel_key: str = "esc"
     doubao_hotkey: str = "ctrl+d"
     insert_delay_ms: int = 300
     auto_send_delay_ms: int = 50
@@ -469,6 +475,10 @@ def resolve_user_path(value: str | Path) -> Path:
 
 def normalize_config(config: DesktopConfig) -> DesktopConfig:
     config.credential_path = str(resolve_user_path(config.credential_path))
+    defaults = DesktopConfig()
+    for field in ("hold_key", "toggle_key", "hold_send_key", "cancel_key"):
+        if not idle_start_hotkey_allowed(parse_hotkey(getattr(config, field))):
+            setattr(config, field, getattr(defaults, field))
     return config
 
 
@@ -479,6 +489,8 @@ def hotkey_conflict_from_values(values: dict[str, str]) -> str | None:
         parsed = parse_hotkey(value)
         if not parsed:
             return f"{label} 不能为空。"
+        if field in {"hold_key", "toggle_key", "hold_send_key", "cancel_key"} and not idle_start_hotkey_allowed(parsed):
+            return f"{label} 不能只用普通字母或数字，避免和打字输入冲突。请使用 Ctrl/Alt/Win、鼠标侧键或功能键组合。"
         if parsed in seen:
             return f"{label} 与 {seen[parsed]} 使用了同一个快捷键：{value}"
         seen[parsed] = label
@@ -539,11 +551,28 @@ ALIASES = {
     "x2": "xbutton2",
     "xbutton2": "xbutton2",
 }
+MODIFIER_KEYS = {"lctrl", "rctrl", "ctrl", "lalt", "ralt", "alt", "lshift", "rshift", "shift", "lwin", "rwin", "win"}
+MOUSE_HOTKEYS = {"xbutton1", "xbutton2", "middle"}
+CONTROL_HOTKEYS = {"esc", "enter", "tab", "space"}
 
 
 def parse_hotkey(value: str) -> frozenset[str]:
     parts = [part.strip().lower() for part in value.replace("＋", "+").split("+") if part.strip()]
     return frozenset(ALIASES.get(part, part) for part in parts)
+
+
+def is_plain_text_key(name: str) -> bool:
+    return len(name) == 1 and name.isprintable()
+
+
+def idle_start_hotkey_allowed(keys: frozenset[str]) -> bool:
+    if not keys:
+        return False
+    if keys & (MODIFIER_KEYS | MOUSE_HOTKEYS | CONTROL_HOTKEYS):
+        return True
+    if any(key.startswith("f") and key[1:].isdigit() for key in keys):
+        return True
+    return not all(is_plain_text_key(key) for key in keys)
 
 
 def format_hotkey(keys: Iterable[str]) -> str:
@@ -598,6 +627,19 @@ def active_matches(active: set[str], target: frozenset[str]) -> bool:
     if "lshift" in active or "rshift" in active:
         expanded.add("shift")
     return target.issubset(expanded)
+
+
+def idle_start_mode_for_active_keys(name: str, active_keys: set[str], config: DesktopConfig) -> str | None:
+    toggle_key = parse_hotkey(config.toggle_key)
+    hold_send_key = parse_hotkey(config.hold_send_key)
+    hold_key = parse_hotkey(config.hold_key)
+    if idle_start_hotkey_allowed(hold_send_key) and name in hold_send_key and active_matches(active_keys, hold_send_key):
+        return "hold_send"
+    if idle_start_hotkey_allowed(hold_key) and name in hold_key and active_matches(active_keys, hold_key):
+        return "hold"
+    if idle_start_hotkey_allowed(toggle_key) and name in toggle_key and active_matches(active_keys, toggle_key):
+        return "toggle"
+    return None
 
 
 def configure_process_dpi_awareness() -> None:
@@ -671,6 +713,9 @@ class DesktopApp:
         self.license_checked_at = 0.0
         self.clipboard = Clipboard(self.root)
         self.active_keys: set[str] = set()
+        self._layout_after_id: str | None = None
+        self._layout_signature: tuple[int, int, int, float] | None = None
+        self._action_layout_signature: tuple[int, int, int, bool, bool] | None = None
         self.recording_mode: str | None = None
         self.cancelled = False
         self.target_hwnd: int | None = None
@@ -699,6 +744,9 @@ class DesktopApp:
         self.activation_win: tk.Toplevel | None = None
         self.activation_code_var = tk.StringVar(value="")
         self.activation_status_var = tk.StringVar(value="")
+        self.float_needed_lines = 0
+        self.float_visible_lines = 0
+        self.float_action_buttons: list[tk.Button] = []
         self.recording_field: str | None = None
         self.status_var = tk.StringVar(value="已就绪")
         self.transcript_var = tk.StringVar(value="")
@@ -940,8 +988,7 @@ class DesktopApp:
 
         outer = tk.Frame(shell, padx=22, pady=18, bg=UI_BG)
         outer.pack(fill="both", expand=True)
-        outer.bind("<Configure>", lambda _event: self.root.after_idle(self.layout_settings_controls))
-        self.root.bind("<Configure>", lambda _event: self.root.after_idle(self.layout_settings_controls), add="+")
+        self.root.bind("<Configure>", lambda _event: self.request_layout_settings_controls(), add="+")
         self.settings_outer = outer
 
         header = tk.Frame(outer, bg=UI_BG)
@@ -1041,7 +1088,7 @@ class DesktopApp:
             self.action_buttons.append(button)
 
         help_text = (
-            "默认热键：rctrl / xbutton1 / lctrl+lwin / z。"
+            "默认热键：rctrl / xbutton1 / lctrl+lwin / esc。"
             "录音结束后会把识别文字粘贴到开始录音前的窗口。"
         )
         self.settings_help_label = tk.Label(
@@ -1245,7 +1292,16 @@ class DesktopApp:
         var.set(value)
         self._sync_delay_entry(field)
 
-    def layout_settings_controls(self) -> None:
+    def request_layout_settings_controls(self) -> None:
+        if self._layout_after_id is not None:
+            return
+        self._layout_after_id = self.root.after(80, self._run_deferred_layout_settings_controls)
+
+    def _run_deferred_layout_settings_controls(self) -> None:
+        self._layout_after_id = None
+        self.layout_settings_controls()
+
+    def layout_settings_controls(self, force: bool = False) -> None:
         if self.settings_table is None:
             return
 
@@ -1253,6 +1309,15 @@ class DesktopApp:
         root_height = max(self.root.winfo_height(), 1)
         available_width = max(self.settings_table.winfo_width(), root_width - 40, 1)
         ui_scale = self.current_ui_scale_factor()
+        signature = (
+            root_width // 24,
+            root_height // 24,
+            available_width // 24,
+            round(ui_scale, 2),
+        )
+        if not force and signature == self._layout_signature:
+            return
+        self._layout_signature = signature
         logical_width = root_width / max(ui_scale, 1.0)
         logical_height = root_height / max(ui_scale, 1.0)
         logical_available_width = available_width / max(ui_scale, 1.0)
@@ -1410,12 +1475,12 @@ class DesktopApp:
                 checkbutton.configure(font=normal_font)
             checkbutton.pack_configure(padx=0 if index == 0 else 10 if tiny else 18)
 
-        self.layout_action_buttons()
+        self.layout_action_buttons(force=force)
         if self.settings_help_label is not None:
             help_text = (
-                "默认热键：rctrl / xbutton1 / lctrl+lwin / z。保存前会检查快捷键冲突。"
+                "默认热键：rctrl / xbutton1 / lctrl+lwin / esc。保存前会检查快捷键冲突。"
                 if short
-                else "默认热键：rctrl / xbutton1 / lctrl+lwin / z。录音结束后会把识别文字粘贴到开始录音前的窗口。"
+                else "默认热键：rctrl / xbutton1 / lctrl+lwin / esc。录音结束后会把识别文字粘贴到开始录音前的窗口。"
             )
             self.settings_help_label.configure(
                 text=help_text,
@@ -1427,20 +1492,24 @@ class DesktopApp:
             elif not self.settings_help_label.winfo_ismapped():
                 self.settings_help_label.pack(anchor="w")
 
-    def layout_action_buttons(self) -> None:
+    def layout_action_buttons(self, force: bool = False) -> None:
         if self.action_buttons_frame is None:
             return
-        width = max(self.action_buttons_frame.winfo_width(), 1)
+        width = max(self.action_buttons_frame.winfo_width(), self.root.winfo_width() - 20, 1)
         root_height = max(self.root.winfo_height(), 1)
         ui_scale = self.current_ui_scale_factor()
         logical_width = width / max(ui_scale, 1.0)
         logical_height = root_height / max(ui_scale, 1.0)
         tight = logical_width <= 620 or logical_height <= 540
         roomy = logical_width >= 760 and logical_height >= 600
-        if root_height <= 430 and width >= 520:
+        if logical_height <= 430 and width >= 520:
             columns = len(self.action_buttons)
         else:
             columns = len(self.action_buttons) if width >= 720 else 3 if width >= 500 else 2 if width >= 340 else 1
+        signature = (width // 24, root_height // 24, columns, tight, roomy)
+        if not force and signature == self._action_layout_signature:
+            return
+        self._action_layout_signature = signature
         button_font = ("Microsoft YaHei UI", 8 if tight else 9)
         button_padx = 2 if root_height <= 430 else 3 if tight else 6
         button_pady = 0 if root_height <= 430 else 1 if tight else 4
@@ -1484,6 +1553,8 @@ class DesktopApp:
     def write_ui_layout_report(self) -> None:
         if self.ui_layout_report is None:
             return
+        self.root.update_idletasks()
+        self.layout_settings_controls(force=True)
         self.root.update_idletasks()
         widgets: list[dict[str, int | str]] = []
         for name, widget in (
@@ -1707,7 +1778,8 @@ class DesktopApp:
     def _build_float_window(self) -> None:
         self.float_win = tk.Toplevel(self.root)
         self.float_win.title("豆包 ASR")
-        self.float_win.geometry("680x170+360+360")
+        self.float_win.geometry("760x220+360+360")
+        self.float_win.minsize(FLOAT_MIN_WIDTH, 170)
         self.float_win.attributes("-topmost", True)
         self.float_win.withdraw()
         self.float_win.protocol("WM_DELETE_WINDOW", self.float_win.withdraw)
@@ -1720,9 +1792,78 @@ class DesktopApp:
         self.float_text.pack(fill="both", expand=True)
         actions = tk.Frame(center, bg="#ffffff")
         actions.pack(fill="x", pady=(8, 0))
-        tk.Button(actions, text="清空", command=self.clear_float).pack(side="left")
-        tk.Button(actions, text="复制", command=self.copy_float).pack(side="left", padx=8)
-        tk.Button(actions, text="插入 ↵", command=lambda: self.insert_text(self.get_float_text(), auto_send=False)).pack(side="right")
+        clear_button = tk.Button(actions, text="清空", command=self.clear_float)
+        copy_button = tk.Button(actions, text="复制", command=self.copy_float)
+        insert_button = tk.Button(actions, text="插入 ↵", command=lambda: self.insert_text(self.get_float_text(), auto_send=False))
+        clear_button.pack(side="left")
+        copy_button.pack(side="left", padx=8)
+        insert_button.pack(side="right")
+        self.float_action_buttons = [clear_button, copy_button, insert_button]
+
+    def _resize_float_window_for_text(self, text: str) -> None:
+        self.float_win.update_idletasks()
+        screen_width = self.float_win.winfo_screenwidth()
+        screen_height = self.float_win.winfo_screenheight()
+        scale = max(self.current_ui_scale_factor(), 1.0)
+        width = min(max(int(FLOAT_BASE_WIDTH * scale), FLOAT_MIN_WIDTH), FLOAT_MAX_WIDTH, max(FLOAT_MIN_WIDTH, screen_width - 80))
+        text_width = max(260, width - int(120 * scale))
+
+        font = tkfont.Font(font=self.float_text["font"])
+        line_height = max(font.metrics("linespace"), 18)
+        sample_width = max(font.measure("测"), font.measure("M"), 1)
+        chars_per_line = max(8, text_width // sample_width)
+        paragraphs = text.splitlines() or [""]
+        needed_lines = sum(max(1, math.ceil(max(len(paragraph), 1) / chars_per_line)) for paragraph in paragraphs)
+        visible_lines = max(3, min(FLOAT_MAX_LINES, needed_lines))
+        self.float_needed_lines = needed_lines
+        self.float_visible_lines = visible_lines
+
+        self.float_text.configure(height=visible_lines)
+        height = int(58 * scale) + line_height * visible_lines
+        height = min(max(height, 170), max(170, int(screen_height * 0.58)))
+
+        current_x = self.float_win.winfo_x()
+        current_y = self.float_win.winfo_y()
+        if current_x <= 0 and current_y <= 0:
+            current_x = max(20, (screen_width - width) // 2)
+            current_y = max(20, screen_height // 3)
+        x = min(max(20, current_x), max(20, screen_width - width - 20))
+        y = min(max(20, current_y), max(20, screen_height - height - 60))
+        self.float_win.geometry(f"{width}x{height}+{x}+{y}")
+
+    def write_float_layout_report(self, report_path: str | Path, text: str) -> None:
+        self.show_float(text)
+        self.float_win.update_idletasks()
+        text_bounds = self._widget_bounds("float-text", self.float_text)
+        button_bounds = [
+            bounds
+            for index, button in enumerate(self.float_action_buttons)
+            for bounds in [self._widget_bounds(f"float-action-{index}", button)]
+            if bounds is not None
+        ]
+        window = {
+            "width": self.float_win.winfo_width(),
+            "height": self.float_win.winfo_height(),
+            "screen_width": self.float_win.winfo_screenwidth(),
+            "screen_height": self.float_win.winfo_screenheight(),
+        }
+        report = {
+            "text_chars": len(text),
+            "stored_text_chars": len(self.get_float_text()),
+            "text_equal_input": self.get_float_text() == text,
+            "window": window,
+            "text_widget": text_bounds,
+            "action_buttons": button_bounds,
+            "wrap": self.float_text.cget("wrap"),
+            "yview": self.float_text.yview(),
+            "needed_lines": self.float_needed_lines,
+            "visible_lines": self.float_visible_lines,
+            "fits_text_sample": self.float_needed_lines <= self.float_visible_lines,
+            "fits_screen": window["width"] <= window["screen_width"] and window["height"] <= window["screen_height"],
+        }
+        path = Path(report_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def save_from_ui(self) -> None:
         conflict = self.find_hotkey_conflict()
@@ -1811,21 +1952,20 @@ class DesktopApp:
             self.status_var.set(f"已录制：{value}，点击保存配置生效")
 
     def _handle_active_press(self, name: str) -> None:
-        if self.recording_mode and active_matches(self.active_keys, parse_hotkey(self.config.cancel_key)):
+        cancel_key = parse_hotkey(self.config.cancel_key)
+        toggle_key = parse_hotkey(self.config.toggle_key)
+        if self.recording_mode and active_matches(self.active_keys, cancel_key):
             self.cancelled = True
             self.stop_recording()
             return
-        if self.recording_mode == "toggle" and active_matches(self.active_keys, parse_hotkey(self.config.toggle_key)):
+        if self.recording_mode == "toggle" and active_matches(self.active_keys, toggle_key):
             self.stop_recording()
             return
         if self.recording_mode:
             return
-        if active_matches(self.active_keys, parse_hotkey(self.config.hold_send_key)):
-            self.start_recording("hold_send")
-        elif active_matches(self.active_keys, parse_hotkey(self.config.hold_key)):
-            self.start_recording("hold")
-        elif name in parse_hotkey(self.config.toggle_key) and active_matches(self.active_keys, parse_hotkey(self.config.toggle_key)):
-            self.start_recording("toggle")
+        mode = idle_start_mode_for_active_keys(name, self.active_keys, self.config)
+        if mode:
+            self.start_recording(mode)
 
     def _handle_active_release(self) -> None:
         if self.recording_mode == "hold" and not active_matches(self.active_keys, parse_hotkey(self.config.hold_key)):
@@ -1918,7 +2058,9 @@ class DesktopApp:
     def show_float(self, text: str) -> None:
         self.float_text.delete("1.0", "end")
         self.float_text.insert("1.0", text)
+        self._resize_float_window_for_text(text)
         self.float_win.deiconify()
+        self.float_win.lift()
 
     def get_float_text(self) -> str:
         return self.float_text.get("1.0", "end").strip()
@@ -2028,7 +2170,27 @@ def run_self_test(report_path: str | None = None) -> int:
         conflict = hotkey_conflict_from_values({field: getattr(config, field) for field in HOTKEY_LABELS})
         if conflict:
             raise ValueError(conflict)
-        return "configured hotkeys are valid"
+        dangerous_values = {field: getattr(DesktopConfig(), field) for field in HOTKEY_LABELS}
+        dangerous_values["toggle_key"] = "x"
+        if hotkey_conflict_from_values(dangerous_values) is None:
+            raise ValueError("bare text hotkey was not rejected")
+        if idle_start_hotkey_allowed(parse_hotkey("x")):
+            raise ValueError("single text key should not start recording while idle")
+        dangerous_config = DesktopConfig(toggle_key="x")
+        active: set[str] = set()
+        for char in "xian":
+            active.add(char)
+            if idle_start_mode_for_active_keys(char, active, dangerous_config):
+                raise ValueError("typing xian would start recording")
+            active.discard(char)
+        default_config = DesktopConfig()
+        if idle_start_mode_for_active_keys("rctrl", {"rctrl"}, default_config) != "hold":
+            raise ValueError("default hold key no longer starts hold recording")
+        if idle_start_mode_for_active_keys("xbutton1", {"xbutton1"}, default_config) != "toggle":
+            raise ValueError("default mouse side key no longer starts toggle recording")
+        if idle_start_mode_for_active_keys("lwin", {"lctrl", "lwin"}, default_config) != "hold_send":
+            raise ValueError("default hold-send combo no longer starts hold_send recording")
+        return "configured hotkeys are valid, bare text start keys are rejected, and xian typing is safe"
 
     def opus_check() -> str:
         encoder = AudioEncoder(ASRConfig(credential_path=str(credential_path)))
@@ -2135,6 +2297,24 @@ def run_tray_self_test(report_path: str | None = None) -> int:
     return 0 if report["ok"] else 1
 
 
+def run_float_layout_test(report_path: str | None = None, text: str | None = None) -> int:
+    sample = text or (
+        "啊，我这啊？我自己是行不行？感觉好像还可以，嗯，"
+        "我试一下整个系统的正确率怎么样，如果把时间跨度拉长，"
+        "可能正确率就会有所下降，但总体来说是还可以。"
+    )
+    destination = Path(report_path) if report_path else Path(tempfile.gettempdir()) / "DoubaoASRHelper-float-layout.json"
+    app: DesktopApp | None = None
+    try:
+        app = DesktopApp(hidden=True)
+        app.write_float_layout_report(destination, sample)
+        report = json.loads(destination.read_text(encoding="utf-8"))
+        return 0 if report.get("fits_text_sample") and report.get("fits_screen") else 1
+    finally:
+        if app is not None:
+            app.quit_app()
+
+
 def run_long_text_test(
     audio_path: str | None,
     report_path: str | None,
@@ -2208,6 +2388,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--self-test-report", help="Write self-test JSON report to this path.")
     parser.add_argument("--tray-self-test", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--tray-self-test-report", help=argparse.SUPPRESS)
+    parser.add_argument("--float-layout-test", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--float-layout-report", help=argparse.SUPPRESS)
+    parser.add_argument("--float-layout-text", help=argparse.SUPPRESS)
     parser.add_argument("--long-text-test", action="store_true", help="Generate the long text stress sample and optionally run ASR.")
     parser.add_argument("--long-text-audio", help="Path for the generated long text WAV sample.")
     parser.add_argument("--long-text-report", help="Path for the long text JSON report.")
@@ -2220,6 +2403,8 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(run_self_test(args.self_test_report))
     if args.tray_self_test:
         raise SystemExit(run_tray_self_test(args.tray_self_test_report))
+    if args.float_layout_test:
+        raise SystemExit(run_float_layout_test(args.float_layout_report, args.float_layout_text))
     if args.long_text_test:
         raise SystemExit(
             run_long_text_test(

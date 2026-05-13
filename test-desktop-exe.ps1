@@ -129,6 +129,39 @@ function Invoke-TraySelfTest {
   return $ReportPath
 }
 
+function Invoke-FloatLayoutTest {
+  param(
+    [Parameter(Mandatory = $true)][string]$ExePath,
+    [Parameter(Mandatory = $true)][string]$ReportName
+  )
+
+  if (-not (Test-Path $ExePath)) {
+    throw "Missing executable: $ExePath"
+  }
+
+  $ReportPath = Join-Path $ReportsDir $ReportName
+  Remove-Item -LiteralPath $ReportPath -Force -ErrorAction SilentlyContinue
+  $Process = Start-Process $ExePath -ArgumentList @("--float-layout-test", "--float-layout-report", $ReportPath) -Wait -PassThru
+  if ($Process.ExitCode -ne 0) {
+    throw "Float layout test failed for $ExePath with exit code $($Process.ExitCode)"
+  }
+  if (-not (Test-Path $ReportPath)) {
+    throw "Float layout report was not written: $ReportPath"
+  }
+
+  $Report = Get-Content -Raw -Encoding UTF8 -LiteralPath $ReportPath | ConvertFrom-Json
+  if (-not $Report.fits_text_sample) {
+    throw "Float layout sample text does not fit: $ReportPath"
+  }
+  if (-not $Report.fits_screen) {
+    throw "Float layout exceeds screen bounds: $ReportPath"
+  }
+  if (-not $Report.text_equal_input) {
+    throw "Float layout report says the displayed text changed: $ReportPath"
+  }
+  return $ReportPath
+}
+
 function Wait-AppWindow {
   param(
     [Parameter(Mandatory = $true)][int]$ProcessId,
@@ -560,6 +593,7 @@ if ($Install.ExitCode -ne 0) {
 $InstalledExe = Join-Path $InstallTarget "DoubaoASRHelper.exe"
 Invoke-AppSelfTest -ExePath $InstalledExe -ReportName "installed-self-test.json" | Out-Host
 Invoke-TraySelfTest -ExePath $InstalledExe -ReportName "installed-tray-self-test.json" | Out-Host
+Invoke-FloatLayoutTest -ExePath $InstalledExe -ReportName "installed-float-layout-long-text.json" | Out-Host
 Assert-CloseToTrayKeepsAlive -ExePath $InstalledExe | Out-Host
 
 $VisibleLayoutReport = Join-Path $ReportsDir "installed-ui-smoke-layout.json"

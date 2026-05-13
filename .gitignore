@@ -4,7 +4,6 @@ __pycache__/
 *.py[cod]
 build/
 dist/
-dist-legacy/
 release/
 wheels/
 *.egg-info
@@ -13,7 +12,6 @@ wheels/
 
 # Virtual environments
 .venv/
-.venv-win7/
 
 # Local development tools and build outputs
 .devtools/
