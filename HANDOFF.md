@@ -328,6 +328,13 @@ Python 层授权测试，调用 `tests/test_activation.py`。
 - `layout_action_buttons`
 - `write_ui_layout_report`
 
+系统区选项：
+
+- `剪贴板保护` 和 `开机自启动` 使用 `tk.Checkbutton(indicatoron=False)` 做成大号开关，不再用默认 `ttk.Checkbutton` 小方框。
+- 相关 helper 是 `_create_option_toggle`、`_sync_option_toggle_style`、`_sync_option_toggle_styles`。
+- `settings_option_buttons` 会把两个开关按 key 保存，`write_ui_layout_report` 会输出 `option-protect_clipboard` 和 `option-startup` 的 bounds。
+- `test-desktop-exe.ps1` 会断言两个 option 开关存在、普通窗口不小于基础尺寸，高 DPI 下不小于 `120x38`，避免回退成默认小控件。
+
 已知优化：
 
 - root `<Configure>` 事件只触发节流布局。
@@ -339,8 +346,9 @@ Python 层授权测试，调用 `tests/test_activation.py`。
 
 1. 先检查 `layout_settings_controls` 的 tiny/short/narrow/compact 判断。
 2. 改底部按钮数量时同步 `test-desktop-exe.ps1` 的 `$ExpectedActionButtons`。
-3. 重新跑 `.\test-desktop-exe.ps1`。
-4. 查看 `release\test-reports\installed-ui-smoke*.png` 和对应 layout JSON。
+3. 改系统区选项时同步 `settings_option_buttons`、`write_ui_layout_report` 和 `Assert-UiVisualSizeAtScale` 的尺寸断言。
+4. 重新跑 `.\test-desktop-exe.ps1`。
+5. 查看 `release\test-reports\installed-ui-smoke*.png` 和对应 layout JSON。
 
 ### DPI 和窗口大小
 
@@ -651,6 +659,19 @@ release\test-reports\windows-compatibility.json
 
 最近重要提交：
 
+- `bfcfa16 Enlarge desktop option toggles`
+  - 将“剪贴板保护 / 开机自启动”从默认小 checkbox 改成大号响应式开关。
+  - 布局报告新增 `option-protect_clipboard`、`option-startup`。
+  - `test-desktop-exe.ps1` 增加普通和 200% DPI 下的开关尺寸断言。
+
+- `af68841 Polish desktop typography alignment`
+  - 统一桌面 UI 标题、标签、说明文字和底部按钮的字号/对齐。
+  - 布局报告增加字号一致性检查。
+
+- `21b70d8 Prevent duplicate desktop instances`
+  - 防止安装版、便携版重复启动导致多个托盘图标和热键冲突。
+  - 第二个实例会快速退出并尽量唤醒已有窗口。
+
 - `1c5508c Add one-click settings reset`
   - 增加“恢复默认”按钮。
   - 复位热键、延迟、剪贴板保护、开机自启动。
@@ -743,6 +764,7 @@ python -m doubaoime_asr.desktop_app --self-test --self-test-report release\test-
 - `installed-ui-smoke*.png`
 - `*-layout.json`
 - action button 数量。
+- `option-protect_clipboard` 和 `option-startup` 的 width/height，尤其是 200% DPI 报告。
 - 150%/200% 缩放报告。
 
 ### 改热键
