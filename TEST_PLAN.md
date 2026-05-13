@@ -104,11 +104,12 @@
 | U05 | 取消录音 | 录音过程中按默认 `esc` | 本次输入取消，不插入也不自动发送 |
 | U06 | 快捷键自定义 | 点击“录制”并输入新组合键后保存 | 配置保存成功，重启后仍生效 |
 | U07 | 快捷键冲突 | 配置重复快捷键、裸字母键或 Windows 保留组合键，例如 `alt+tab` | 弹窗提示冲突或不可用风险，不能保存问题配置 |
-| U08 | 悬浮窗操作 | 录音后在悬浮窗点击清空、复制、插入 | 三个操作都生效，窗口不遮挡主流程 |
-| U09 | 帮助文档 | 打开“使用说明”和 release `HELP.md` | 能看到首次运行、默认快捷键、系统托盘、长文本测试和卸载说明 |
-| U10 | 延迟设置 | 调整插入延迟、发送延迟并保存后重启 | 数值保持在允许范围内，滑块和输入框同步显示 |
-| U11 | UI 截图复核 | 打开 `release\test-reports\installed-ui-smoke.png`、`installed-ui-smoke-narrow.png`、`installed-ui-smoke-minimum.png` 和对应 `*-layout.json`，再查看 `installed-ui-smoke-scale150-minimum-layout.json`、`installed-ui-smoke-scale200-narrow-layout.json`、`installed-ui-smoke-scale200-minimum-layout.json`、`installed-ui-smoke-scale200-default-layout.json` | 主界面没有滚动条，文字、输入框、录制按钮和底部操作按钮不被截断，窄窗口、最小窗口、150% 和 200% 缩放下控件自动压缩和重排，200% 默认窗口不是小窗，布局报告显示 `fits_horizontally=true` 且 `fits_vertically=true` |
-| U12 | 系统托盘后台运行 | 点击主窗口 X 或“隐藏窗口”，再点击/右键托盘图标 | 主窗口隐藏后进程继续运行；左键托盘图标恢复窗口；右键菜单可显示、隐藏、打开配置目录和退出 |
+| U08 | 一键恢复默认 | 修改快捷键、延迟、剪贴板保护和开机自启动后点击“恢复默认” | 热键、延迟、剪贴板保护和启动项回到初始值并保存；凭据文件路径保留 |
+| U09 | 悬浮窗操作 | 录音后在悬浮窗点击清空、复制、插入 | 三个操作都生效，窗口不遮挡主流程 |
+| U10 | 帮助文档 | 打开“使用说明”和 release `HELP.md` | 能看到首次运行、默认快捷键、系统托盘、长文本测试、一键恢复默认和卸载说明 |
+| U11 | 延迟设置 | 调整插入延迟、发送延迟并保存后重启 | 数值保持在允许范围内，滑块和输入框同步显示 |
+| U12 | UI 截图复核 | 打开 `release\test-reports\installed-ui-smoke.png`、`installed-ui-smoke-narrow.png`、`installed-ui-smoke-minimum.png` 和对应 `*-layout.json`，再查看 `installed-ui-smoke-scale150-minimum-layout.json`、`installed-ui-smoke-scale200-narrow-layout.json`、`installed-ui-smoke-scale200-minimum-layout.json`、`installed-ui-smoke-scale200-default-layout.json` | 主界面没有滚动条，文字、输入框、录制按钮和底部操作按钮不被截断，窄窗口、最小窗口、150% 和 200% 缩放下控件自动压缩和重排，200% 默认窗口不是小窗，布局报告显示 `fits_horizontally=true` 且 `fits_vertically=true` |
+| U13 | 系统托盘后台运行 | 点击主窗口 X 或“隐藏窗口”，再点击/右键托盘图标 | 主窗口隐藏后进程继续运行；左键托盘图标恢复窗口；右键菜单可显示、隐藏、打开配置目录和退出 |
 
 ## 发版前建议
 

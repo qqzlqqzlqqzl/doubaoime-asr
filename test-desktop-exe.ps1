@@ -399,7 +399,7 @@ function Assert-UiLayoutFits {
       throw "UI layout report missing setting entry $Index"
     }
   }
-  $ExpectedActionButtons = 5
+  $ExpectedActionButtons = 6
   $ActionButtons = @($Layout.widgets | Where-Object { $_.name -like "action-*" })
   if ($ActionButtons.Count -ne $ExpectedActionButtons) {
     throw "UI layout report expected $ExpectedActionButtons action buttons, found $($ActionButtons.Count)"

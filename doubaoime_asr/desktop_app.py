@@ -489,6 +489,19 @@ class DesktopConfig:
     credential_path: str = str(DEFAULT_CREDENTIAL_PATH)
 
 
+RESETTABLE_CONFIG_FIELDS = (
+    "hold_key",
+    "toggle_key",
+    "hold_send_key",
+    "cancel_key",
+    "doubao_hotkey",
+    "insert_delay_ms",
+    "auto_send_delay_ms",
+    "protect_clipboard",
+    "startup",
+)
+
+
 def resolve_user_path(value: str | Path) -> Path:
     path = Path(value).expanduser()
     if not path.is_absolute():
@@ -503,6 +516,13 @@ def normalize_config(config: DesktopConfig) -> DesktopConfig:
         if not idle_start_hotkey_allowed(parse_hotkey(getattr(config, field))):
             setattr(config, field, getattr(defaults, field))
     return config
+
+
+def reset_config_to_defaults(config: DesktopConfig, preserve_credential_path: bool = True) -> DesktopConfig:
+    defaults = DesktopConfig()
+    credential_path = config.credential_path if preserve_credential_path else defaults.credential_path
+    reset = DesktopConfig(**{**asdict(defaults), "credential_path": credential_path})
+    return normalize_config(reset)
 
 
 def hotkey_conflict_from_values(values: dict[str, str]) -> str | None:
@@ -1216,6 +1236,7 @@ class DesktopApp:
         self.action_buttons.clear()
         actions = [
             ("保存配置", self.save_from_ui),
+            ("恢复默认", self.reset_settings_to_defaults),
             ("显示悬浮窗", lambda: self.show_float("")),
             ("使用说明", self.show_help),
             ("打开配置目录", self.open_config_dir),
@@ -2033,6 +2054,22 @@ class DesktopApp:
         save_config(self.config)
         self.status_var.set("配置已保存")
 
+    def reset_settings_to_defaults(self) -> None:
+        self.config = reset_config_to_defaults(self.config, preserve_credential_path=True)
+        for key, entry in self.entries.items():
+            if key in self.delay_vars:
+                continue
+            value = str(getattr(self.config, key))
+            entry.delete(0, "end")
+            entry.insert(0, value)
+        for key, var in self.delay_vars.items():
+            var.set(int(getattr(self.config, key)))
+            self._sync_delay_entry(key)
+        self.vars["protect_clipboard"].set(self.config.protect_clipboard)
+        self.vars["startup"].set(self.config.startup)
+        save_config(self.config)
+        self.status_var.set("已恢复默认设置，凭据文件路径已保留")
+
     def find_hotkey_conflict(self) -> str | None:
         return hotkey_conflict_from_values({field: self.entries[field].get() for field in HOTKEY_LABELS})
 
@@ -2344,7 +2381,26 @@ def run_self_test(report_path: str | None = None) -> int:
             raise ValueError("Alt+M cannot be converted to a Windows hotkey probe")
         if system_hotkey_conflict(parse_hotkey("alt+tab")) is None:
             raise ValueError("reserved Windows hotkey was not rejected")
-        return "configured hotkeys are valid, bare text start keys are rejected, xian typing is safe, Alt combos are captured, and Windows conflicts are checked"
+        custom_config = DesktopConfig(
+            hold_key="alt+m",
+            toggle_key="xbutton2",
+            hold_send_key="ctrl+shift+m",
+            cancel_key="f12",
+            doubao_hotkey="ctrl+shift+d",
+            insert_delay_ms=900,
+            auto_send_delay_ms=120,
+            protect_clipboard=False,
+            startup=True,
+            credential_path=str(APP_CONFIG_DIR / "custom-credentials.json"),
+        )
+        reset_config = reset_config_to_defaults(custom_config)
+        defaults = DesktopConfig()
+        for field in RESETTABLE_CONFIG_FIELDS:
+            if getattr(reset_config, field) != getattr(defaults, field):
+                raise ValueError(f"default reset did not restore {field}")
+        if reset_config.credential_path != str(resolve_user_path(custom_config.credential_path)):
+            raise ValueError("default reset should preserve the credential path")
+        return "configured hotkeys are valid, bare text start keys are rejected, xian typing is safe, Alt combos are captured, Windows conflicts are checked, and default reset is safe"
 
     def opus_check() -> str:
         encoder = AudioEncoder(ASRConfig(credential_path=str(credential_path)))
