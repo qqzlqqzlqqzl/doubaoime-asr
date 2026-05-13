@@ -225,6 +225,14 @@ EXE 内置「使用说明」窗口，安装后开始菜单也会生成 Help 快�
 .\test-desktop-exe.ps1
 ```
 
+生成约 500 字中文长文本样本，并用打包后的 exe 跑断续音量起伏 ASR 测试：
+
+```powershell
+.\test-long-text-asr.ps1
+```
+
+该测试会生成 `.devtools\samples\long-text-volume-stress.wav`，并输出 `release\test-reports\long-text-asr.json`。样本由多段中文 TTS 拼接而成，段间包含停顿，音量会按高低模式变化。
+
 产物：
 
 | 文件 | 用途 |

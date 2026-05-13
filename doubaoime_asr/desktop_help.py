@@ -75,6 +75,9 @@ HELP.md：这份使用说明。
    开发目录里可以运行 test-desktop-exe.ps1。普通用户也可以在命令行运行：
    DoubaoASRHelper.exe --self-test --self-test-report report.json
 
+6. 想做长文本语音识别压力测试：
+   开发目录里可以运行 test-long-text-asr.ps1。它会生成约 500 字中文语音样本，样本包含断续停顿和音量高低起伏，然后用打包后的 EXE 调用 ASR 并写出报告。
+
 十、卸载
 如果使用安装器安装，可以在开始菜单运行 Uninstall Doubao ASR Helper。
 便携版直接删除 exe 即可。

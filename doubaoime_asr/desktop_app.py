@@ -25,6 +25,7 @@ if getattr(sys, "frozen", False):
 from doubaoime_asr import ASRConfig, ResponseType, transcribe_realtime
 from doubaoime_asr.audio import AudioEncoder
 from doubaoime_asr.desktop_help import HELP_TEXT
+from doubaoime_asr.transcript import TranscriptAccumulator
 
 
 APP_CONFIG_DIR = Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming")) / "DoubaoASRHelper"
@@ -227,6 +228,7 @@ class DesktopApp:
         self.audio_queue: queue.Queue[bytes | None] | None = None
         self.audio_stream: sd.InputStream | None = None
         self.asr_thread: threading.Thread | None = None
+        self.transcript = TranscriptAccumulator()
         self.final_text = ""
         self.entries: dict[str, tk.Entry] = {}
         self.vars: dict[str, tk.BooleanVar] = {}
@@ -477,6 +479,7 @@ class DesktopApp:
         self.recording_mode = mode
         self.cancelled = False
         self.final_text = ""
+        self.transcript = TranscriptAccumulator()
         self.audio_queue = queue.Queue()
         self.root.after(0, lambda: self.show_float("正在听..."))
         self.audio_stream = sd.InputStream(
@@ -525,8 +528,8 @@ class DesktopApp:
             config = ASRConfig(credential_path=str(resolve_user_path(self.config.credential_path)))
             async for response in transcribe_realtime(source(), config=config):
                 if response.type in {ResponseType.INTERIM_RESULT, ResponseType.FINAL_RESULT} and response.text:
-                    self.final_text = response.text
-                    self.root.after(0, lambda text=response.text: self.show_float(text))
+                    text = self._update_asr_text(response)
+                    self.root.after(0, lambda value=text: self.show_float(value))
                 if response.type == ResponseType.ERROR:
                     self.root.after(0, lambda msg=response.error_msg: self.show_float(f"错误：{msg}"))
 
@@ -535,6 +538,14 @@ class DesktopApp:
             self.root.after(0, self._finish_insert)
         except Exception as exc:
             self.root.after(0, lambda: self.show_float(f"错误：{exc}"))
+
+    def _update_asr_text(self, response) -> str:
+        if response.text:
+            self.final_text = self.transcript.update(
+                response.text,
+                is_final=response.type == ResponseType.FINAL_RESULT,
+            )
+        return self.final_text
 
     def _finish_insert(self) -> None:
         self.status_var.set("识别完成")
@@ -692,15 +703,79 @@ def run_self_test(report_path: str | None = None) -> int:
     return 0 if report["ok"] else 1
 
 
+def run_long_text_test(
+    audio_path: str | None,
+    report_path: str | None,
+    credential_path: str | None,
+    run_asr_check: bool,
+    min_recognized_chars: int,
+    min_keywords: int,
+) -> int:
+    from doubaoime_asr.long_text_sample import (
+        default_credential_path,
+        default_output_path,
+        generate_long_text_sample,
+        run_asr,
+        sample_text,
+    )
+
+    output = Path(audio_path) if audio_path else default_output_path()
+    report = Path(report_path) if report_path else Path("release/test-reports/long-text-asr.json")
+    credential = Path(credential_path) if credential_path else default_credential_path()
+
+    result = {
+        "ok": False,
+        "runner": {
+            "executable": sys.executable,
+            "frozen": bool(getattr(sys, "frozen", False)),
+        },
+    }
+    try:
+        info = generate_long_text_sample(output)
+        result["sample"] = asdict(info)
+        result["source_text"] = sample_text()
+
+        if run_asr_check:
+            result["asr"] = asyncio.run(run_asr(output, credential, min_recognized_chars, min_keywords))
+            result["ok"] = bool(result["asr"]["passed"])
+        else:
+            result["ok"] = True
+    except Exception as exc:
+        result["error"] = repr(exc)
+    finally:
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return 0 if result["ok"] else 1
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run the Doubao ASR desktop helper.")
     parser.add_argument("--hidden", action="store_true")
     parser.add_argument("--show-help", action="store_true", help="Open the desktop help window on startup.")
     parser.add_argument("--self-test", action="store_true", help="Run packaged app diagnostics and exit.")
     parser.add_argument("--self-test-report", help="Write self-test JSON report to this path.")
+    parser.add_argument("--long-text-test", action="store_true", help="Generate the long text stress sample and optionally run ASR.")
+    parser.add_argument("--long-text-audio", help="Path for the generated long text WAV sample.")
+    parser.add_argument("--long-text-report", help="Path for the long text JSON report.")
+    parser.add_argument("--long-text-generate-only", action="store_true", help="Skip ASR and only generate the WAV sample.")
+    parser.add_argument("--credential-path", help="Credential cache path for ASR tests.")
+    parser.add_argument("--min-recognized-chars", type=int, default=220)
+    parser.add_argument("--min-keywords", type=int, default=3)
     args = parser.parse_args(argv)
     if args.self_test:
         raise SystemExit(run_self_test(args.self_test_report))
+    if args.long_text_test:
+        raise SystemExit(
+            run_long_text_test(
+                args.long_text_audio,
+                args.long_text_report,
+                args.credential_path,
+                not args.long_text_generate_only,
+                args.min_recognized_chars,
+                args.min_keywords,
+            )
+        )
     app = DesktopApp(hidden=args.hidden, show_help=args.show_help)
     app.run()
 

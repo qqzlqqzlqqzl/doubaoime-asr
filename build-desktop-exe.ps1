@@ -20,6 +20,7 @@ pyinstaller `
   --windowed `
   --name DoubaoASRHelper `
   --add-binary ".devtools\opus\bin\opus.dll;." `
+  --hidden-import doubaoime_asr.long_text_sample `
   --hidden-import pynput.keyboard._win32 `
   --hidden-import pynput.mouse._win32 `
   doubaoime_asr\desktop_app.py
