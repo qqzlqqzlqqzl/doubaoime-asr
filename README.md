@@ -2,6 +2,8 @@
 
 豆包输入法语音识别 Python 客户端。
 
+当前维护仓库：`https://github.com/qqzlqqzlqqzl/doubaoime-asr.git`。原始上游项目来自 `starccy/doubaoime-asr`，本仓库在其基础上补充了 Windows 桌面助手、打包、托盘、热键、激活码和测试文档。
+
 ## 免责声明
 
 本项目通过对安卓豆包输入法客户端通信协议分析并参考客户端代码实现，**非官方提供的 API**。
@@ -14,12 +16,12 @@
 
 ```bash
 # 从本地安装
-git clone https://github.com/starccy/doubaoime-asr.git
+git clone https://github.com/qqzlqqzlqqzl/doubaoime-asr.git
 cd doubaoime-asr
 pip install -e .
 
 # 或从 Git 仓库安装
-pip install git+https://github.com/starccy/doubaoime-asr.git
+pip install git+https://github.com/qqzlqqzlqqzl/doubaoime-asr.git
 ```
 
 ### 系统依赖
@@ -87,8 +89,6 @@ asyncio.run(main())
 
 ```bash
 pip install sounddevice numpy
-# 或
-pip install doubaoime-asr[examples]
 ```
 
 ## API 参考
@@ -189,7 +189,13 @@ config = ASRConfig(credential_path="~/.config/doubaoime-asr/credentials.json")
 
 ## 桌面语音输入助手
 
-Windows 桌面版的正式目标是 Windows 10/11 x64。Win7/Win8 不提供支持，对外分发优先使用主发布包。
+Windows 桌面版的正式目标是 Windows 10/11 x64。Win7、Win8、Win8.1 和 32 位 Windows 不作为支持目标，对外分发优先使用主发布包。
+
+本地开发建议先在 PowerShell 中启用项目隔离环境：
+
+```powershell
+. .\enter-dev.ps1
+```
 
 启动桌面 UI：
 
@@ -241,6 +247,8 @@ EXE 内置「使用说明」窗口，安装后开始菜单也会生成 Help 快�
 ```
 
 完整测试项见 [TEST_PLAN.md](TEST_PLAN.md)。
+
+如果要让另一个 AI 或开发者接手维护，请先阅读 [HANDOFF.md](HANDOFF.md)。它记录了当前桌面版架构、构建测试流程、近期关键改动和常见坑。
 
 生成约 500 字中文长文本样本，并用打包后的 exe 跑断续音量起伏 ASR 测试：
 
