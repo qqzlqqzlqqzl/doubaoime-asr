@@ -1,0 +1,31 @@
+# Optional legacy build environment for Windows 7 SP1 / Windows 8.x experiments.
+# Win10/Win11 x64 is the primary supported desktop target; do not use this for the main release.
+# Use with Python 3.8.20 only. This is intentionally separate from pyproject.toml.
+altgraph==0.17.5
+annotated-types==0.7.0
+certifi==2026.4.22
+cffi==1.17.1
+charset-normalizer==3.4.7
+cryptography==41.0.7
+eval-type-backport==0.2.2
+idna==3.15
+miniaudio==1.61
+numpy==1.24.4
+opuslib==3.0.1
+pefile==2024.8.26
+protobuf==5.29.5
+pycparser==2.23
+pydantic==2.10.6
+pydantic-core==2.27.2
+pyinstaller==4.10
+pyinstaller-hooks-contrib==2022.15
+pynput==1.8.1
+pywin32-ctypes==0.2.3
+requests==2.32.4
+setuptools==75.3.4
+six==1.17.0
+sounddevice==0.5.1
+sv-ttk==2.5.5
+typing-extensions==4.13.2
+urllib3==2.2.3
+websockets==13.1

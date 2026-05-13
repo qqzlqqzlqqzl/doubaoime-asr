@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 from dataclasses import dataclass, field
 from enum import Enum, auto
+import inspect
 import json
 from pathlib import Path
 import time
@@ -11,7 +12,10 @@ from typing import AsyncIterator, Callable, List, Optional, Union
 import uuid
 from pydantic import BaseModel, Field
 import websockets
-from websockets import ClientConnection
+try:
+    from websockets import ClientConnection
+except ImportError:
+    from typing import Any as ClientConnection
 
 from .config import ASRConfig, SessionConfig
 from .audio import AudioEncoder
@@ -19,6 +23,14 @@ from .asr_pb2 import AsrRequest, AsrResponse as AsrResponsePb, FrameState
 
 # PCM 音频数据的类型别名
 AudioChunk = bytes
+
+
+def _connect_websocket(config: ASRConfig):
+    kwargs = {"open_timeout": config.connect_timeout}
+    params = inspect.signature(websockets.connect).parameters
+    header_kw = "additional_headers" if "additional_headers" in params else "extra_headers"
+    kwargs[header_kw] = config.headers
+    return websockets.connect(config.ws_url, **kwargs)
 
 
 class ResponseType(Enum):
@@ -176,11 +188,7 @@ class DoubaoASR:
         state = _SessionState()
 
         try:
-            async with websockets.connect(
-                self.config.ws_url,
-                additional_headers=self.config.headers,
-                open_timeout=self.config.connect_timeout,
-            ) as ws:
+            async with _connect_websocket(self.config) as ws:
                 # 初始化会话
                 async for resp in self._initialize_session(ws, state):
                     yield resp
@@ -246,11 +254,7 @@ class DoubaoASR:
         state = _SessionState()
 
         try:
-            async with websockets.connect(
-                self.config.ws_url,
-                additional_headers=self.config.headers,
-                open_timeout=self.config.connect_timeout,
-            ) as ws:
+            async with _connect_websocket(self.config) as ws:
                 # 初始化会话
                 async for resp in self._initialize_session(ws, state):
                     yield resp

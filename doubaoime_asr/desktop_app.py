@@ -77,6 +77,14 @@ MIN_WINDOW_HEIGHT = 420
 _DPI_AWARENESS_CONFIGURED = False
 
 
+async def _run_blocking(func: Callable, *args):
+    to_thread = getattr(asyncio, "to_thread", None)
+    if to_thread is not None:
+        return await to_thread(func, *args)
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, func, *args)
+
+
 if sys.platform == "win32" and wintypes is not None:
     _WNDPROC = ctypes.WINFUNCTYPE(
         ctypes.c_ssize_t,
@@ -1872,7 +1880,7 @@ class DesktopApp:
     def _run_asr_thread(self) -> None:
         async def source() -> Iterable[bytes]:
             while True:
-                chunk = await asyncio.to_thread(self.audio_queue.get)
+                chunk = await _run_blocking(self.audio_queue.get)
                 if chunk is None:
                     break
                 yield chunk

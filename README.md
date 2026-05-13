@@ -189,6 +189,8 @@ config = ASRConfig(credential_path="~/.config/doubaoime-asr/credentials.json")
 
 ## 桌面语音输入助手
 
+Windows 桌面版的正式优先目标是 Windows 10/11 x64。Win7/Win8 不作为主支持目标，项目只保留实验性 legacy 构建脚本用于特殊场景验证；对外分发优先使用主发布包。
+
 启动桌面 UI：
 
 ```powershell
@@ -291,3 +293,5 @@ $env:DOUBAO_ASR_LICENSE_URL = "http://127.0.0.1:8765"
 | `release\DoubaoASRHelper-Windows.zip` | 给其他电脑分发的压缩包，包含安装器、便携版、简短说明和离线 `HELP.md` |
 
 首次运行会自动在用户目录创建凭据缓存文件；也可以在 UI 里点击「选择」改用已有的 `credentials.json`。
+
+Windows 版本支持和 legacy 老系统实验包说明见 [WINDOWS_COMPATIBILITY.md](WINDOWS_COMPATIBILITY.md)。
