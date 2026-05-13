@@ -6,6 +6,31 @@
 当前主要分支：`main`  
 远端仓库：`https://github.com/qqzlqqzlqqzl/doubaoime-asr.git`
 
+## 0. 多电脑协作同步备注
+
+当前项目正在两台 Windows 电脑之间协作开发。接手前不要直接覆盖本地文件或强推，请先：
+
+```powershell
+git fetch origin
+git status --short --branch
+git log --oneline --decorate HEAD..origin/main
+```
+
+如果本机有未提交改动，优先用：
+
+```powershell
+git pull --rebase --autostash
+```
+
+2026-05-13，本机已同步另一台电脑推上来的文档提交，并额外提交：
+
+- `64e49f0 Fix settings layout in compact windows`
+  - 修复设置页在 `820x680`、`760x520`、`560x420` 和 150%/200% DPI 下被挤出的问题。
+  - 高度不足时隐藏非必要副标题、帮助文案和高级设置，保留模式块、核心热键、插入延迟、选项、状态和底部按钮。
+  - 增大“剪贴板保护 / 开机自启动”开关的点击尺寸，并在最小窗口下横排显示。
+
+这次提交已经推到 `origin/main`。另一台电脑继续工作前必须先拉到至少 `64e49f0`，否则很容易把已通过测试的响应式 UI 修复覆盖掉。
+
 ## 1. 当前项目定位
 
 这个仓库最初是 `doubaoime-asr` Python 客户端，现在已经扩展成一个 Windows 桌面语音输入助手。
@@ -669,6 +694,12 @@ release\test-reports\windows-compatibility.json
 ## 9. 最近关键改动
 
 最近重要提交：
+
+- `64e49f0 Fix settings layout in compact windows`
+  - 这是本机在两电脑协作期间完成并推送的响应式 UI 修复。
+  - 修复 `test-desktop-exe.ps1` 中普通、窄窗口、最小窗口和高 DPI 布局报告失败。
+  - 高度不足时折叠非核心说明和高级设置，确保状态、6 个底部按钮、三种模式、热键输入、插入延迟和选项开关都在单页内可见。
+  - 相关验证已在本机跑过：`build-desktop-exe.ps1`、`test-desktop-exe.ps1`、`test-windows-compat.ps1`、`test-activation.ps1`、`test-license-stress.ps1`、`test-long-text-asr.ps1`。
 
 - 本轮 `Match desktop settings reference layout`
   - 设置界面改成参考图式三模式块：按着说、自由说、按着说+自动发送。

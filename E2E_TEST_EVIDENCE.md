@@ -4,6 +4,8 @@
 
 结论：没有全部测完。当前环境已经跑完一部分能自动化闭合的链路；需要真人按键、真实外部应用、重启、干净电脑、长时间运行或受控授权服务器的项目，下面明确标为 `BLOCKED` 或 `NOT_RUN`，不按通过计算。
 
+协作备注：2026-05-13 本机已拉取另一台电脑的最新文档提交，并推送 `64e49f0 Fix settings layout in compact windows`。这个提交修复设置页在普通、窄窗口、最小窗口和 150%/200% DPI 下的布局测试失败。另一台电脑继续前应先 `git fetch origin` 并确认已包含该提交，避免用旧版 `desktop_app.py` 覆盖。
+
 自查修正：
 
 - `release/test-reports/*` 被 `.gitignore` 忽略，只是本机证据，不会随 GitHub 提交保存。下面的表格保留本机路径，同时把关键数值写进本文档，避免只有不可追溯的本地文件引用。
@@ -42,6 +44,7 @@
 
 - 源码自测：`release/test-reports/e2e-source-self-test.json`，状态 PASS。
 - 打包 EXE/UI/托盘/安装版测试：`test-desktop-exe.ps1` 已通过，证据在 `release/test-reports/dist-self-test.json`、`portable-self-test.json`、`installed-self-test.json`、`installed-tray-self-test.json`、`installed-ui-smoke*.json/png`。
+- 本机追加验证：在 `64e49f0` 之前的工作区运行过 `build-desktop-exe.ps1`、`test-desktop-exe.ps1`、`test-windows-compat.ps1`、`test-activation.ps1`、`test-license-stress.ps1`、`test-long-text-asr.ps1`，其中桌面 EXE 测试覆盖 `820x680`、`760x520`、`560x420`、150% DPI、200% DPI 和默认 200% DPI 窗口。
 - 长文本文件 ASR：`release/test-reports/long-text-asr.json`，`ok=true`，识别 556 字，关键词 9 个。
 - 耳机声学 ASR：`release/test-reports/headset-loopback-asr.json`，`ok=true`，识别 552 字，关键词 9 个。
 
