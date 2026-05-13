@@ -18,6 +18,10 @@ if ($RequireActivation -and -not $LicenseServerUrl) {
 $GeneratedConfigDir = Join-Path $PSScriptRoot "build\license-config"
 New-Item -ItemType Directory -Force -Path $GeneratedConfigDir | Out-Null
 $GeneratedLicenseConfig = Join-Path $GeneratedConfigDir "license-config.json"
+$AppIcon = Join-Path $PSScriptRoot "doubaoime_asr\assets\app.ico"
+if (-not (Test-Path $AppIcon)) {
+  throw "Missing app icon: $AppIcon"
+}
 $LicenseConfigJson = [ordered]@{
   server_url = $LicenseServerUrl
   require_activation = $RequireActivation
@@ -42,8 +46,10 @@ pyinstaller `
   --onefile `
   --windowed `
   --name DoubaoASRHelper `
+  --icon "$AppIcon" `
   --add-binary ".devtools\opus\bin\opus.dll;." `
   --add-data "$GeneratedLicenseConfig;doubaoime_asr" `
+  --add-data "$AppIcon;doubaoime_asr\assets" `
   --collect-data sv_ttk `
   --hidden-import doubaoime_asr.long_text_sample `
   --hidden-import pynput.keyboard._win32 `
@@ -56,6 +62,7 @@ pyinstaller `
   --onefile `
   --windowed `
   --name DoubaoASRHelperSetup `
+  --icon "$AppIcon" `
   --add-binary "dist\DoubaoASRHelper.exe;." `
   windows_installer.py
 

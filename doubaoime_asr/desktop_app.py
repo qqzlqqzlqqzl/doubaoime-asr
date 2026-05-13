@@ -80,6 +80,7 @@ FLOAT_BASE_WIDTH = 760
 FLOAT_MIN_WIDTH = 560
 FLOAT_MAX_WIDTH = 960
 FLOAT_MAX_LINES = 12
+APP_ICON_RELATIVE_PATH = Path("assets") / "app.ico"
 _DPI_AWARENESS_CONFIGURED = False
 
 
@@ -89,6 +90,17 @@ async def _run_blocking(func: Callable, *args):
         return await to_thread(func, *args)
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, func, *args)
+
+
+def app_icon_path() -> Path | None:
+    package_icon = Path(__file__).resolve().parent / APP_ICON_RELATIVE_PATH
+    if package_icon.exists():
+        return package_icon
+    if getattr(sys, "frozen", False):
+        bundled_icon = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)) / "doubaoime_asr" / APP_ICON_RELATIVE_PATH
+        if bundled_icon.exists():
+            return bundled_icon
+    return None
 
 
 if sys.platform == "win32" and wintypes is not None:
@@ -176,6 +188,9 @@ class WindowsTrayIcon:
         self._hwnd: int | None = None
         self._hicon: int | None = None
         self._hicon_owned = False
+        self.icon_loaded_from_file = False
+        self.loaded_icon_path: str | None = None
+        self.icon_load_error: str | None = None
         self._hinstance: int | None = None
         self._class_name = f"DoubaoASRHelperTrayWindow-{os.getpid()}-{id(self)}"
         self._window_proc = None
@@ -398,6 +413,9 @@ class WindowsTrayIcon:
     def _load_icon(self) -> int:
         assert wintypes is not None
         user32 = ctypes.windll.user32
+        self.icon_loaded_from_file = False
+        self.loaded_icon_path = None
+        self.icon_load_error = None
         if self.icon_path and self.icon_path.exists():
             hicon = user32.LoadImageW(
                 None,
@@ -409,7 +427,12 @@ class WindowsTrayIcon:
             )
             if hicon:
                 self._hicon_owned = True
+                self.icon_loaded_from_file = True
+                self.loaded_icon_path = str(self.icon_path)
                 return int(hicon)
+            self.icon_load_error = f"LoadImageW failed for {self.icon_path}: {ctypes.WinError()!r}"
+        elif self.icon_path:
+            self.icon_load_error = f"Icon file does not exist: {self.icon_path}"
         hicon = user32.LoadIconW(None, ctypes.c_wchar_p(self._IDI_APPLICATION))
         self._hicon_owned = False
         if not hicon:
@@ -698,6 +721,12 @@ class DesktopApp:
         if ui_scale_factor is not None:
             self.root.tk.call("tk", "scaling", BASE_TK_SCALING * max(0.75, min(3.0, ui_scale_factor)))
         self.root.title("豆包 ASR 助手")
+        icon_path = app_icon_path()
+        if icon_path is not None:
+            try:
+                self.root.iconbitmap(default=str(icon_path))
+            except tk.TclError:
+                pass
         if ui_window_size:
             self.root.geometry(ui_window_size)
         else:
@@ -778,7 +807,7 @@ class DesktopApp:
     def _start_tray_icon(self) -> None:
         if not WindowsTrayIcon.is_supported():
             return
-        self.tray_icon = WindowsTrayIcon("豆包 ASR 助手 - 后台运行", self._enqueue_tray_action)
+        self.tray_icon = WindowsTrayIcon("豆包 ASR 助手 - 后台运行", self._enqueue_tray_action, icon_path=app_icon_path())
         self.tray_icon.start()
         self.root.after(1200, self._report_tray_startup_error)
 
@@ -1578,6 +1607,10 @@ class DesktopApp:
             if bounds is not None:
                 widgets.append(bounds)
 
+        if not widgets:
+            self.root.after(200, self.write_ui_layout_report)
+            return
+
         root_width = self.root.winfo_width()
         root_height = self.root.winfo_height()
         content_right = max((int(widget["right"]) for widget in widgets), default=0)
@@ -2220,6 +2253,18 @@ def run_self_test(report_path: str | None = None) -> int:
         ctypes.windll.shell32.Shell_NotifyIconW
         return "Windows notification area APIs are available"
 
+    def app_icon_check() -> str:
+        icon_path = app_icon_path()
+        if icon_path is None:
+            raise RuntimeError("App icon resource is missing")
+        if icon_path.stat().st_size < 1024:
+            raise RuntimeError(f"App icon resource is unexpectedly small: {icon_path}")
+        report["app_icon"] = {
+            "path": str(icon_path),
+            "size": icon_path.stat().st_size,
+        }
+        return f"app icon is available at {icon_path}"
+
     def help_text_check() -> str:
         required = ["豆包 ASR 助手使用说明", "首次运行", "默认快捷键", "系统托盘", "常见问题", "卸载"]
         missing = [item for item in required if item not in HELP_TEXT]
@@ -2252,6 +2297,7 @@ def run_self_test(report_path: str | None = None) -> int:
     check("audio_devices", sounddevice_check)
     check("input_control", input_control_check)
     check("system_tray_api", tray_api_check)
+    check("app_icon", app_icon_check)
     check("help_text", help_text_check)
     check("license_config", license_config_check)
     check("license_state", license_state_check, required=False)
@@ -2263,10 +2309,16 @@ def run_self_test(report_path: str | None = None) -> int:
 
 
 def run_tray_self_test(report_path: str | None = None) -> int:
+    icon_path = app_icon_path()
     report = {
         "ok": False,
         "platform": sys.platform,
         "supported": WindowsTrayIcon.is_supported(),
+        "icon_path": str(icon_path) if icon_path else None,
+        "icon_exists": bool(icon_path and icon_path.exists()),
+        "icon_loaded_from_file": False,
+        "loaded_icon_path": None,
+        "icon_load_error": None,
         "started": False,
         "stopped": False,
         "error": None,
@@ -2276,10 +2328,17 @@ def run_tray_self_test(report_path: str | None = None) -> int:
     try:
         if not WindowsTrayIcon.is_supported():
             raise RuntimeError("Windows system tray is not supported on this platform")
-        tray = WindowsTrayIcon("豆包 ASR 助手 - 托盘测试", lambda _action: None)
+        if icon_path is None:
+            raise RuntimeError("App icon resource is missing")
+        tray = WindowsTrayIcon("豆包 ASR 助手 - 托盘测试", lambda _action: None, icon_path=icon_path)
         report["started"] = tray.start(wait=True, timeout=3.0)
+        report["icon_loaded_from_file"] = tray.icon_loaded_from_file
+        report["loaded_icon_path"] = tray.loaded_icon_path
+        report["icon_load_error"] = tray.icon_load_error
         if not report["started"]:
             raise RuntimeError(tray.last_error or "Timed out waiting for tray icon")
+        if not report["icon_loaded_from_file"]:
+            raise RuntimeError(tray.icon_load_error or "Tray icon fell back to the Windows default icon")
         time.sleep(0.5)
         tray.stop()
         report["stopped"] = not tray.is_alive()

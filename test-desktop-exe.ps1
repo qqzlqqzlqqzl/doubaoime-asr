@@ -126,6 +126,9 @@ function Invoke-TraySelfTest {
   if (-not $Report.started -or -not $Report.stopped) {
     throw "Tray self-test did not start and stop cleanly: $ReportPath"
   }
+  if (-not $Report.icon_exists -or -not $Report.icon_loaded_from_file) {
+    throw "Tray self-test did not load the bundled app icon: $ReportPath"
+  }
   return $ReportPath
 }
 

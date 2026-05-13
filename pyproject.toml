@@ -38,4 +38,4 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 
 [tool.setuptools.package-data]
-doubaoime_asr = ["*.pyi", "*.proto", "license-config.json"]
+doubaoime_asr = ["*.pyi", "*.proto", "license-config.json", "assets/*.ico"]
