@@ -22,6 +22,7 @@ public class DoubaoWin32Capture {
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
+  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
@@ -94,6 +95,36 @@ function Invoke-AppSelfTest {
   }
   if ($null -eq $Report.license_config) {
     throw "Self-test report is missing license_config: $ReportPath"
+  }
+  return $ReportPath
+}
+
+function Invoke-TraySelfTest {
+  param(
+    [Parameter(Mandatory = $true)][string]$ExePath,
+    [Parameter(Mandatory = $true)][string]$ReportName
+  )
+
+  if (-not (Test-Path $ExePath)) {
+    throw "Missing executable: $ExePath"
+  }
+
+  $ReportPath = Join-Path $ReportsDir $ReportName
+  Remove-Item -LiteralPath $ReportPath -Force -ErrorAction SilentlyContinue
+  $Process = Start-Process $ExePath -ArgumentList @("--tray-self-test", "--tray-self-test-report", $ReportPath) -Wait -PassThru
+  if ($Process.ExitCode -ne 0) {
+    throw "Tray self-test failed for $ExePath with exit code $($Process.ExitCode)"
+  }
+  if (-not (Test-Path $ReportPath)) {
+    throw "Tray self-test report was not written: $ReportPath"
+  }
+
+  $Report = Get-Content -Raw -Encoding UTF8 -LiteralPath $ReportPath | ConvertFrom-Json
+  if (-not $Report.ok) {
+    throw "Tray self-test report says ok=false: $ReportPath"
+  }
+  if (-not $Report.started -or -not $Report.stopped) {
+    throw "Tray self-test did not start and stop cleanly: $ReportPath"
   }
   return $ReportPath
 }
@@ -345,6 +376,33 @@ function Assert-UiLayoutFits {
   return $ReportPath
 }
 
+function Assert-CloseToTrayKeepsAlive {
+  param([Parameter(Mandatory = $true)][string]$ExePath)
+
+  $App = Start-Process $ExePath -ArgumentList "--background" -PassThru
+  try {
+    $Window = Wait-AppWindow -ProcessId $App.Id -ExePath $ExePath
+    [DoubaoWin32Capture]::PostMessage($Window.WindowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+    Start-Sleep -Seconds 2
+    $StillRunning = Get-Process -Id $Window.Process.Id -ErrorAction SilentlyContinue
+    if (-not $StillRunning) {
+      throw "App exited after WM_CLOSE instead of hiding to tray"
+    }
+    $VisibleWindow = [DoubaoWin32Capture]::FindWindowForProcess($Window.Process.Id, $MainWindowTitle, 300, 250)
+    if ($VisibleWindow -ne [IntPtr]::Zero) {
+      throw "Main window is still visible after WM_CLOSE"
+    }
+    return [pscustomobject]@{
+      ProcessId = $Window.Process.Id
+      HiddenToTray = $true
+    }
+  }
+  finally {
+    Stop-Process -Id $App.Id -Force -ErrorAction SilentlyContinue
+    Stop-AppFromPath -ExePath $ExePath
+  }
+}
+
 function Stop-AppFromPath {
   param([Parameter(Mandatory = $true)][string]$ExePath)
 
@@ -370,6 +428,8 @@ function Remove-WithRetry {
 
 Invoke-AppSelfTest -ExePath $DistExe -ReportName "dist-self-test.json" | Out-Host
 Invoke-AppSelfTest -ExePath $PortableExe -ReportName "portable-self-test.json" | Out-Host
+Invoke-TraySelfTest -ExePath $DistExe -ReportName "dist-tray-self-test.json" | Out-Host
+Invoke-TraySelfTest -ExePath $PortableExe -ReportName "portable-tray-self-test.json" | Out-Host
 
 $OldRequireActivation = $env:DOUBAO_ASR_REQUIRE_ACTIVATION
 $OldLicenseUrl = $env:DOUBAO_ASR_LICENSE_URL
@@ -439,6 +499,8 @@ if ($Install.ExitCode -ne 0) {
 
 $InstalledExe = Join-Path $InstallTarget "DoubaoASRHelper.exe"
 Invoke-AppSelfTest -ExePath $InstalledExe -ReportName "installed-self-test.json" | Out-Host
+Invoke-TraySelfTest -ExePath $InstalledExe -ReportName "installed-tray-self-test.json" | Out-Host
+Assert-CloseToTrayKeepsAlive -ExePath $InstalledExe | Out-Host
 
 $VisibleLayoutReport = Join-Path $ReportsDir "installed-ui-smoke-layout.json"
 Remove-Item -LiteralPath $VisibleLayoutReport -Force -ErrorAction SilentlyContinue

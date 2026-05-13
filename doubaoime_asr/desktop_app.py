@@ -12,13 +12,18 @@ import threading
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 import sounddevice as sd
 import sv_ttk
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from pynput import keyboard, mouse
+
+if sys.platform == "win32":
+    from ctypes import wintypes
+else:
+    wintypes = None  # type: ignore[assignment]
 
 if getattr(sys, "frozen", False):
     bundle_dir = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
@@ -66,6 +71,367 @@ DELAY_SPECS = {
 }
 BASE_TK_SCALING = 96 / 72
 _DPI_AWARENESS_CONFIGURED = False
+
+
+if sys.platform == "win32" and wintypes is not None:
+    _WNDPROC = ctypes.WINFUNCTYPE(
+        ctypes.c_ssize_t,
+        wintypes.HWND,
+        wintypes.UINT,
+        wintypes.WPARAM,
+        wintypes.LPARAM,
+    )
+
+    class _WNDCLASSW(ctypes.Structure):
+        _fields_ = [
+            ("style", wintypes.UINT),
+            ("lpfnWndProc", _WNDPROC),
+            ("cbClsExtra", ctypes.c_int),
+            ("cbWndExtra", ctypes.c_int),
+            ("hInstance", wintypes.HINSTANCE),
+            ("hIcon", wintypes.HICON),
+            ("hCursor", wintypes.HANDLE),
+            ("hbrBackground", wintypes.HBRUSH),
+            ("lpszMenuName", wintypes.LPCWSTR),
+            ("lpszClassName", wintypes.LPCWSTR),
+        ]
+
+    class _NOTIFYICONDATAW(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", wintypes.DWORD),
+            ("hWnd", wintypes.HWND),
+            ("uID", wintypes.UINT),
+            ("uFlags", wintypes.UINT),
+            ("uCallbackMessage", wintypes.UINT),
+            ("hIcon", wintypes.HICON),
+            ("szTip", wintypes.WCHAR * 128),
+        ]
+
+
+class WindowsTrayIcon:
+    ACTION_SHOW = "show"
+    ACTION_HIDE = "hide"
+    ACTION_OPEN_CONFIG = "open_config"
+    ACTION_QUIT = "quit"
+
+    _NIM_ADD = 0x00000000
+    _NIM_DELETE = 0x00000002
+    _NIF_MESSAGE = 0x00000001
+    _NIF_ICON = 0x00000002
+    _NIF_TIP = 0x00000004
+    _WM_CLOSE = 0x0010
+    _WM_COMMAND = 0x0111
+    _WM_DESTROY = 0x0002
+    _WM_NULL = 0x0000
+    _WM_CONTEXTMENU = 0x007B
+    _WM_USER = 0x0400
+    _WM_TRAYICON = _WM_USER + 20
+    _WM_LBUTTONUP = 0x0202
+    _WM_LBUTTONDBLCLK = 0x0203
+    _WM_RBUTTONUP = 0x0205
+    _IMAGE_ICON = 1
+    _LR_DEFAULTSIZE = 0x00000040
+    _LR_LOADFROMFILE = 0x00000010
+    _IDI_APPLICATION = 32512
+    _MF_STRING = 0x00000000
+    _MF_SEPARATOR = 0x00000800
+    _TPM_RIGHTBUTTON = 0x0002
+
+    _MENU_SHOW = 1001
+    _MENU_HIDE = 1002
+    _MENU_OPEN_CONFIG = 1003
+    _MENU_QUIT = 1004
+
+    def __init__(
+        self,
+        tooltip: str,
+        action_callback: Callable[[str], None],
+        icon_path: str | Path | None = None,
+    ) -> None:
+        self.tooltip = tooltip[:127]
+        self.action_callback = action_callback
+        self.icon_path = Path(icon_path) if icon_path else None
+        self.last_error: str | None = None
+        self._thread: threading.Thread | None = None
+        self._ready = threading.Event()
+        self._started_ok = False
+        self._hwnd: int | None = None
+        self._hicon: int | None = None
+        self._hicon_owned = False
+        self._hinstance: int | None = None
+        self._class_name = f"DoubaoASRHelperTrayWindow-{os.getpid()}-{id(self)}"
+        self._window_proc = None
+
+    @staticmethod
+    def is_supported() -> bool:
+        return sys.platform == "win32" and wintypes is not None and hasattr(ctypes, "windll")
+
+    def start(self, wait: bool = False, timeout: float = 2.0) -> bool:
+        if not self.is_supported():
+            self.last_error = "Windows system tray is only available on win32."
+            self._ready.set()
+            return False
+        if self._thread and self._thread.is_alive():
+            return True
+        self._ready.clear()
+        self._thread = threading.Thread(target=self._run_message_loop, name="DoubaoASRTray", daemon=True)
+        self._thread.start()
+        return self.wait_until_ready(timeout) if wait else True
+
+    def wait_until_ready(self, timeout: float = 2.0) -> bool:
+        self._ready.wait(timeout)
+        return self._started_ok
+
+    def is_alive(self) -> bool:
+        return bool(self._thread and self._thread.is_alive())
+
+    def stop(self) -> None:
+        if not self.is_supported():
+            return
+        hwnd = self._hwnd
+        if hwnd:
+            try:
+                ctypes.windll.user32.PostMessageW(hwnd, self._WM_CLOSE, 0, 0)
+            except OSError:
+                pass
+        if self._thread and self._thread.is_alive() and threading.current_thread() is not self._thread:
+            self._thread.join(timeout=2.0)
+
+    def _run_message_loop(self) -> None:
+        assert wintypes is not None
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        try:
+            self._configure_win32_signatures()
+            self._hinstance = kernel32.GetModuleHandleW(None)
+            self._window_proc = _WNDPROC(self._wnd_proc)
+            window_class = _WNDCLASSW()
+            window_class.lpfnWndProc = self._window_proc
+            window_class.hInstance = self._hinstance
+            window_class.lpszClassName = self._class_name
+            if not user32.RegisterClassW(ctypes.byref(window_class)):
+                raise ctypes.WinError()
+
+            hwnd = user32.CreateWindowExW(
+                0,
+                self._class_name,
+                "Doubao ASR Helper Tray",
+                0,
+                0,
+                0,
+                0,
+                0,
+                None,
+                None,
+                self._hinstance,
+                None,
+            )
+            if not hwnd:
+                raise ctypes.WinError()
+            self._hwnd = hwnd
+            self._add_icon(hwnd)
+            self._started_ok = True
+            self._ready.set()
+
+            msg = wintypes.MSG()
+            while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+                user32.TranslateMessage(ctypes.byref(msg))
+                user32.DispatchMessageW(ctypes.byref(msg))
+        except Exception as exc:
+            self.last_error = repr(exc)
+            self._ready.set()
+        finally:
+            self._delete_icon()
+            self._destroy_icon()
+            if self._hinstance:
+                try:
+                    user32.UnregisterClassW(self._class_name, self._hinstance)
+                except OSError:
+                    pass
+            self._hwnd = None
+
+    def _configure_win32_signatures(self) -> None:
+        assert wintypes is not None
+        user32 = ctypes.windll.user32
+        shell32 = ctypes.windll.shell32
+        kernel32 = ctypes.windll.kernel32
+
+        kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
+        kernel32.GetModuleHandleW.restype = wintypes.HMODULE
+        user32.RegisterClassW.argtypes = [ctypes.POINTER(_WNDCLASSW)]
+        user32.RegisterClassW.restype = wintypes.ATOM
+        user32.CreateWindowExW.argtypes = [
+            wintypes.DWORD,
+            wintypes.LPCWSTR,
+            wintypes.LPCWSTR,
+            wintypes.DWORD,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            wintypes.HWND,
+            wintypes.HMENU,
+            wintypes.HINSTANCE,
+            wintypes.LPVOID,
+        ]
+        user32.CreateWindowExW.restype = wintypes.HWND
+        user32.DefWindowProcW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+        user32.DefWindowProcW.restype = ctypes.c_ssize_t
+        user32.DestroyWindow.argtypes = [wintypes.HWND]
+        user32.DestroyWindow.restype = wintypes.BOOL
+        user32.PostQuitMessage.argtypes = [ctypes.c_int]
+        user32.PostQuitMessage.restype = None
+        user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+        user32.PostMessageW.restype = wintypes.BOOL
+        user32.GetMessageW.argtypes = [ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT]
+        user32.GetMessageW.restype = wintypes.BOOL
+        user32.TranslateMessage.argtypes = [ctypes.POINTER(wintypes.MSG)]
+        user32.TranslateMessage.restype = wintypes.BOOL
+        user32.DispatchMessageW.argtypes = [ctypes.POINTER(wintypes.MSG)]
+        user32.DispatchMessageW.restype = ctypes.c_ssize_t
+        user32.CreatePopupMenu.restype = wintypes.HMENU
+        user32.AppendMenuW.argtypes = [wintypes.HMENU, wintypes.UINT, ctypes.c_size_t, wintypes.LPCWSTR]
+        user32.AppendMenuW.restype = wintypes.BOOL
+        user32.TrackPopupMenu.argtypes = [
+            wintypes.HMENU,
+            wintypes.UINT,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            wintypes.HWND,
+            wintypes.LPVOID,
+        ]
+        user32.TrackPopupMenu.restype = wintypes.BOOL
+        user32.DestroyMenu.argtypes = [wintypes.HMENU]
+        user32.DestroyMenu.restype = wintypes.BOOL
+        user32.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
+        user32.GetCursorPos.restype = wintypes.BOOL
+        user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+        user32.SetForegroundWindow.restype = wintypes.BOOL
+        user32.LoadImageW.restype = wintypes.HANDLE
+        user32.LoadIconW.restype = wintypes.HICON
+        user32.DestroyIcon.argtypes = [wintypes.HICON]
+        user32.DestroyIcon.restype = wintypes.BOOL
+        user32.UnregisterClassW.argtypes = [wintypes.LPCWSTR, wintypes.HINSTANCE]
+        user32.UnregisterClassW.restype = wintypes.BOOL
+
+        shell32.Shell_NotifyIconW.argtypes = [wintypes.DWORD, ctypes.POINTER(_NOTIFYICONDATAW)]
+        shell32.Shell_NotifyIconW.restype = wintypes.BOOL
+
+    def _wnd_proc(self, hwnd: int, msg: int, wparam: int, lparam: int) -> int:
+        user32 = ctypes.windll.user32
+        try:
+            if msg == self._WM_TRAYICON:
+                event = int(lparam)
+                if event in {self._WM_LBUTTONUP, self._WM_LBUTTONDBLCLK}:
+                    self.action_callback(self.ACTION_SHOW)
+                    return 0
+                if event in {self._WM_RBUTTONUP, self._WM_CONTEXTMENU}:
+                    self._show_menu(hwnd)
+                    return 0
+            if msg == self._WM_COMMAND:
+                command = int(wparam) & 0xFFFF
+                action = {
+                    self._MENU_SHOW: self.ACTION_SHOW,
+                    self._MENU_HIDE: self.ACTION_HIDE,
+                    self._MENU_OPEN_CONFIG: self.ACTION_OPEN_CONFIG,
+                    self._MENU_QUIT: self.ACTION_QUIT,
+                }.get(command)
+                if action:
+                    self.action_callback(action)
+                    return 0
+            if msg == self._WM_CLOSE:
+                user32.DestroyWindow(hwnd)
+                return 0
+            if msg == self._WM_DESTROY:
+                self._delete_icon()
+                user32.PostQuitMessage(0)
+                return 0
+        except Exception as exc:
+            self.last_error = repr(exc)
+        return int(user32.DefWindowProcW(hwnd, msg, wparam, lparam))
+
+    def _show_menu(self, hwnd: int) -> None:
+        assert wintypes is not None
+        user32 = ctypes.windll.user32
+        menu = user32.CreatePopupMenu()
+        if not menu:
+            raise ctypes.WinError()
+        try:
+            for item_id, text in (
+                (self._MENU_SHOW, "显示主窗口"),
+                (self._MENU_HIDE, "隐藏窗口"),
+                (self._MENU_OPEN_CONFIG, "打开配置目录"),
+            ):
+                if not user32.AppendMenuW(menu, self._MF_STRING, item_id, text):
+                    raise ctypes.WinError()
+            user32.AppendMenuW(menu, self._MF_SEPARATOR, 0, None)
+            if not user32.AppendMenuW(menu, self._MF_STRING, self._MENU_QUIT, "退出"):
+                raise ctypes.WinError()
+            point = wintypes.POINT()
+            if not user32.GetCursorPos(ctypes.byref(point)):
+                raise ctypes.WinError()
+            user32.SetForegroundWindow(hwnd)
+            user32.TrackPopupMenu(menu, self._TPM_RIGHTBUTTON, point.x, point.y, 0, hwnd, None)
+            user32.PostMessageW(hwnd, self._WM_NULL, 0, 0)
+        finally:
+            user32.DestroyMenu(menu)
+
+    def _load_icon(self) -> int:
+        assert wintypes is not None
+        user32 = ctypes.windll.user32
+        if self.icon_path and self.icon_path.exists():
+            hicon = user32.LoadImageW(
+                None,
+                str(self.icon_path),
+                self._IMAGE_ICON,
+                0,
+                0,
+                self._LR_LOADFROMFILE | self._LR_DEFAULTSIZE,
+            )
+            if hicon:
+                self._hicon_owned = True
+                return int(hicon)
+        hicon = user32.LoadIconW(None, ctypes.c_wchar_p(self._IDI_APPLICATION))
+        self._hicon_owned = False
+        if not hicon:
+            raise ctypes.WinError()
+        return int(hicon)
+
+    def _add_icon(self, hwnd: int) -> None:
+        assert wintypes is not None
+        self._hicon = self._load_icon()
+        data = _NOTIFYICONDATAW()
+        data.cbSize = ctypes.sizeof(data)
+        data.hWnd = hwnd
+        data.uID = 1
+        data.uFlags = self._NIF_MESSAGE | self._NIF_ICON | self._NIF_TIP
+        data.uCallbackMessage = self._WM_TRAYICON
+        data.hIcon = self._hicon
+        data.szTip = self.tooltip
+        if not ctypes.windll.shell32.Shell_NotifyIconW(self._NIM_ADD, ctypes.byref(data)):
+            raise ctypes.WinError()
+
+    def _delete_icon(self) -> None:
+        if not self.is_supported() or not self._hwnd:
+            return
+        data = _NOTIFYICONDATAW()
+        data.cbSize = ctypes.sizeof(data)
+        data.hWnd = self._hwnd
+        data.uID = 1
+        try:
+            ctypes.windll.shell32.Shell_NotifyIconW(self._NIM_DELETE, ctypes.byref(data))
+        except OSError:
+            pass
+
+    def _destroy_icon(self) -> None:
+        if not self.is_supported() or not self._hicon or not self._hicon_owned:
+            return
+        try:
+            ctypes.windll.user32.DestroyIcon(self._hicon)
+        except OSError:
+            pass
+        self._hicon = None
 
 
 @dataclass
@@ -271,13 +637,16 @@ class DesktopApp:
     ) -> None:
         configure_process_dpi_awareness()
         self.root = tk.Tk()
+        self._quitting = False
+        self.tray_actions: queue.Queue[str] = queue.Queue()
+        self.tray_icon: WindowsTrayIcon | None = None
         if ui_scale_factor is not None:
             self.root.tk.call("tk", "scaling", BASE_TK_SCALING * max(0.75, min(3.0, ui_scale_factor)))
         self.root.title("豆包 ASR 助手")
         self.root.geometry(ui_window_size or "900x680")
         min_window_scale = min(max(self.current_ui_scale_factor(), 1.0), 1.35)
         self.root.minsize(int(560 * min_window_scale), int(420 * min_window_scale))
-        self.root.protocol("WM_DELETE_WINDOW", self.root.withdraw)
+        self.root.protocol("WM_DELETE_WINDOW", self.hide_main_window)
         self._configure_ttk_styles()
         self.config = load_config()
         self.license_config = load_license_config()
@@ -319,6 +688,8 @@ class DesktopApp:
         self._build_settings_ui()
         self._build_float_window()
         self._start_listeners()
+        self._start_tray_icon()
+        self.root.after(100, self._process_tray_actions)
         self.root.after(150, self.check_license_on_startup)
         if hidden or background:
             self.root.withdraw()
@@ -334,7 +705,113 @@ class DesktopApp:
             self.root.after(800, self.write_ui_layout_report)
 
     def run(self) -> None:
-        self.root.mainloop()
+        try:
+            self.root.mainloop()
+        finally:
+            self._cleanup_resources()
+
+    def _start_tray_icon(self) -> None:
+        if not WindowsTrayIcon.is_supported():
+            return
+        self.tray_icon = WindowsTrayIcon("豆包 ASR 助手 - 后台运行", self._enqueue_tray_action)
+        self.tray_icon.start()
+        self.root.after(1200, self._report_tray_startup_error)
+
+    def _report_tray_startup_error(self) -> None:
+        if self._quitting or not self.tray_icon:
+            return
+        if self.tray_icon.last_error:
+            self.status_var.set("系统托盘不可用，窗口隐藏后可从任务管理器结束")
+
+    def _enqueue_tray_action(self, action: str) -> None:
+        self.tray_actions.put(action)
+
+    def _process_tray_actions(self) -> None:
+        while True:
+            try:
+                action = self.tray_actions.get_nowait()
+            except queue.Empty:
+                break
+            self._handle_tray_action(action)
+        if not self._quitting:
+            try:
+                self.root.after(100, self._process_tray_actions)
+            except tk.TclError:
+                pass
+
+    def _handle_tray_action(self, action: str) -> None:
+        if action == WindowsTrayIcon.ACTION_SHOW:
+            self.show_main_window()
+        elif action == WindowsTrayIcon.ACTION_HIDE:
+            self.hide_main_window()
+        elif action == WindowsTrayIcon.ACTION_OPEN_CONFIG:
+            self.open_config_dir()
+        elif action == WindowsTrayIcon.ACTION_QUIT:
+            self.quit_app()
+
+    def hide_main_window(self) -> None:
+        try:
+            self.root.withdraw()
+            self.status_var.set("已隐藏到系统托盘，右键托盘图标可退出")
+        except tk.TclError:
+            pass
+
+    def quit_app(self) -> None:
+        if self._quitting:
+            return
+        self._cleanup_resources()
+        try:
+            self.root.quit()
+        except tk.TclError:
+            pass
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
+
+    def _cleanup_resources(self) -> None:
+        if getattr(self, "_resources_cleaned", False):
+            return
+        self._resources_cleaned = True
+        self._quitting = True
+        self._stop_recording_for_exit()
+        for listener in (getattr(self, "keyboard_listener", None), getattr(self, "mouse_listener", None)):
+            if listener is None:
+                continue
+            try:
+                listener.stop()
+            except Exception:
+                pass
+        if self.tray_icon is not None:
+            self.tray_icon.stop()
+
+    def _stop_recording_for_exit(self) -> None:
+        self.recording_mode = None
+        self.recording_field = None
+        self.active_keys.clear()
+        if self.audio_stream is not None:
+            try:
+                self.audio_stream.stop()
+            except Exception:
+                pass
+            try:
+                self.audio_stream.close()
+            except Exception:
+                pass
+            self.audio_stream = None
+        if self.audio_queue is not None:
+            try:
+                self.audio_queue.put_nowait(None)
+            except Exception:
+                pass
+
+    def schedule_ui(self, delay_ms: int, callback: Callable[[], None]) -> None:
+        if self._quitting:
+            return
+        try:
+            self.root.after(delay_ms, callback)
+        except tk.TclError:
+            pass
 
     def _configure_ttk_styles(self) -> None:
         style = ttk.Style(self.root)
@@ -520,7 +997,7 @@ class DesktopApp:
             ("显示悬浮窗", lambda: self.show_float("")),
             ("使用说明", self.show_help),
             ("打开配置目录", self.open_config_dir),
-            ("隐藏窗口", self.root.withdraw),
+            ("隐藏窗口", self.hide_main_window),
         ]
         for index, (text, command) in enumerate(actions):
             button = tk.Button(buttons, text=text, command=command, width=12)
@@ -1321,7 +1798,7 @@ class DesktopApp:
         self.final_text = ""
         self.transcript = TranscriptAccumulator()
         self.audio_queue = queue.Queue()
-        self.root.after(0, lambda: self.show_float("正在听..."))
+        self.schedule_ui(0, lambda: self.show_float("正在听..."))
         self.audio_stream = sd.InputStream(
             samplerate=16000,
             channels=1,
@@ -1347,7 +1824,7 @@ class DesktopApp:
             self.audio_queue.put(None)
         self.status_var.set("正在识别")
         if self.cancelled:
-            self.root.after(0, lambda: self.show_float("已取消"))
+            self.schedule_ui(0, lambda: self.show_float("已取消"))
         self.pending_mode = mode
 
     def _audio_callback(self, indata, _frames, _time_info, status) -> None:
@@ -1369,15 +1846,15 @@ class DesktopApp:
             async for response in transcribe_realtime(source(), config=config):
                 if response.type in {ResponseType.INTERIM_RESULT, ResponseType.FINAL_RESULT} and response.text:
                     text = self._update_asr_text(response)
-                    self.root.after(0, lambda value=text: self.show_float(value))
+                    self.schedule_ui(0, lambda value=text: self.show_float(value))
                 if response.type == ResponseType.ERROR:
-                    self.root.after(0, lambda msg=response.error_msg: self.show_float(f"错误：{msg}"))
+                    self.schedule_ui(0, lambda msg=response.error_msg: self.show_float(f"错误：{msg}"))
 
         try:
             asyncio.run(runner())
-            self.root.after(0, self._finish_insert)
+            self.schedule_ui(0, self._finish_insert)
         except Exception as exc:
-            self.root.after(0, lambda: self.show_float(f"错误：{exc}"))
+            self.schedule_ui(0, lambda: self.show_float(f"错误：{exc}"))
 
     def _update_asr_text(self, response) -> str:
         if response.text:
@@ -1392,7 +1869,7 @@ class DesktopApp:
         if self.cancelled or not self.final_text:
             return
         auto_send = getattr(self, "pending_mode", "") == "hold_send"
-        self.root.after(self.config.insert_delay_ms, lambda: self.insert_text(self.final_text, auto_send=auto_send))
+        self.schedule_ui(self.config.insert_delay_ms, lambda: self.insert_text(self.final_text, auto_send=auto_send))
 
     def show_float(self, text: str) -> None:
         self.float_text.delete("1.0", "end")
@@ -1419,9 +1896,9 @@ class DesktopApp:
             time.sleep(0.05)
         send_ctrl_v()
         if auto_send:
-            self.root.after(self.config.auto_send_delay_ms, send_enter)
+            self.schedule_ui(self.config.auto_send_delay_ms, send_enter)
         if self.config.protect_clipboard:
-            self.root.after(500, lambda: self.clipboard.set_text(original))
+            self.schedule_ui(500, lambda: self.clipboard.set_text(original))
 
 
 def get_foreground_window() -> int:
@@ -1527,8 +2004,16 @@ def run_self_test(report_path: str | None = None) -> int:
         get_foreground_window()
         return "keyboard, mouse, and foreground window APIs are available"
 
+    def tray_api_check() -> str:
+        if sys.platform != "win32":
+            return "system tray is Windows-only; skipped on this platform"
+        if not WindowsTrayIcon.is_supported():
+            raise RuntimeError("Windows notification area APIs are unavailable")
+        ctypes.windll.shell32.Shell_NotifyIconW
+        return "Windows notification area APIs are available"
+
     def help_text_check() -> str:
-        required = ["豆包 ASR 助手使用说明", "首次运行", "默认快捷键", "常见问题", "卸载"]
+        required = ["豆包 ASR 助手使用说明", "首次运行", "默认快捷键", "系统托盘", "常见问题", "卸载"]
         missing = [item for item in required if item not in HELP_TEXT]
         if missing:
             raise RuntimeError(f"Help text is missing required section(s): {missing}")
@@ -1558,6 +2043,7 @@ def run_self_test(report_path: str | None = None) -> int:
     check("opus_encoder", opus_check)
     check("audio_devices", sounddevice_check)
     check("input_control", input_control_check)
+    check("system_tray_api", tray_api_check)
     check("help_text", help_text_check)
     check("license_config", license_config_check)
     check("license_state", license_state_check, required=False)
@@ -1565,6 +2051,41 @@ def run_self_test(report_path: str | None = None) -> int:
     destination = Path(report_path) if report_path else Path(tempfile.gettempdir()) / "DoubaoASRHelper-self-test.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return 0 if report["ok"] else 1
+
+
+def run_tray_self_test(report_path: str | None = None) -> int:
+    report = {
+        "ok": False,
+        "platform": sys.platform,
+        "supported": WindowsTrayIcon.is_supported(),
+        "started": False,
+        "stopped": False,
+        "error": None,
+    }
+
+    tray: WindowsTrayIcon | None = None
+    try:
+        if not WindowsTrayIcon.is_supported():
+            raise RuntimeError("Windows system tray is not supported on this platform")
+        tray = WindowsTrayIcon("豆包 ASR 助手 - 托盘测试", lambda _action: None)
+        report["started"] = tray.start(wait=True, timeout=3.0)
+        if not report["started"]:
+            raise RuntimeError(tray.last_error or "Timed out waiting for tray icon")
+        time.sleep(0.5)
+        tray.stop()
+        report["stopped"] = not tray.is_alive()
+        if not report["stopped"]:
+            raise RuntimeError("Tray message loop did not stop cleanly")
+        report["ok"] = True
+    except Exception as exc:
+        report["error"] = repr(exc)
+    finally:
+        if tray is not None:
+            tray.stop()
+        destination = Path(report_path) if report_path else Path(tempfile.gettempdir()) / "DoubaoASRHelper-tray-test.json"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return 0 if report["ok"] else 1
 
 
@@ -1639,6 +2160,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--ui-scale-factor", type=float, help=argparse.SUPPRESS)
     parser.add_argument("--self-test", action="store_true", help="Run packaged app diagnostics and exit.")
     parser.add_argument("--self-test-report", help="Write self-test JSON report to this path.")
+    parser.add_argument("--tray-self-test", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--tray-self-test-report", help=argparse.SUPPRESS)
     parser.add_argument("--long-text-test", action="store_true", help="Generate the long text stress sample and optionally run ASR.")
     parser.add_argument("--long-text-audio", help="Path for the generated long text WAV sample.")
     parser.add_argument("--long-text-report", help="Path for the long text JSON report.")
@@ -1649,6 +2172,8 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.self_test:
         raise SystemExit(run_self_test(args.self_test_report))
+    if args.tray_self_test:
+        raise SystemExit(run_tray_self_test(args.tray_self_test_report))
     if args.long_text_test:
         raise SystemExit(
             run_long_text_test(
