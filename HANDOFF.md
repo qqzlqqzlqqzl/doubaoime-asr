@@ -38,8 +38,9 @@ git pull --rebase --autostash
 - 热键/文件行改成“标签 + 输入框 + 录制/选择按钮”的顺序，贴近参考图，而不是把按钮插在输入框前面。
 - 紧凑模式下隐藏副标题和底部说明，保留三种模式块、豆包快捷键、插入延迟、剪贴板保护、开机自启动、高级延迟、状态和 6 个底部按钮。
 - 同步更新 `test-desktop-exe.ps1` 的 200% 默认窗口尺寸期望，从 `900x680` 改为 `760x520`。
-- 已跑：`python -m compileall doubaoime_asr`、`python -m pytest -q`、源码 UI 布局 JSON 断言、`build-desktop-exe.ps1`、`test-activation.ps1`、`test-license-stress.ps1`。
-- 阻塞：`test-desktop-exe.ps1` 和 `test-windows-compat.ps1` 在启动新打包 `dist\DoubaoASRHelper.exe` 时仍被 Windows 应用控制策略拦截，错误为“应用程序控制策略已阻止此文件”；`Unblock-File` 无效。需要代码签名或调整本机 Smart App Control/Code Integrity 策略后才能重新跑完整 EXE 截图链路。
+- 已跑：`python -m compileall doubaoime_asr`、`python -m pytest -q`、源码 UI 布局 JSON 断言、源码按钮点击烟测、`build-desktop-exe.ps1`、`test-activation.ps1`、`test-license-stress.ps1`、`test-windows-compat.ps1`、`test-desktop-exe.ps1`、`test-long-text-asr.ps1`。
+- 注意：此前新打包 `dist\DoubaoASRHelper.exe` 曾被 Windows 应用控制策略拦截；本轮对 EXE 执行 `Unblock-File` 后，单独重跑 `test-desktop-exe.ps1` 已通过。正式分发仍建议做可信代码签名，避免其他机器触发 Smart App Control / Code Integrity。
+- 耳机声学闭环最新重跑失败：`headset-loopback-asr-rerun.json` 明确只用了 `耳机 (2- Realtek(R) Audio)` 输出和 `外部麦克风 (2- Realtek(R) Audio)` 输入，未使用电脑扬声器，但录回电平太低，ASR `recognized_chars=0`。旧 `headset-loopback-asr.json` 仍是通过证据，但当前物理摆放/音量状态需要重调后再测。
 
 2026-05-13，本轮继续补齐可自动化的端到端缺口：
 
