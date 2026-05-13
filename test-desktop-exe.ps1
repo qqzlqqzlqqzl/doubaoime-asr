@@ -30,12 +30,10 @@ public class DoubaoWin32Capture {
     GetWindowText(hWnd, text, text.Capacity);
     return text.ToString();
   }
-  public static IntPtr FindWindowForProcess(int expectedProcessId, string titleContains) {
+  public static IntPtr FindWindowForProcess(int expectedProcessId, string titleContains, int minWidth, int minHeight) {
     IntPtr found = IntPtr.Zero;
+    long foundArea = 0;
     EnumWindows(delegate(IntPtr hWnd, IntPtr lParam) {
-      if (found != IntPtr.Zero) {
-        return false;
-      }
       uint windowProcessId;
       GetWindowThreadProcessId(hWnd, out windowProcessId);
       if (windowProcessId != (uint)expectedProcessId || !IsWindowVisible(hWnd)) {
@@ -43,8 +41,15 @@ public class DoubaoWin32Capture {
       }
       string title = GetWindowTitle(hWnd);
       if (!String.IsNullOrWhiteSpace(title) && (String.IsNullOrEmpty(titleContains) || title.Contains(titleContains))) {
-        found = hWnd;
-        return false;
+        RECT rect;
+        GetWindowRect(hWnd, out rect);
+        int width = rect.Right - rect.Left;
+        int height = rect.Bottom - rect.Top;
+        long area = (long)width * (long)height;
+        if (width >= minWidth && height >= minHeight && area > foundArea) {
+          found = hWnd;
+          foundArea = area;
+        }
       }
       return true;
     }, IntPtr.Zero);
@@ -57,6 +62,7 @@ public class DoubaoWin32Capture {
 $HwndTopMost = [IntPtr](-1)
 $HwndNoTopMost = [IntPtr](-2)
 $SwpShowWindow = [uint32]0x0040
+$MainWindowTitle = [string]::Concat([char]0x8C46, [char]0x5305, " ASR ", [char]0x52A9, [char]0x624B)
 
 function Invoke-AppSelfTest {
   param(
@@ -106,7 +112,7 @@ function Wait-AppWindow {
       Where-Object { $_.Path -eq $ExePath }
 
     foreach ($Candidate in $Candidates) {
-      $WindowHandle = [DoubaoWin32Capture]::FindWindowForProcess($Candidate.Id, "")
+      $WindowHandle = [DoubaoWin32Capture]::FindWindowForProcess($Candidate.Id, $MainWindowTitle, 600, 400)
       if ($WindowHandle -ne [IntPtr]::Zero) {
         return [pscustomobject]@{
           Process = $Candidate
@@ -128,8 +134,12 @@ function Save-AppWindowScreenshot {
   )
 
   $Window = Wait-AppWindow -ProcessId $ProcessId -ExePath $ExePath
-  [DoubaoWin32Capture]::SetWindowPos($Window.WindowHandle, $HwndTopMost, 40, 80, 820, 680, $SwpShowWindow) | Out-Null
-  [DoubaoWin32Capture]::MoveWindow($Window.WindowHandle, 40, 80, 820, 680, $true) | Out-Null
+  if (-not [DoubaoWin32Capture]::SetWindowPos($Window.WindowHandle, $HwndTopMost, 40, 80, 820, 680, $SwpShowWindow)) {
+    throw "Could not make app window topmost for screenshot"
+  }
+  if (-not [DoubaoWin32Capture]::MoveWindow($Window.WindowHandle, 40, 80, 820, 680, $true)) {
+    throw "Could not move app window for screenshot"
+  }
   [DoubaoWin32Capture]::SetForegroundWindow($Window.WindowHandle) | Out-Null
   Start-Sleep -Milliseconds $StabilizeMilliseconds
 
