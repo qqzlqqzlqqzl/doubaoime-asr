@@ -23,6 +23,13 @@ if getattr(sys, "frozen", False):
     os.environ["PATH"] = str(bundle_dir) + os.pathsep + os.environ.get("PATH", "")
 
 from doubaoime_asr import ASRConfig, ResponseType, transcribe_realtime
+from doubaoime_asr.activation import (
+    LicenseResult,
+    activate_license,
+    device_fingerprint,
+    load_license_config,
+    verify_license,
+)
 from doubaoime_asr.audio import AudioEncoder
 from doubaoime_asr.desktop_help import HELP_TEXT
 from doubaoime_asr.transcript import TranscriptAccumulator
@@ -220,6 +227,9 @@ class DesktopApp:
         self.root.minsize(680, 500)
         self.root.protocol("WM_DELETE_WINDOW", self.root.withdraw)
         self.config = load_config()
+        self.license_config = load_license_config()
+        self.license_result: LicenseResult | None = None
+        self.license_checked_at = 0.0
         self.clipboard = Clipboard(self.root)
         self.active_keys: set[str] = set()
         self.recording_mode: str | None = None
@@ -233,12 +243,16 @@ class DesktopApp:
         self.entries: dict[str, tk.Entry] = {}
         self.vars: dict[str, tk.BooleanVar] = {}
         self.help_win: tk.Toplevel | None = None
+        self.activation_win: tk.Toplevel | None = None
+        self.activation_code_var = tk.StringVar(value="")
+        self.activation_status_var = tk.StringVar(value="")
         self.recording_field: str | None = None
         self.status_var = tk.StringVar(value="已就绪")
         self.transcript_var = tk.StringVar(value="")
         self._build_settings_ui()
         self._build_float_window()
         self._start_listeners()
+        self.root.after(150, self.check_license_on_startup)
         if hidden:
             self.root.withdraw()
         if show_help:
@@ -293,6 +307,7 @@ class DesktopApp:
         tk.Button(buttons, text="保存配置", command=self.save_from_ui, width=14).pack(side="left")
         tk.Button(buttons, text="显示悬浮窗", command=lambda: self.show_float("")).pack(side="left", padx=10)
         tk.Button(buttons, text="使用说明", command=self.show_help, width=12).pack(side="left")
+        tk.Button(buttons, text="授权状态", command=self.show_activation_window, width=12).pack(side="left", padx=(10, 0))
         tk.Button(buttons, text="打开配置目录", command=self.open_config_dir, width=14).pack(side="left", padx=10)
         tk.Button(buttons, text="隐藏窗口", command=self.root.withdraw, width=14).pack(side="right")
 
@@ -346,6 +361,127 @@ class DesktopApp:
         actions.pack(fill="x", pady=(10, 0))
         tk.Button(actions, text="打开配置目录", command=self.open_config_dir, width=14).pack(side="left")
         tk.Button(actions, text="关闭", command=self.help_win.withdraw, width=12).pack(side="right")
+
+    def check_license_on_startup(self) -> None:
+        result = self.verify_current_license()
+        self.status_var.set(self.format_license_status(result))
+        if self.license_config.require_activation and not result.ok:
+            self.root.deiconify()
+            self.show_activation_window(result.message)
+
+    def verify_current_license(self, force: bool = False) -> LicenseResult:
+        now = time.time()
+        if (
+            not force
+            and self.license_result is not None
+            and self.license_result.ok
+            and now - self.license_checked_at < 600
+        ):
+            return self.license_result
+        self.license_config = load_license_config()
+        self.license_result = verify_license(self.license_config)
+        self.license_checked_at = now
+        return self.license_result
+
+    def format_license_status(self, result: LicenseResult | None = None) -> str:
+        result = result or self.license_result
+        if not self.license_config.require_activation:
+            return "授权：当前构建未启用强制激活"
+        if result and result.ok:
+            suffix = f"，到期：{result.expires_at}" if result.expires_at else ""
+            return f"授权：已激活{suffix}"
+        message = result.message if result else "尚未校验"
+        return f"授权：{message}"
+
+    def ensure_license(self, show_dialog: bool = True) -> bool:
+        result = self.verify_current_license()
+        if result.ok:
+            return True
+        self.status_var.set(self.format_license_status(result))
+        if show_dialog:
+            self.root.after(0, lambda message=result.message: self.show_activation_window(message))
+        return False
+
+    def show_activation_window(self, initial_message: str | None = None) -> None:
+        if self.activation_win is not None and self.activation_win.winfo_exists():
+            if initial_message:
+                self.activation_status_var.set(initial_message)
+            else:
+                self.activation_status_var.set(self.format_license_status())
+            self.activation_win.deiconify()
+            self.activation_win.lift()
+            return
+
+        self.activation_win = tk.Toplevel(self.root)
+        self.activation_win.title("授权激活 - 豆包 ASR 助手")
+        self.activation_win.geometry("560x340+460+260")
+        self.activation_win.minsize(520, 320)
+        self.activation_win.protocol("WM_DELETE_WINDOW", self.activation_win.withdraw)
+
+        frame = tk.Frame(self.activation_win, padx=20, pady=18)
+        frame.pack(fill="both", expand=True)
+
+        title = "此版本需要激活后使用" if self.license_config.require_activation else "授权状态"
+        tk.Label(frame, text=title, font=("Microsoft YaHei UI", 16, "bold")).pack(anchor="w")
+        tk.Label(
+            frame,
+            text="激活码会绑定当前电脑。把安装包转发给别人时，对方仍需要自己的激活码。",
+            fg="#5d6b82",
+            wraplength=500,
+            justify="left",
+        ).pack(anchor="w", pady=(6, 14))
+
+        self.activation_status_var.set(initial_message or self.format_license_status())
+        tk.Label(frame, textvariable=self.activation_status_var, fg="#39465e", wraplength=500, justify="left").pack(anchor="w")
+
+        server_text = self.license_config.server_url or "未配置授权服务器"
+        tk.Label(frame, text=f"授权服务器：{server_text}", fg="#5d6b82", wraplength=500, justify="left").pack(anchor="w", pady=(10, 0))
+        tk.Label(frame, text=f"本机设备码：{device_fingerprint()}", fg="#5d6b82", wraplength=500, justify="left").pack(anchor="w", pady=(4, 14))
+
+        row = tk.Frame(frame)
+        row.pack(fill="x")
+        tk.Label(row, text="激活码", width=10, anchor="w").pack(side="left")
+        entry = tk.Entry(row, textvariable=self.activation_code_var)
+        entry.pack(side="left", fill="x", expand=True)
+
+        actions = tk.Frame(frame)
+        actions.pack(fill="x", pady=(16, 0))
+        tk.Button(actions, text="激活", command=self.activate_from_ui, width=12).pack(side="left")
+        tk.Button(actions, text="重新校验", command=self.verify_license_from_ui, width=12).pack(side="left", padx=8)
+        tk.Button(actions, text="复制设备码", command=self.copy_device_id, width=12).pack(side="left")
+        tk.Button(actions, text="关闭", command=self.activation_win.withdraw, width=12).pack(side="right")
+
+        self.activation_win.lift()
+        entry.focus_set()
+
+    def copy_device_id(self) -> None:
+        self.clipboard.set_text(device_fingerprint())
+        self.activation_status_var.set("设备码已复制。")
+
+    def activate_from_ui(self) -> None:
+        code = self.activation_code_var.get().strip()
+        self.activation_status_var.set("正在激活...")
+        threading.Thread(target=self._activate_worker, args=(code,), daemon=True).start()
+
+    def _activate_worker(self, code: str) -> None:
+        result = activate_license(self.license_config, code)
+        self.root.after(0, lambda: self._handle_activation_result(result))
+
+    def verify_license_from_ui(self) -> None:
+        self.activation_status_var.set("正在校验授权...")
+        threading.Thread(target=self._verify_license_worker, daemon=True).start()
+
+    def _verify_license_worker(self) -> None:
+        result = self.verify_current_license(force=True)
+        self.root.after(0, lambda: self._handle_activation_result(result))
+
+    def _handle_activation_result(self, result: LicenseResult) -> None:
+        self.license_result = result
+        self.license_checked_at = time.time()
+        self.activation_status_var.set(self.format_license_status(result))
+        self.status_var.set(self.format_license_status(result) if self.license_config.require_activation else "已就绪")
+        if result.ok and self.activation_win is not None and self.activation_win.winfo_exists():
+            self.activation_win.after(700, self.activation_win.withdraw)
 
     def _build_float_window(self) -> None:
         self.float_win = tk.Toplevel(self.root)
@@ -475,6 +611,8 @@ class DesktopApp:
             self.stop_recording()
 
     def start_recording(self, mode: str) -> None:
+        if not self.ensure_license(show_dialog=True):
+            return
         self.target_hwnd = get_foreground_window()
         self.recording_mode = mode
         self.cancelled = False
@@ -640,7 +778,12 @@ def run_self_test(report_path: str | None = None) -> int:
 
     config = load_config()
     credential_path = resolve_user_path(config.credential_path)
+    license_config = load_license_config()
     report["credential_path"] = str(credential_path)
+    report["license_config"] = {
+        "require_activation": license_config.require_activation,
+        "server_url_configured": bool(license_config.server_url),
+    }
 
     def config_dir_check() -> str:
         APP_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -683,11 +826,29 @@ def run_self_test(report_path: str | None = None) -> int:
         return "keyboard, mouse, and foreground window APIs are available"
 
     def help_text_check() -> str:
-        required = ["豆包 ASR 助手使用说明", "默认快捷键", "常见问题", "卸载"]
+        required = ["豆包 ASR 助手使用说明", "默认快捷键", "授权激活", "常见问题", "卸载"]
         missing = [item for item in required if item not in HELP_TEXT]
         if missing:
             raise RuntimeError(f"Help text is missing required section(s): {missing}")
         return f"embedded help has {len(HELP_TEXT)} characters"
+
+    def license_config_check() -> str:
+        if license_config.require_activation and not license_config.server_url:
+            raise RuntimeError("activation is required but license server URL is empty")
+        mode = "required" if license_config.require_activation else "disabled"
+        return f"activation mode is {mode}"
+
+    def license_state_check() -> str:
+        result = verify_license(license_config)
+        report["license_state"] = {
+            "ok": result.ok,
+            "message": result.message,
+            "expires_at": result.expires_at,
+            "code": result.code,
+        }
+        if not result.ok:
+            return f"license is not currently valid: {result.message}"
+        return result.message
 
     check("config_dir", config_dir_check)
     check("credential_path", credential_path_check)
@@ -696,6 +857,8 @@ def run_self_test(report_path: str | None = None) -> int:
     check("audio_devices", sounddevice_check)
     check("input_control", input_control_check)
     check("help_text", help_text_check)
+    check("license_config", license_config_check)
+    check("license_state", license_state_check, required=False)
 
     destination = Path(report_path) if report_path else Path(tempfile.gettempdir()) / "DoubaoASRHelper-self-test.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -722,6 +885,7 @@ def run_long_text_test(
     output = Path(audio_path) if audio_path else default_output_path()
     report = Path(report_path) if report_path else Path("release/test-reports/long-text-asr.json")
     credential = Path(credential_path) if credential_path else default_credential_path()
+    license_config = load_license_config()
 
     result = {
         "ok": False,
@@ -729,8 +893,22 @@ def run_long_text_test(
             "executable": sys.executable,
             "frozen": bool(getattr(sys, "frozen", False)),
         },
+        "license_config": {
+            "require_activation": license_config.require_activation,
+            "server_url_configured": bool(license_config.server_url),
+        },
     }
     try:
+        license_result = verify_license(license_config)
+        result["license_state"] = {
+            "ok": license_result.ok,
+            "message": license_result.message,
+            "expires_at": license_result.expires_at,
+            "code": license_result.code,
+        }
+        if run_asr_check and not license_result.ok:
+            raise RuntimeError(f"授权校验未通过：{license_result.message}")
+
         info = generate_long_text_sample(output)
         result["sample"] = asdict(info)
         result["source_text"] = sample_text()

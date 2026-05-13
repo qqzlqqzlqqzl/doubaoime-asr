@@ -233,6 +233,41 @@ EXE 内置「使用说明」窗口，安装后开始菜单也会生成 Help 快�
 
 该测试会生成 `.devtools\samples\long-text-volume-stress.wav`，并输出 `release\test-reports\long-text-asr.json`。样本由多段中文 TTS 拼接而成，段间包含停顿，音量会按高低模式变化。
 
+### 激活码分发控制
+
+默认开发构建不要求激活。要做受控分发版，先准备一个授权服务器地址，然后在打包前设置环境变量：
+
+```powershell
+$env:DOUBAO_ASR_REQUIRE_ACTIVATION = "1"
+$env:DOUBAO_ASR_LICENSE_URL = "https://你的授权服务器域名"
+.\build-desktop-exe.ps1
+```
+
+打包脚本会把授权配置写进 EXE。用户首次启动受控分发版时需要输入激活码；激活码会和当前电脑设备码绑定，复制安装包到其他电脑后仍需要新的可用激活码。
+
+项目里带了一个最小示例授权服务器，方便先跑通闭环：
+
+```powershell
+python tools/license_server.py --codes tools/license-codes.sample.json --host 127.0.0.1 --port 8765
+```
+
+本地测试受控构建时可使用：
+
+```powershell
+$env:DOUBAO_ASR_REQUIRE_ACTIVATION = "1"
+$env:DOUBAO_ASR_LICENSE_URL = "http://127.0.0.1:8765"
+.\build-desktop-exe.ps1
+```
+
+示例服务器协议：
+
+| 接口 | 用途 |
+|------|------|
+| `POST /api/activate` | 提交 `activation_code`、`device_id`、`app_version`，成功后返回授权 token |
+| `POST /api/verify` | 提交 `token`、`device_id`、`app_version`，校验本机授权是否仍有效 |
+
+生产分发建议把授权服务器部署到 HTTPS 域名，修改 `tools/license-codes.sample.json` 为自己的激活码文件，并用 `DOUBAO_ASR_LICENSE_SECRET` 设置服务端签名密钥。客户端激活只能防止普通转发滥用，不能绝对防逆向；如果要更强控制，可以把 ASR 请求也代理到自己的后端，由后端按激活状态放行。
+
 产物：
 
 | 文件 | 用途 |

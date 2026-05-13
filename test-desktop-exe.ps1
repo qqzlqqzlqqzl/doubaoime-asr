@@ -28,9 +28,12 @@ function Invoke-AppSelfTest {
     throw "Self-test report was not written: $ReportPath"
   }
 
-  $Report = Get-Content -Raw -LiteralPath $ReportPath | ConvertFrom-Json
+  $Report = Get-Content -Raw -Encoding UTF8 -LiteralPath $ReportPath | ConvertFrom-Json
   if (-not $Report.ok) {
     throw "Self-test report says ok=false: $ReportPath"
+  }
+  if ($null -eq $Report.license_config) {
+    throw "Self-test report is missing license_config: $ReportPath"
   }
   return $ReportPath
 }
@@ -60,6 +63,27 @@ function Remove-WithRetry {
 
 Invoke-AppSelfTest -ExePath $DistExe -ReportName "dist-self-test.json" | Out-Host
 Invoke-AppSelfTest -ExePath $PortableExe -ReportName "portable-self-test.json" | Out-Host
+
+$OldRequireActivation = $env:DOUBAO_ASR_REQUIRE_ACTIVATION
+$OldLicenseUrl = $env:DOUBAO_ASR_LICENSE_URL
+$OldConfigDir = $env:DOUBAO_ASR_CONFIG_DIR
+$ActivationConfigDir = Join-Path $ReportsDir "activation-self-test-config"
+Remove-Item -LiteralPath $ActivationConfigDir -Recurse -Force -ErrorAction SilentlyContinue
+try {
+  $env:DOUBAO_ASR_REQUIRE_ACTIVATION = "1"
+  $env:DOUBAO_ASR_LICENSE_URL = "http://127.0.0.1:9"
+  $env:DOUBAO_ASR_CONFIG_DIR = $ActivationConfigDir
+  $ActivationReportPath = Invoke-AppSelfTest -ExePath $DistExe -ReportName "activation-required-self-test.json"
+  $ActivationReport = Get-Content -Raw -Encoding UTF8 -LiteralPath $ActivationReportPath | ConvertFrom-Json
+  if (-not $ActivationReport.license_config.require_activation) {
+    throw "Activation-required self-test did not enable activation mode"
+  }
+}
+finally {
+  $env:DOUBAO_ASR_REQUIRE_ACTIVATION = $OldRequireActivation
+  $env:DOUBAO_ASR_LICENSE_URL = $OldLicenseUrl
+  $env:DOUBAO_ASR_CONFIG_DIR = $OldConfigDir
+}
 
 if (-not (Test-Path $ReleaseZip)) {
   throw "Missing release zip: $ReleaseZip"
