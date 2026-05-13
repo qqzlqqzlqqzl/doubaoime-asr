@@ -70,6 +70,10 @@ DELAY_SPECS = {
     "auto_send_delay_ms": (0, 500, 10),
 }
 BASE_TK_SCALING = 96 / 72
+DEFAULT_WINDOW_WIDTH = 900
+DEFAULT_WINDOW_HEIGHT = 680
+MIN_WINDOW_WIDTH = 560
+MIN_WINDOW_HEIGHT = 420
 _DPI_AWARENESS_CONFIGURED = False
 
 
@@ -640,12 +644,17 @@ class DesktopApp:
         self._quitting = False
         self.tray_actions: queue.Queue[str] = queue.Queue()
         self.tray_icon: WindowsTrayIcon | None = None
+        self.default_window_scaled = ui_window_size is None
         if ui_scale_factor is not None:
             self.root.tk.call("tk", "scaling", BASE_TK_SCALING * max(0.75, min(3.0, ui_scale_factor)))
         self.root.title("豆包 ASR 助手")
-        self.root.geometry(ui_window_size or "900x680")
+        if ui_window_size:
+            self.root.geometry(ui_window_size)
+        else:
+            window_width, window_height = self.scaled_window_size(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
+            self.root.geometry(f"{window_width}x{window_height}")
         min_window_scale = min(max(self.current_ui_scale_factor(), 1.0), 1.35)
-        self.root.minsize(int(560 * min_window_scale), int(420 * min_window_scale))
+        self.root.minsize(int(MIN_WINDOW_WIDTH * min_window_scale), int(MIN_WINDOW_HEIGHT * min_window_scale))
         self.root.protocol("WM_DELETE_WINDOW", self.hide_main_window)
         self._configure_ttk_styles()
         self.config = load_config()
@@ -871,6 +880,25 @@ class DesktopApp:
             return max(0.75, float(self.root.tk.call("tk", "scaling")) / BASE_TK_SCALING)
         except (tk.TclError, ValueError):
             return 1.0
+
+    def scaled_window_size(
+        self,
+        base_width: int,
+        base_height: int,
+        max_width_ratio: float = 0.9,
+        max_height_ratio: float = 0.88,
+    ) -> tuple[int, int]:
+        scale = min(max(self.current_ui_scale_factor(), 1.0), 2.5)
+        width = int(round(base_width * scale))
+        height = int(round(base_height * scale))
+        try:
+            screen_width = max(int(self.root.winfo_screenwidth()), base_width)
+            screen_height = max(int(self.root.winfo_screenheight()), base_height)
+        except tk.TclError:
+            return width, height
+        max_width = max(base_width, int(screen_width * max_width_ratio))
+        max_height = max(base_height, int(screen_height * max_height_ratio))
+        return min(width, max_width), min(height, max_height)
 
     def show_main_window(self) -> None:
         self.root.deiconify()
@@ -1217,16 +1245,16 @@ class DesktopApp:
         root_height = max(self.root.winfo_height(), 1)
         available_width = max(self.settings_table.winfo_width(), root_width - 40, 1)
         ui_scale = self.current_ui_scale_factor()
-        high_scale = ui_scale >= 1.35
-        very_high_scale = ui_scale >= 1.75
-        narrow = root_width <= 620 or (high_scale and root_width <= 760)
-        short = root_height <= 540 or (high_scale and root_height <= 680)
+        logical_width = root_width / max(ui_scale, 1.0)
+        logical_height = root_height / max(ui_scale, 1.0)
+        logical_available_width = available_width / max(ui_scale, 1.0)
+        narrow = logical_width <= 620
+        short = logical_height <= 540
         tiny = (
-            (root_width <= 620 and root_height <= 430)
-            or (high_scale and root_height <= 600)
-            or (very_high_scale and root_height <= 680)
+            (logical_width <= 620 and logical_height <= 430)
+            or logical_height <= 430
         )
-        compact = narrow or available_width < 760
+        compact = narrow or logical_available_width < 760
         show_desc = not narrow
         show_section_headers = not tiny
         desc_wrap = max(130, min(260, available_width - (300 if compact else 540)))
@@ -1396,8 +1424,11 @@ class DesktopApp:
             return
         width = max(self.action_buttons_frame.winfo_width(), 1)
         root_height = max(self.root.winfo_height(), 1)
-        tight = width <= 620 or root_height <= 540
-        roomy = width >= 760 and root_height >= 600
+        ui_scale = self.current_ui_scale_factor()
+        logical_width = width / max(ui_scale, 1.0)
+        logical_height = root_height / max(ui_scale, 1.0)
+        tight = logical_width <= 620 or logical_height <= 540
+        roomy = logical_width >= 760 and logical_height >= 600
         if root_height <= 430 and width >= 520:
             columns = len(self.action_buttons)
         else:
@@ -1476,10 +1507,15 @@ class DesktopApp:
             "root": {
                 "width": root_width,
                 "height": root_height,
+                "logical_width": round(root_width / max(self.current_ui_scale_factor(), 1.0), 1),
+                "logical_height": round(root_height / max(self.current_ui_scale_factor(), 1.0), 1),
             },
             "display": {
                 "tk_scaling": float(self.root.tk.call("tk", "scaling")),
                 "ui_scale_factor": round(self.current_ui_scale_factor(), 3),
+                "screen_width": self.root.winfo_screenwidth(),
+                "screen_height": self.root.winfo_screenheight(),
+                "default_window_scaled": self.default_window_scaled,
             },
             "content": {
                 "right": content_right,

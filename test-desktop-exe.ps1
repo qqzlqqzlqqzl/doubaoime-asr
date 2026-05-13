@@ -376,6 +376,66 @@ function Assert-UiLayoutFits {
   return $ReportPath
 }
 
+function Assert-UiVisualSizeAtScale {
+  param([Parameter(Mandatory = $true)][string]$ReportPath)
+
+  $Layout = Wait-UiLayoutReport -ReportPath $ReportPath
+  $Scale = [double]$Layout.display.ui_scale_factor
+  if ($Scale -lt 1.9) {
+    return $ReportPath
+  }
+
+  $Title = $Layout.widgets | Where-Object { $_.name -eq "title" } | Select-Object -First 1
+  if ($null -eq $Title -or [int]$Title.height -lt 38) {
+    throw "High-DPI title is too small in layout report: $ReportPath"
+  }
+  $Entries = @($Layout.widgets | Where-Object { $_.name -like "setting-*-entry" })
+  $SmallEntries = @($Entries | Where-Object { [int]$_.height -lt 38 })
+  if ($SmallEntries.Count -gt 0) {
+    throw "High-DPI entry widgets are too small: $($SmallEntries.name -join ', ')"
+  }
+  $RecordButtons = @($Layout.widgets | Where-Object { $_.name -like "setting-*-button" })
+  $SmallRecordButtons = @($RecordButtons | Where-Object { [int]$_.height -lt 40 })
+  if ($SmallRecordButtons.Count -gt 0) {
+    throw "High-DPI setting buttons are too small: $($SmallRecordButtons.name -join ', ')"
+  }
+  $ActionButtons = @($Layout.widgets | Where-Object { $_.name -like "action-*" })
+  $SmallActions = @($ActionButtons | Where-Object { [int]$_.height -lt 44 -or [int]$_.width -lt 110 })
+  if ($SmallActions.Count -gt 0) {
+    throw "High-DPI action buttons are too small: $($SmallActions.name -join ', ')"
+  }
+  $Scales = @($Layout.widgets | Where-Object { $_.name -like "setting-*-scale" })
+  $SmallScales = @($Scales | Where-Object { [int]$_.height -lt 18 })
+  if ($SmallScales.Count -gt 0) {
+    throw "High-DPI sliders are too small: $($SmallScales.name -join ', ')"
+  }
+  return $ReportPath
+}
+
+function Assert-DefaultScaleWindowComfortable {
+  param([Parameter(Mandatory = $true)][string]$ReportPath)
+
+  $Layout = Wait-UiLayoutReport -ReportPath $ReportPath
+  $Scale = [double]$Layout.display.ui_scale_factor
+  if ($Scale -lt 1.2) {
+    return $ReportPath
+  }
+  if (-not ($Layout.display.PSObject.Properties.Name -contains "default_window_scaled") -or -not $Layout.display.default_window_scaled) {
+    throw "Default window scaling was not applied: $ReportPath"
+  }
+  $ScreenWidth = [int]$Layout.display.screen_width
+  $ScreenHeight = [int]$Layout.display.screen_height
+  $WindowScale = [Math]::Min([Math]::Max($Scale, 1.0), 2.5)
+  $ExpectedWidth = [Math]::Min([int][Math]::Round(900 * $WindowScale), [int]($ScreenWidth * 0.9))
+  $ExpectedHeight = [Math]::Min([int][Math]::Round(680 * $WindowScale), [int]($ScreenHeight * 0.88))
+  $RootWidth = [int]$Layout.root.width
+  $RootHeight = [int]$Layout.root.height
+  if ($RootWidth -lt ($ExpectedWidth - 32) -or $RootHeight -lt ($ExpectedHeight - 32)) {
+    throw "Default high-DPI window is too small: got ${RootWidth}x${RootHeight}, expected about ${ExpectedWidth}x${ExpectedHeight}"
+  }
+  return $ReportPath
+}
+
 function Assert-CloseToTrayKeepsAlive {
   param([Parameter(Mandatory = $true)][string]$ExePath)
 
@@ -508,6 +568,7 @@ $VisibleApp = Start-Process $InstalledExe -ArgumentList @("--background", "--ui-
 try {
   Save-AppWindowScreenshot -ProcessId $VisibleApp.Id -ExePath $InstalledExe -ReportName "installed-ui-smoke.png" -PreserveWindowSize -Background | Out-Host
   Assert-UiLayoutFits -ReportPath $VisibleLayoutReport | Out-Host
+  Assert-UiVisualSizeAtScale -ReportPath $VisibleLayoutReport | Out-Host
 }
 finally {
   Stop-Process -Id $VisibleApp.Id -Force -ErrorAction SilentlyContinue
@@ -520,6 +581,7 @@ $NarrowApp = Start-Process $InstalledExe -ArgumentList @("--background", "--ui-l
 try {
   Save-AppWindowScreenshot -ProcessId $NarrowApp.Id -ExePath $InstalledExe -ReportName "installed-ui-smoke-narrow.png" -PreserveWindowSize -Background | Out-Host
   Assert-UiLayoutFits -ReportPath $NarrowLayoutReport | Out-Host
+  Assert-UiVisualSizeAtScale -ReportPath $NarrowLayoutReport | Out-Host
 }
 finally {
   Stop-Process -Id $NarrowApp.Id -Force -ErrorAction SilentlyContinue
@@ -532,6 +594,7 @@ $MinimumApp = Start-Process $InstalledExe -ArgumentList @("--background", "--ui-
 try {
   Save-AppWindowScreenshot -ProcessId $MinimumApp.Id -ExePath $InstalledExe -ReportName "installed-ui-smoke-minimum.png" -PreserveWindowSize -Background | Out-Host
   Assert-UiLayoutFits -ReportPath $MinimumLayoutReport | Out-Host
+  Assert-UiVisualSizeAtScale -ReportPath $MinimumLayoutReport | Out-Host
 }
 finally {
   Stop-Process -Id $MinimumApp.Id -Force -ErrorAction SilentlyContinue
@@ -554,6 +617,7 @@ foreach ($Scenario in $ScaleScenarios) {
   ) -PassThru
   try {
     Assert-UiLayoutFits -ReportPath $ScaleReport | Out-Host
+    Assert-UiVisualSizeAtScale -ReportPath $ScaleReport | Out-Host
     $ScaleLayout = Wait-UiLayoutReport -ReportPath $ScaleReport
     $ActualScale = [double]$ScaleLayout.display.ui_scale_factor
     $ExpectedScale = [double]$Scenario.Scale
@@ -565,6 +629,24 @@ foreach ($Scenario in $ScaleScenarios) {
     Stop-Process -Id $ScaleApp.Id -Force -ErrorAction SilentlyContinue
     Stop-AppFromPath -ExePath $InstalledExe
   }
+}
+
+$DefaultScaleReport = Join-Path $ReportsDir "installed-ui-smoke-scale200-default-layout.json"
+Remove-Item -LiteralPath $DefaultScaleReport -Force -ErrorAction SilentlyContinue
+$DefaultScaleApp = Start-Process $InstalledExe -ArgumentList @(
+  "--background",
+  "--ui-layout-report", $DefaultScaleReport,
+  "--ui-scale-factor", "2.0"
+) -PassThru
+try {
+  Save-AppWindowScreenshot -ProcessId $DefaultScaleApp.Id -ExePath $InstalledExe -ReportName "installed-ui-smoke-scale200-default.png" -PreserveWindowSize -Background | Out-Host
+  Assert-UiLayoutFits -ReportPath $DefaultScaleReport | Out-Host
+  Assert-UiVisualSizeAtScale -ReportPath $DefaultScaleReport | Out-Host
+  Assert-DefaultScaleWindowComfortable -ReportPath $DefaultScaleReport | Out-Host
+}
+finally {
+  Stop-Process -Id $DefaultScaleApp.Id -Force -ErrorAction SilentlyContinue
+  Stop-AppFromPath -ExePath $InstalledExe
 }
 
 $App = Start-Process $InstalledExe -ArgumentList "--hidden" -PassThru
