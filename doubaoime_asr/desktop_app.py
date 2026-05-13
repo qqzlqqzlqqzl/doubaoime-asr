@@ -563,7 +563,22 @@ ALIASES = {
     "lwin": "lwin",
     "win": "win",
     "cmd": "win",
+    "left alt": "lalt",
+    "左alt": "lalt",
+    "lalt": "lalt",
+    "right alt": "ralt",
+    "右alt": "ralt",
+    "ralt": "ralt",
     "alt": "alt",
+    "atl": "alt",
+    "alt gr": "ralt",
+    "altgr": "ralt",
+    "left shift": "lshift",
+    "左shift": "lshift",
+    "lshift": "lshift",
+    "right shift": "rshift",
+    "右shift": "rshift",
+    "rshift": "rshift",
     "shift": "shift",
     "鼠标侧键1": "xbutton1",
     "mouse x1": "xbutton1",
@@ -607,12 +622,17 @@ def format_hotkey(keys: Iterable[str]) -> str:
 
 def key_name(key: keyboard.Key | keyboard.KeyCode) -> str | None:
     key_map = {
+        keyboard.Key.ctrl: "ctrl",
         keyboard.Key.ctrl_l: "lctrl",
         keyboard.Key.ctrl_r: "rctrl",
+        keyboard.Key.cmd: "win",
         keyboard.Key.cmd_l: "lwin",
         keyboard.Key.cmd_r: "rwin",
+        keyboard.Key.alt: "alt",
         keyboard.Key.alt_l: "lalt",
         keyboard.Key.alt_r: "ralt",
+        keyboard.Key.alt_gr: "ralt",
+        keyboard.Key.shift: "shift",
         keyboard.Key.shift_l: "lshift",
         keyboard.Key.shift_r: "rshift",
         keyboard.Key.esc: "esc",
@@ -2223,7 +2243,13 @@ def run_self_test(report_path: str | None = None) -> int:
             raise ValueError("default mouse side key no longer starts toggle recording")
         if idle_start_mode_for_active_keys("lwin", {"lctrl", "lwin"}, default_config) != "hold_send":
             raise ValueError("default hold-send combo no longer starts hold_send recording")
-        return "configured hotkeys are valid, bare text start keys are rejected, and xian typing is safe"
+        if key_name(keyboard.Key.alt) != "alt":
+            raise ValueError("generic Alt key is not captured")
+        if format_hotkey({key_name(keyboard.Key.alt), "m"}) != "alt+m":
+            raise ValueError("Alt+M hotkey capture would lose Alt")
+        if parse_hotkey("atl+m") != frozenset({"alt", "m"}):
+            raise ValueError("common Alt typo alias is not normalized")
+        return "configured hotkeys are valid, bare text start keys are rejected, xian typing is safe, and Alt combos are captured"
 
     def opus_check() -> str:
         encoder = AudioEncoder(ASRConfig(credential_path=str(credential_path)))
