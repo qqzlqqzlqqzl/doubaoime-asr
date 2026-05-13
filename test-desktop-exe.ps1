@@ -23,6 +23,7 @@ public class DoubaoWin32Capture {
   [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
   public static string GetWindowTitle(IntPtr hWnd) {
     StringBuilder text = new StringBuilder(256);
@@ -52,6 +53,10 @@ public class DoubaoWin32Capture {
 }
 "@
 [DoubaoWin32Capture]::SetProcessDPIAware() | Out-Null
+
+$HwndTopMost = [IntPtr](-1)
+$HwndNoTopMost = [IntPtr](-2)
+$SwpShowWindow = [uint32]0x0040
 
 function Invoke-AppSelfTest {
   param(
@@ -123,6 +128,7 @@ function Save-AppWindowScreenshot {
   )
 
   $Window = Wait-AppWindow -ProcessId $ProcessId -ExePath $ExePath
+  [DoubaoWin32Capture]::SetWindowPos($Window.WindowHandle, $HwndTopMost, 40, 80, 820, 680, $SwpShowWindow) | Out-Null
   [DoubaoWin32Capture]::MoveWindow($Window.WindowHandle, 40, 80, 820, 680, $true) | Out-Null
   [DoubaoWin32Capture]::SetForegroundWindow($Window.WindowHandle) | Out-Null
   Start-Sleep -Milliseconds $StabilizeMilliseconds
@@ -146,11 +152,39 @@ function Save-AppWindowScreenshot {
   finally {
     $Graphics.Dispose()
     $Bitmap.Dispose()
+    [DoubaoWin32Capture]::SetWindowPos($Window.WindowHandle, $HwndNoTopMost, $Rect.Left, $Rect.Top, $Width, $Height, $SwpShowWindow) | Out-Null
   }
   if (-not (Test-Path $ScreenshotPath)) {
     throw "UI screenshot was not written: $ScreenshotPath"
   }
+  Assert-UiScreenshotLooksVisible -ScreenshotPath $ScreenshotPath
   return $ScreenshotPath
+}
+
+function Assert-UiScreenshotLooksVisible {
+  param([Parameter(Mandatory = $true)][string]$ScreenshotPath)
+
+  $Bitmap = [System.Drawing.Bitmap]::FromFile($ScreenshotPath)
+  try {
+    $Total = 0.0
+    $Count = 0
+    $StepX = [Math]::Max([int]($Bitmap.Width / 40), 1)
+    $StepY = [Math]::Max([int]($Bitmap.Height / 40), 1)
+    for ($Y = 0; $Y -lt $Bitmap.Height; $Y += $StepY) {
+      for ($X = 0; $X -lt $Bitmap.Width; $X += $StepX) {
+        $Color = $Bitmap.GetPixel($X, $Y)
+        $Total += (0.2126 * $Color.R) + (0.7152 * $Color.G) + (0.0722 * $Color.B)
+        $Count += 1
+      }
+    }
+    $AverageLuma = $Total / [Math]::Max($Count, 1)
+    if ($AverageLuma -lt 150) {
+      throw "UI screenshot looks too dark to be the light Tk settings window (average luma $([Math]::Round($AverageLuma, 2))): $ScreenshotPath"
+    }
+  }
+  finally {
+    $Bitmap.Dispose()
+  }
 }
 
 function Stop-AppFromPath {
