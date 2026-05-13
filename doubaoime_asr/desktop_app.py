@@ -224,13 +224,13 @@ class DesktopApp:
         self,
         hidden: bool = False,
         show_help: bool = False,
-        scroll_bottom: bool = False,
         ui_layout_report: str | None = None,
+        ui_window_size: str | None = None,
     ) -> None:
         self.root = tk.Tk()
         self.root.title("豆包 ASR 助手")
-        self.root.geometry("900x680")
-        self.root.minsize(760, 520)
+        self.root.geometry(ui_window_size or "900x680")
+        self.root.minsize(560, 420)
         self.root.protocol("WM_DELETE_WINDOW", self.root.withdraw)
         self.config = load_config()
         self.license_config = load_license_config()
@@ -248,8 +248,16 @@ class DesktopApp:
         self.final_text = ""
         self.entries: dict[str, tk.Entry] = {}
         self.vars: dict[str, tk.BooleanVar] = {}
-        self.settings_canvas: tk.Canvas | None = None
-        self.keep_settings_scrolled_bottom = scroll_bottom
+        self.settings_outer: tk.Frame | None = None
+        self.settings_title_label: tk.Label | None = None
+        self.settings_status_label: tk.Label | None = None
+        self.settings_table: tk.Frame | None = None
+        self.settings_rows: list[dict[str, tk.Widget | None]] = []
+        self.settings_checks_frame: tk.Frame | None = None
+        self.settings_checkbuttons: list[tk.Checkbutton] = []
+        self.settings_help_label: tk.Label | None = None
+        self.action_buttons_frame: tk.Frame | None = None
+        self.action_buttons: list[tk.Button] = []
         self.ui_layout_report = Path(ui_layout_report) if ui_layout_report else None
         self.help_win: tk.Toplevel | None = None
         self.activation_win: tk.Toplevel | None = None
@@ -268,11 +276,8 @@ class DesktopApp:
             self.root.after(100, self.show_main_window)
         if show_help:
             self.root.after(100, self.show_help)
-        if scroll_bottom:
-            for delay_ms in (350, 750, 1250, 1800, 2600, 3800, 5200):
-                self.root.after(delay_ms, self.scroll_settings_bottom)
         if self.ui_layout_report is not None:
-            self.root.after(6500, self.write_ui_layout_report)
+            self.root.after(800, self.write_ui_layout_report)
 
     def run(self) -> None:
         self.root.mainloop()
@@ -289,32 +294,21 @@ class DesktopApp:
         shell = tk.Frame(self.root)
         shell.pack(fill="both", expand=True)
 
-        canvas = tk.Canvas(shell, highlightthickness=0)
-        scrollbar = tk.Scrollbar(shell, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
-        self.settings_canvas = canvas
+        outer = tk.Frame(shell, padx=22, pady=18)
+        outer.pack(fill="both", expand=True)
+        outer.bind("<Configure>", lambda _event: self.root.after_idle(self.layout_settings_controls))
+        self.root.bind("<Configure>", lambda _event: self.root.after_idle(self.layout_settings_controls), add="+")
+        self.settings_outer = outer
 
-        outer = tk.Frame(canvas, padx=22, pady=18)
-        window_id = canvas.create_window((0, 0), window=outer, anchor="nw")
-
-        def update_scroll_region(_event=None) -> None:
-            canvas.configure(scrollregion=canvas.bbox("all"))
-            self._request_settings_bottom_scroll()
-
-        def fit_width(event) -> None:
-            canvas.itemconfigure(window_id, width=event.width)
-            self._request_settings_bottom_scroll()
-
-        outer.bind("<Configure>", update_scroll_region)
-        canvas.bind("<Configure>", fit_width)
-
-        tk.Label(outer, text="豆包 ASR 助手", font=("Microsoft YaHei UI", 20, "bold")).pack(anchor="w")
-        tk.Label(outer, textvariable=self.status_var, fg="#5d6b82").pack(anchor="w", pady=(4, 16))
+        self.settings_title_label = tk.Label(outer, text="豆包 ASR 助手", font=("Microsoft YaHei UI", 20, "bold"))
+        self.settings_title_label.pack(anchor="w")
+        self.settings_status_label = tk.Label(outer, textvariable=self.status_var, fg="#5d6b82", anchor="w", justify="left")
+        self.settings_status_label.pack(anchor="w", fill="x", pady=(4, 16))
 
         table = tk.Frame(outer)
         table.pack(fill="x")
+        self.settings_table = table
+        self.settings_rows.clear()
         fields = [
             ("hold_key", "按住说", "按住说话，松开后识别并插入"),
             ("toggle_key", "自由说", "按一次开始，再按一次结束"),
@@ -328,42 +322,54 @@ class DesktopApp:
         for key, label, desc in fields:
             row_frame = tk.Frame(table)
             row_frame.pack(fill="x", pady=5)
-            row_frame.columnconfigure(3, weight=1)
-            tk.Label(
+            label_widget = tk.Label(
                 row_frame,
                 text=label,
                 anchor="w",
                 font=("Microsoft YaHei UI", 10, "bold"),
-            ).grid(row=0, column=0, sticky="w", padx=(0, 8))
-            tk.Label(
+            )
+            desc_widget = tk.Label(
                 row_frame,
                 text=desc,
                 anchor="w",
                 fg="#5d6b82",
                 wraplength=170,
                 justify="left",
-            ).grid(row=0, column=1, sticky="w", padx=(0, 8))
+            )
             entry = tk.Entry(row_frame, width=10)
             entry.insert(0, str(getattr(self.config, key)))
             self.entries[key] = entry
+            button: tk.Button | None = None
             if key.endswith("_key"):
-                tk.Button(row_frame, text="录制", command=lambda field=key: self.start_key_record(field), width=5).grid(row=0, column=2, padx=(0, 8))
-                entry.grid(row=0, column=3, sticky="ew")
+                button = tk.Button(row_frame, text="录制", command=lambda field=key: self.start_key_record(field), width=5)
             elif key == "credential_path":
-                tk.Button(row_frame, text="选择", command=self.select_credential_file, width=5).grid(row=0, column=2, padx=(0, 8))
-                entry.grid(row=0, column=3, sticky="ew")
-            else:
-                entry.grid(row=0, column=2, columnspan=2, sticky="ew")
+                button = tk.Button(row_frame, text="选择", command=self.select_credential_file, width=5)
+            self.settings_rows.append(
+                {
+                    "frame": row_frame,
+                    "label": label_widget,
+                    "desc": desc_widget,
+                    "button": button,
+                    "entry": entry,
+                }
+            )
 
         checks = tk.Frame(outer)
         checks.pack(fill="x", pady=14)
+        self.settings_checks_frame = checks
+        self.settings_checkbuttons.clear()
         self.vars["protect_clipboard"] = tk.BooleanVar(value=self.config.protect_clipboard)
         self.vars["startup"] = tk.BooleanVar(value=self.config.startup)
-        tk.Checkbutton(checks, text="剪贴板保护", variable=self.vars["protect_clipboard"]).pack(side="left")
-        tk.Checkbutton(checks, text="开机自启动", variable=self.vars["startup"]).pack(side="left", padx=18)
+        protect_clipboard = tk.Checkbutton(checks, text="剪贴板保护", variable=self.vars["protect_clipboard"])
+        startup = tk.Checkbutton(checks, text="开机自启动", variable=self.vars["startup"])
+        protect_clipboard.pack(side="left")
+        startup.pack(side="left", padx=18)
+        self.settings_checkbuttons.extend([protect_clipboard, startup])
 
         buttons = tk.Frame(outer)
         buttons.pack(fill="x", pady=(4, 16))
+        self.action_buttons_frame = buttons
+        self.action_buttons.clear()
         actions = [
             ("保存配置", self.save_from_ui),
             ("显示悬浮窗", lambda: self.show_float("")),
@@ -372,60 +378,213 @@ class DesktopApp:
             ("打开配置目录", self.open_config_dir),
             ("隐藏窗口", self.root.withdraw),
         ]
-        for index, (text, command) in enumerate(actions):
-            row, column = divmod(index, 3)
-            buttons.columnconfigure(column, weight=1)
-            tk.Button(buttons, text=text, command=command, width=14).grid(row=row, column=column, sticky="ew", padx=6, pady=4)
+        for text, command in actions:
+            self.action_buttons.append(tk.Button(buttons, text=text, command=command, width=12))
 
         help_text = (
             "默认热键：rctrl / xbutton1 / lctrl+lwin / z。"
             "录音结束后会把识别文字粘贴到开始录音前的窗口。"
         )
-        tk.Label(outer, text=help_text, fg="#5d6b82", wraplength=660, justify="left").pack(anchor="w")
-        self._bind_settings_mousewheel(outer)
+        self.settings_help_label = tk.Label(outer, text=help_text, fg="#5d6b82", wraplength=660, justify="left")
+        self.settings_help_label.pack(anchor="w")
+        self.root.after_idle(self.layout_settings_controls)
 
-    def _bind_settings_mousewheel(self, widget: tk.Widget) -> None:
-        widget.bind("<MouseWheel>", self._on_settings_mousewheel, add="+")
-        for child in widget.winfo_children():
-            self._bind_settings_mousewheel(child)
-
-    def _on_settings_mousewheel(self, event) -> None:
-        if self.settings_canvas is None:
+    def layout_settings_controls(self) -> None:
+        if self.settings_table is None:
             return
-        step = -1 if event.delta > 0 else 1
-        self.settings_canvas.yview_scroll(step * 3, "units")
 
-    def _request_settings_bottom_scroll(self) -> None:
-        if self.keep_settings_scrolled_bottom and self.settings_canvas is not None:
-            self.root.after_idle(self.scroll_settings_bottom)
+        root_width = max(self.root.winfo_width(), 1)
+        root_height = max(self.root.winfo_height(), 1)
+        available_width = max(self.settings_table.winfo_width(), root_width - 40, 1)
+        narrow = root_width <= 620
+        short = root_height <= 540
+        tiny = root_width <= 620 and root_height <= 430
+        compact = narrow or available_width < 720
+        desc_inline = short and not narrow
+        single_line = narrow
+        desc_wrap = max(150, min(320, available_width - (220 if compact else 520)))
+        outer_padx = 8 if tiny else 12 if short or compact else 22
+        outer_pady = 6 if tiny else 8 if short else 10 if compact else 18
+        row_pady = 1 if tiny else 2 if short else 3 if compact else 5
+        title_size = 14 if tiny else 16 if short or compact else 20
+        normal_size = 8 if tiny else 9 if short or compact else 10
+        desc_size = 8 if compact or short else 9
+        normal_font = ("Microsoft YaHei UI", normal_size)
+        desc_font = ("Microsoft YaHei UI", desc_size)
 
-    def scroll_settings_bottom(self) -> None:
-        if self.settings_canvas is not None:
-            self.root.update_idletasks()
-            self.settings_canvas.configure(scrollregion=self.settings_canvas.bbox("all"))
-            self.settings_canvas.yview_moveto(1.0)
-            self.settings_canvas.yview_scroll(1000, "units")
-            self.root.update_idletasks()
+        if self.settings_outer is not None:
+            self.settings_outer.configure(padx=outer_padx, pady=outer_pady)
+        if self.settings_title_label is not None:
+            self.settings_title_label.configure(font=("Microsoft YaHei UI", title_size, "bold"))
+        if self.settings_status_label is not None:
+            self.settings_status_label.configure(font=normal_font, wraplength=max(240, available_width - 20))
+            self.settings_status_label.pack_configure(pady=(1 if tiny else 3, 4 if short else 10 if compact else 16))
+
+        for row in self.settings_rows:
+            frame = row["frame"]
+            label = row["label"]
+            desc = row["desc"]
+            button = row["button"]
+            entry = row["entry"]
+            if not isinstance(frame, tk.Frame) or label is None or desc is None or entry is None:
+                continue
+
+            frame.pack_configure(pady=row_pady)
+            for widget in (label, desc, button, entry):
+                if widget is not None:
+                    widget.grid_forget()
+                    widget.configure(font=desc_font if widget is desc else normal_font)
+            for column in range(4):
+                frame.columnconfigure(column, weight=0, minsize=0)
+
+            desc.configure(wraplength=desc_wrap)
+            if single_line:
+                frame.columnconfigure(2 if button is not None else 1, weight=1)
+                label.grid(row=0, column=0, sticky="w", padx=(0, 6))
+                if button is not None:
+                    button.configure(width=4)
+                    button.grid(row=0, column=1, sticky="ew", padx=(0, 6))
+                    entry.grid(row=0, column=2, sticky="ew")
+                else:
+                    entry.grid(row=0, column=1, columnspan=2, sticky="ew")
+            elif compact and not desc_inline:
+                frame.columnconfigure(1, weight=1)
+                label.grid(row=0, column=0, sticky="w", padx=(0, 8), pady=(0, 2))
+                desc.grid(row=0, column=1, sticky="ew", pady=(0, 2))
+                if button is not None:
+                    button.configure(width=5)
+                    button.grid(row=1, column=0, sticky="ew", padx=(0, 8), pady=(2, 0))
+                    entry.grid(row=1, column=1, sticky="ew", pady=(2, 0))
+                else:
+                    entry.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(2, 0))
+            else:
+                frame.columnconfigure(3, weight=1)
+                label.grid(row=0, column=0, sticky="w", padx=(0, 14))
+                desc.grid(row=0, column=1, sticky="w", padx=(0, 14))
+                if button is not None:
+                    button.configure(width=5)
+                    button.grid(row=0, column=2, padx=(0, 8))
+                    entry.grid(row=0, column=3, sticky="ew")
+                else:
+                    entry.grid(row=0, column=2, columnspan=2, sticky="ew")
+
+        if self.settings_checks_frame is not None:
+            self.settings_checks_frame.pack_configure(pady=4 if tiny else 7 if short else 9 if compact else 14)
+        for index, checkbutton in enumerate(self.settings_checkbuttons):
+            checkbutton.configure(font=normal_font)
+            checkbutton.pack_configure(padx=0 if index == 0 else 10 if tiny else 18)
+
+        self.layout_action_buttons()
+        if self.settings_help_label is not None:
+            help_text = (
+                "默认热键：rctrl / xbutton1 / lctrl+lwin / z。保存前会检查快捷键冲突。"
+                if short
+                else "默认热键：rctrl / xbutton1 / lctrl+lwin / z。录音结束后会把识别文字粘贴到开始录音前的窗口。"
+            )
+            self.settings_help_label.configure(
+                text=help_text,
+                font=desc_font,
+                wraplength=max(240, available_width - 20),
+            )
+            if tiny:
+                self.settings_help_label.pack_forget()
+            elif not self.settings_help_label.winfo_ismapped():
+                self.settings_help_label.pack(anchor="w")
+
+    def layout_action_buttons(self) -> None:
+        if self.action_buttons_frame is None:
+            return
+        width = max(self.action_buttons_frame.winfo_width(), 1)
+        root_height = max(self.root.winfo_height(), 1)
+        tight = width <= 620 or root_height <= 540
+        roomy = width >= 760 and root_height >= 600
+        columns = 3 if width >= 500 else 2 if width >= 340 else 1
+        button_font = ("Microsoft YaHei UI", 8 if tight else 9)
+        button_padx = 3 if tight else 6
+        button_pady = 2 if tight else 4
+        for column in range(3):
+            self.action_buttons_frame.columnconfigure(column, weight=0)
+        for button in self.action_buttons:
+            button.grid_forget()
+        for column in range(columns):
+            self.action_buttons_frame.columnconfigure(column, weight=1)
+        for index, button in enumerate(self.action_buttons):
+            button.configure(font=button_font)
+            row, column = divmod(index, columns)
+            button.grid(
+                row=row,
+                column=column,
+                sticky="" if roomy else "ew",
+                padx=button_padx,
+                pady=button_pady,
+            )
+
+    def _widget_bounds(self, name: str, widget: tk.Widget | None) -> dict[str, int | str] | None:
+        if widget is None or not widget.winfo_ismapped():
+            return None
+        root_x = self.root.winfo_rootx()
+        root_y = self.root.winfo_rooty()
+        x = widget.winfo_rootx() - root_x
+        y = widget.winfo_rooty() - root_y
+        width = widget.winfo_width()
+        height = widget.winfo_height()
+        return {
+            "name": name,
+            "x": x,
+            "y": y,
+            "width": width,
+            "height": height,
+            "right": x + width,
+            "bottom": y + height,
+        }
 
     def write_ui_layout_report(self) -> None:
-        if self.settings_canvas is None or self.ui_layout_report is None:
+        if self.ui_layout_report is None:
             return
         self.root.update_idletasks()
+        widgets: list[dict[str, int | str]] = []
+        for name, widget in (
+            ("title", self.settings_title_label),
+            ("status", self.settings_status_label),
+            ("checks", self.settings_checks_frame),
+            ("actions", self.action_buttons_frame),
+            ("help", self.settings_help_label),
+        ):
+            bounds = self._widget_bounds(name, widget)
+            if bounds is not None:
+                widgets.append(bounds)
+        for index, row in enumerate(self.settings_rows):
+            for key in ("label", "desc", "button", "entry"):
+                widget = row.get(key)
+                bounds = self._widget_bounds(f"setting-{index}-{key}", widget if isinstance(widget, tk.Widget) else None)
+                if bounds is not None:
+                    widgets.append(bounds)
+        for index, button in enumerate(self.action_buttons):
+            bounds = self._widget_bounds(f"action-{index}", button)
+            if bounds is not None:
+                widgets.append(bounds)
+
+        root_width = self.root.winfo_width()
+        root_height = self.root.winfo_height()
+        content_right = max((int(widget["right"]) for widget in widgets), default=0)
+        content_bottom = max((int(widget["bottom"]) for widget in widgets), default=0)
         report = {
             "root": {
-                "width": self.root.winfo_width(),
-                "height": self.root.winfo_height(),
+                "width": root_width,
+                "height": root_height,
             },
-            "canvas": {
-                "width": self.settings_canvas.winfo_width(),
-                "height": self.settings_canvas.winfo_height(),
-                "bbox": self.settings_canvas.bbox("all"),
-                "scrollregion": self.settings_canvas.cget("scrollregion"),
-                "yview": self.settings_canvas.yview(),
+            "content": {
+                "right": content_right,
+                "bottom": content_bottom,
+                "fits_horizontally": content_right <= root_width + 2,
+                "fits_vertically": content_bottom <= root_height + 2,
             },
+            "widgets": widgets,
         }
         self.ui_layout_report.parent.mkdir(parents=True, exist_ok=True)
         self.ui_layout_report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        if self.ui_layout_report is not None:
+            self.root.after(500, self.write_ui_layout_report)
 
     def start_key_record(self, field: str) -> None:
         self.recording_field = field
@@ -1041,8 +1200,8 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run the Doubao ASR desktop helper.")
     parser.add_argument("--hidden", action="store_true")
     parser.add_argument("--show-help", action="store_true", help="Open the desktop help window on startup.")
-    parser.add_argument("--ui-scroll-bottom", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--ui-layout-report", help=argparse.SUPPRESS)
+    parser.add_argument("--ui-window-size", help=argparse.SUPPRESS)
     parser.add_argument("--self-test", action="store_true", help="Run packaged app diagnostics and exit.")
     parser.add_argument("--self-test-report", help="Write self-test JSON report to this path.")
     parser.add_argument("--long-text-test", action="store_true", help="Generate the long text stress sample and optionally run ASR.")
@@ -1069,8 +1228,8 @@ def main(argv: list[str] | None = None) -> None:
     app = DesktopApp(
         hidden=args.hidden,
         show_help=args.show_help,
-        scroll_bottom=args.ui_scroll_bottom,
         ui_layout_report=args.ui_layout_report,
+        ui_window_size=args.ui_window_size,
     )
     app.run()
 

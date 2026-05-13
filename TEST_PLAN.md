@@ -64,7 +64,7 @@
 | E04 | 分发 zip 完整性 | zip 包含安装器、便携版、README 和 HELP |
 | E05 | 安装器静默安装 | 安装到临时目录成功 |
 | E06 | 安装后 EXE 自测 | 安装目录里的 EXE 自测通过 |
-| E07 | 安装后可见 UI 截图 | 启动可见窗口并写出 `release\test-reports\installed-ui-smoke.png` 和 `installed-ui-smoke-bottom.png`，用于检查界面截断、遮挡和按钮是否可见 |
+| E07 | 安装后可见 UI 截图和布局报告 | 启动可见窗口并写出 `release\test-reports\installed-ui-smoke.png`、`installed-ui-smoke-narrow.png`、`installed-ui-smoke-minimum.png` 及对应 `*-layout.json`，自动断言正常/窄/最小窗口下主界面不需要滚动、控件不溢出、输入框和底部按钮都在单页可见区域内 |
 | E08 | 安装后启动烟测 | `--hidden` 启动后进程保持运行 |
 
 ### 长文本 ASR 测试
@@ -101,7 +101,7 @@
 | U08 | 授权服务器不可达 | 断网或停掉授权服务器后启动/校验 | 显示服务器不可达，不崩溃 |
 | U09 | 帮助文档 | 打开“使用说明”和 release `HELP.md` | 能看到授权激活说明 |
 | U10 | 快捷键冲突 | 配置重复快捷键 | 弹窗提示冲突，不能保存重复配置 |
-| U11 | UI 截图复核 | 打开 `release\test-reports\installed-ui-smoke.png` 和 `installed-ui-smoke-bottom.png` | 主界面文字、输入框、录制按钮和底部操作按钮不被截断 |
+| U11 | UI 截图复核 | 打开 `release\test-reports\installed-ui-smoke.png`、`installed-ui-smoke-narrow.png`、`installed-ui-smoke-minimum.png` 和对应 `*-layout.json` | 主界面没有滚动条，文字、输入框、录制按钮和底部操作按钮不被截断，窄窗口和最小窗口下控件自动压缩和重排，布局报告显示 `fits_horizontally=true` 且 `fits_vertically=true` |
 
 ## 发版前建议
 
@@ -110,4 +110,4 @@
 3. 再按正式授权服务器设置环境变量，跑 `.\build-desktop-exe.ps1`。
 4. 跑 `.\test-desktop-exe.ps1`。
 5. 有 ASR 凭据时跑 `.\test-long-text-asr.ps1`。
-6. 手工验收 U01-U10，重点看授权窗口和未激活拦截。
+6. 手工验收 U01-U11，重点看授权窗口、未激活拦截和主界面缩放截图。
