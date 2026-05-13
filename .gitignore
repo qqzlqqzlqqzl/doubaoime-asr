@@ -1,10 +1,23 @@
-.venv/
-.devtools/
-node_modules/
-dist/
-build/
-target/
+# Python-generated files
 __pycache__/
+*.py[oc]
 *.py[cod]
+build/
+dist/
+wheels/
+*.egg-info
 .pytest_cache/
 .ruff_cache/
+
+# Virtual environments
+.venv/
+
+# Local development tools and build outputs
+.devtools/
+node_modules/
+target/
+
+# Project credentials and generated files
+doubaoime_v1.1.2_100102018_official
+credentials.json
+hook_*.js
