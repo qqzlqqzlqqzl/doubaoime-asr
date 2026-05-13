@@ -1978,6 +1978,8 @@ def run_self_test(report_path: str | None = None) -> int:
         "ok": True,
         "executable": sys.executable,
         "frozen": bool(getattr(sys, "frozen", False)),
+        "python_version": sys.version,
+        "platform": sys.platform,
         "app_config_dir": str(APP_CONFIG_DIR),
         "checks": [],
     }

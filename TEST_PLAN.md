@@ -52,6 +52,7 @@
 ```powershell
 .\build-desktop-exe.ps1
 .\test-desktop-exe.ps1
+.\test-windows-compat.ps1
 ```
 
 覆盖项：
@@ -68,6 +69,7 @@
 | E08 | 托盘图标烟测 | `--tray-self-test` 能创建并删除 Windows 系统托盘图标，报告 `started=true`、`stopped=true` |
 | E09 | 关闭窗口后台保活 | 对安装后主窗口发送关闭消息后，进程保持运行且主窗口不可见 |
 | E10 | 安装后后台保活烟测 | `--hidden` 启动后进程保持运行，主窗口隐藏时可通过系统托盘继续后台监听 |
+| E11 | Windows 兼容性审计 | `test-windows-compat.ps1` 写出 `release\test-reports\windows-compatibility.json`，明确 Win7/Win8.0 不支持、Win8.1 条件兼容、Win10/Win11 为推荐目标 |
 
 ### 长文本 ASR 测试
 
