@@ -27,6 +27,24 @@
 | A11 | token 被篡改 | 返回 `BAD_TOKEN`，本地授权被清理 |
 | A12 | 授权服务器临时不可达 | 返回校验失败，但保留本地 token，避免误删有效授权 |
 
+### 授权服务器压力测试
+
+运行：
+
+```powershell
+.\test-license-stress.ps1
+```
+
+覆盖项：
+
+| 编号 | 测试项 | 预期 |
+|------|------|------|
+| S01 | 单设备激活码并发激活 | 64 个不同设备同时抢同一个单设备码时，只有 1 个成功，其余返回 `DEVICE_LIMIT` |
+| S02 | 同一设备重复激活幂等 | 64 个并发请求使用同一设备码和同一激活码时全部成功，不增加设备数 |
+| S03 | token 并发校验 | 200 个并发校验请求全部通过 |
+| S04 | 无效码并发请求 | 64 个无效激活码请求全部返回 `UNKNOWN_CODE` |
+| S05 | 压测报告 | 写出 `release\test-reports\license-stress.json`，包含成功数、失败数、状态码分布和延迟统计 |
+
 ### EXE 和安装器测试
 
 运行：
@@ -86,7 +104,8 @@
 ## 发版前建议
 
 1. 先跑 `.\test-activation.ps1`。
-2. 再按正式授权服务器设置环境变量，跑 `.\build-desktop-exe.ps1`。
-3. 跑 `.\test-desktop-exe.ps1`。
-4. 有 ASR 凭据时跑 `.\test-long-text-asr.ps1`。
-5. 手工验收 U01-U10，重点看授权窗口和未激活拦截。
+2. 跑 `.\test-license-stress.ps1`。
+3. 再按正式授权服务器设置环境变量，跑 `.\build-desktop-exe.ps1`。
+4. 跑 `.\test-desktop-exe.ps1`。
+5. 有 ASR 凭据时跑 `.\test-long-text-asr.ps1`。
+6. 手工验收 U01-U10，重点看授权窗口和未激活拦截。

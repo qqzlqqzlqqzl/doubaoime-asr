@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import os
+import threading
 import time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -79,6 +80,7 @@ class LicenseServer(ThreadingHTTPServer):
         super().__init__(address, LicenseHandler)
         self.codes_path = codes_path
         self.secret = secret
+        self.lock = threading.RLock()
         self.data = self._load_codes()
 
     def _load_codes(self) -> dict[str, Any]:
@@ -153,28 +155,29 @@ class LicenseHandler(BaseHTTPRequestHandler):
         if not activation_code or not device_id:
             return 400, {"ok": False, "message": "缺少激活码或设备码。", "code": "BAD_REQUEST"}
 
-        code, entry = self._code_entry(activation_code)
-        error = self._entry_error(entry)
-        if error:
-            return error
+        with self.server.lock:
+            code, entry = self._code_entry(activation_code)
+            error = self._entry_error(entry)
+            if error:
+                return error
 
-        devices = entry.setdefault("devices", {})
-        max_devices = int(entry.get("max_devices", 1))
-        if device_id not in devices and len(devices) >= max_devices:
-            return 403, {"ok": False, "message": "这个激活码可绑定设备数已满。", "code": "DEVICE_LIMIT"}
+            devices = entry.setdefault("devices", {})
+            max_devices = int(entry.get("max_devices", 1))
+            if device_id not in devices and len(devices) >= max_devices:
+                return 403, {"ok": False, "message": "这个激活码可绑定设备数已满。", "code": "DEVICE_LIMIT"}
 
-        devices.setdefault(
-            device_id,
-            {
-                "activated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                "app_version": app_version,
-            },
-        )
-        devices[device_id]["last_activated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        self.server.save_codes()
+            devices.setdefault(
+                device_id,
+                {
+                    "activated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                    "app_version": app_version,
+                },
+            )
+            devices[device_id]["last_activated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            self.server.save_codes()
 
-        expires_at = entry.get("expires_at")
-        token = self._make_token(code, device_id, expires_at, app_version)
+            expires_at = entry.get("expires_at")
+            token = self._make_token(code, device_id, expires_at, app_version)
         return 200, {
             "ok": True,
             "message": "激活成功。",
@@ -196,16 +199,17 @@ class LicenseHandler(BaseHTTPRequestHandler):
         if token_payload.get("device_id") != device_id:
             return 403, {"ok": False, "message": "授权不属于这台电脑。", "code": "DEVICE_MISMATCH"}
 
-        code, entry = self._code_entry(str(token_payload.get("code", "")))
-        error = self._entry_error(entry)
-        if error:
-            return error
+        with self.server.lock:
+            code, entry = self._code_entry(str(token_payload.get("code", "")))
+            error = self._entry_error(entry)
+            if error:
+                return error
 
-        if device_id not in entry.setdefault("devices", {}):
-            return 403, {"ok": False, "message": "此设备未绑定该激活码。", "code": "UNBOUND_DEVICE"}
+            if device_id not in entry.setdefault("devices", {}):
+                return 403, {"ok": False, "message": "此设备未绑定该激活码。", "code": "UNBOUND_DEVICE"}
 
-        expires_at = entry.get("expires_at")
-        renewed_token = self._make_token(code, device_id, expires_at, str(payload.get("app_version", "")))
+            expires_at = entry.get("expires_at")
+            renewed_token = self._make_token(code, device_id, expires_at, str(payload.get("app_version", "")))
         return 200, {
             "ok": True,
             "message": "授权有效。",
