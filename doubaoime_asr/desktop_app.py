@@ -517,6 +517,9 @@ def hotkey_conflict_from_values(values: dict[str, str]) -> str | None:
         if parsed in seen:
             return f"{label} 与 {seen[parsed]} 使用了同一个快捷键：{value}"
         seen[parsed] = label
+        system_conflict = system_hotkey_conflict(parsed)
+        if system_conflict:
+            return f"{label} 可能不可用：{system_conflict}"
     return None
 
 
@@ -573,6 +576,7 @@ ALIASES = {
     "atl": "alt",
     "alt gr": "ralt",
     "altgr": "ralt",
+    "delete": "del",
     "left shift": "lshift",
     "左shift": "lshift",
     "lshift": "lshift",
@@ -592,11 +596,96 @@ ALIASES = {
 MODIFIER_KEYS = {"lctrl", "rctrl", "ctrl", "lalt", "ralt", "alt", "lshift", "rshift", "shift", "lwin", "rwin", "win"}
 MOUSE_HOTKEYS = {"xbutton1", "xbutton2", "middle"}
 CONTROL_HOTKEYS = {"esc", "enter", "tab", "space"}
+VK_KEYS = {
+    "esc": 0x1B,
+    "tab": 0x09,
+    "enter": 0x0D,
+    "space": 0x20,
+    "del": 0x2E,
+}
+RESERVED_HOTKEYS = {
+    frozenset({"alt", "tab"}): "Alt+Tab 是 Windows 切换窗口快捷键。",
+    frozenset({"alt", "f4"}): "Alt+F4 是 Windows 关闭窗口快捷键。",
+    frozenset({"ctrl", "alt", "del"}): "Ctrl+Alt+Del 是 Windows 安全快捷键。",
+    frozenset({"win", "l"}): "Win+L 是 Windows 锁屏快捷键。",
+    frozenset({"win", "d"}): "Win+D 是 Windows 显示桌面快捷键。",
+    frozenset({"win", "tab"}): "Win+Tab 是 Windows 任务视图快捷键。",
+}
 
 
 def parse_hotkey(value: str) -> frozenset[str]:
     parts = [part.strip().lower() for part in value.replace("＋", "+").split("+") if part.strip()]
     return frozenset(ALIASES.get(part, part) for part in parts)
+
+
+def generic_hotkey(keys: Iterable[str]) -> frozenset[str]:
+    generic = set(keys)
+    if "lctrl" in generic or "rctrl" in generic:
+        generic.discard("lctrl")
+        generic.discard("rctrl")
+        generic.add("ctrl")
+    if "lalt" in generic or "ralt" in generic:
+        generic.discard("lalt")
+        generic.discard("ralt")
+        generic.add("alt")
+    if "lshift" in generic or "rshift" in generic:
+        generic.discard("lshift")
+        generic.discard("rshift")
+        generic.add("shift")
+    if "lwin" in generic or "rwin" in generic:
+        generic.discard("lwin")
+        generic.discard("rwin")
+        generic.add("win")
+    return frozenset(generic)
+
+
+def hotkey_vk(keys: frozenset[str]) -> int | None:
+    normal_keys = [key for key in keys if key not in MODIFIER_KEYS]
+    if len(normal_keys) != 1:
+        return None
+    key = normal_keys[0]
+    if len(key) == 1 and key.isascii() and key.isalnum():
+        return ord(key.upper())
+    if key.startswith("f") and key[1:].isdigit():
+        number = int(key[1:])
+        if 1 <= number <= 24:
+            return 0x70 + number - 1
+    return VK_KEYS.get(key)
+
+
+def hotkey_modifiers(keys: frozenset[str]) -> int:
+    generic = generic_hotkey(keys)
+    modifiers = 0
+    if "alt" in generic:
+        modifiers |= 0x0001
+    if "ctrl" in generic:
+        modifiers |= 0x0002
+    if "shift" in generic:
+        modifiers |= 0x0004
+    if "win" in generic:
+        modifiers |= 0x0008
+    return modifiers
+
+
+def system_hotkey_conflict(keys: frozenset[str]) -> str | None:
+    generic = generic_hotkey(keys)
+    reserved = RESERVED_HOTKEYS.get(generic)
+    if reserved:
+        return reserved
+    if sys.platform != "win32" or not hasattr(ctypes, "windll"):
+        return None
+    if keys & MOUSE_HOTKEYS:
+        return None
+    vk = hotkey_vk(generic)
+    modifiers = hotkey_modifiers(generic)
+    if vk is None or not modifiers:
+        return None
+    hotkey_id = 0xD0B0
+    user32 = ctypes.windll.user32
+    if user32.RegisterHotKey(None, hotkey_id, modifiers | 0x4000, vk):
+        user32.UnregisterHotKey(None, hotkey_id)
+        return None
+    return "这个组合键已被 Windows 或其他正在运行的软件占用。"
 
 
 def is_plain_text_key(name: str) -> bool:
@@ -639,6 +728,7 @@ def key_name(key: keyboard.Key | keyboard.KeyCode) -> str | None:
         keyboard.Key.enter: "enter",
         keyboard.Key.space: "space",
         keyboard.Key.tab: "tab",
+        keyboard.Key.delete: "del",
     }
     if key in key_map:
         return key_map[key]
@@ -1992,14 +2082,13 @@ class DesktopApp:
         field = self.recording_field
         self.recording_field = None
         if field and value:
-            for other_field in HOTKEY_LABELS:
-                if other_field != field and parse_hotkey(self.entries[other_field].get()) == parse_hotkey(value):
-                    messagebox.showwarning(
-                        "快捷键冲突",
-                        f"这个快捷键已被「{HOTKEY_LABELS.get(other_field, other_field)}」使用，请换一个。",
-                    )
-                    self.status_var.set("快捷键冲突，请重新录制")
-                    return
+            values = {hotkey_field: self.entries[hotkey_field].get() for hotkey_field in HOTKEY_LABELS}
+            values[field] = value
+            conflict = hotkey_conflict_from_values(values)
+            if conflict:
+                messagebox.showwarning("快捷键冲突", conflict)
+                self.status_var.set("快捷键冲突，请重新录制")
+                return
             self.entries[field].delete(0, "end")
             self.entries[field].insert(0, value)
             self.status_var.set(f"已录制：{value}，点击保存配置生效")
@@ -2249,7 +2338,13 @@ def run_self_test(report_path: str | None = None) -> int:
             raise ValueError("Alt+M hotkey capture would lose Alt")
         if parse_hotkey("atl+m") != frozenset({"alt", "m"}):
             raise ValueError("common Alt typo alias is not normalized")
-        return "configured hotkeys are valid, bare text start keys are rejected, xian typing is safe, and Alt combos are captured"
+        if generic_hotkey(parse_hotkey("lalt+m")) != frozenset({"alt", "m"}):
+            raise ValueError("left/right modifier aliases are not normalized for conflict checks")
+        if hotkey_vk(parse_hotkey("alt+m")) != ord("M"):
+            raise ValueError("Alt+M cannot be converted to a Windows hotkey probe")
+        if system_hotkey_conflict(parse_hotkey("alt+tab")) is None:
+            raise ValueError("reserved Windows hotkey was not rejected")
+        return "configured hotkeys are valid, bare text start keys are rejected, xian typing is safe, Alt combos are captured, and Windows conflicts are checked"
 
     def opus_check() -> str:
         encoder = AudioEncoder(ASRConfig(credential_path=str(credential_path)))
