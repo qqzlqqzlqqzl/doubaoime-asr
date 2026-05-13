@@ -592,25 +592,31 @@ def sync_startup(enabled: bool) -> None:
 ALIASES = {
     "right ctrl": "rctrl",
     "右ctrl": "rctrl",
+    "右 ctrl": "rctrl",
     "rctrl": "rctrl",
     "left ctrl": "lctrl",
     "左ctrl": "lctrl",
+    "左 ctrl": "lctrl",
     "lctrl": "lctrl",
     "ctrl": "ctrl",
     "control": "ctrl",
     "right win": "rwin",
     "右win": "rwin",
+    "右 win": "rwin",
     "rwin": "rwin",
     "left win": "lwin",
     "左win": "lwin",
+    "左 win": "lwin",
     "lwin": "lwin",
     "win": "win",
     "cmd": "win",
     "left alt": "lalt",
     "左alt": "lalt",
+    "左 alt": "lalt",
     "lalt": "lalt",
     "right alt": "ralt",
     "右alt": "ralt",
+    "右 alt": "ralt",
     "ralt": "ralt",
     "alt": "alt",
     "atl": "alt",
@@ -619,19 +625,45 @@ ALIASES = {
     "delete": "del",
     "left shift": "lshift",
     "左shift": "lshift",
+    "左 shift": "lshift",
     "lshift": "lshift",
     "right shift": "rshift",
     "右shift": "rshift",
+    "右 shift": "rshift",
     "rshift": "rshift",
     "shift": "shift",
     "鼠标侧键1": "xbutton1",
+    "鼠标侧键 1": "xbutton1",
     "mouse x1": "xbutton1",
     "x1": "xbutton1",
     "xbutton1": "xbutton1",
     "鼠标侧键2": "xbutton2",
+    "鼠标侧键 2": "xbutton2",
     "mouse x2": "xbutton2",
     "x2": "xbutton2",
     "xbutton2": "xbutton2",
+}
+HOTKEY_DISPLAY_NAMES = {
+    "lctrl": "左 Ctrl",
+    "rctrl": "右 Ctrl",
+    "ctrl": "Ctrl",
+    "lalt": "左 Alt",
+    "ralt": "右 Alt",
+    "alt": "Alt",
+    "lshift": "左 Shift",
+    "rshift": "右 Shift",
+    "shift": "Shift",
+    "lwin": "左 Win",
+    "rwin": "右 Win",
+    "win": "Win",
+    "xbutton1": "鼠标侧键 1",
+    "xbutton2": "鼠标侧键 2",
+    "middle": "鼠标中键",
+    "esc": "Esc",
+    "enter": "Enter",
+    "tab": "Tab",
+    "space": "Space",
+    "del": "Delete",
 }
 MODIFIER_KEYS = {"lctrl", "rctrl", "ctrl", "lalt", "ralt", "alt", "lshift", "rshift", "shift", "lwin", "rwin", "win"}
 MOUSE_HOTKEYS = {"xbutton1", "xbutton2", "middle"}
@@ -747,6 +779,26 @@ def format_hotkey(keys: Iterable[str]) -> str:
     unique = list(dict.fromkeys(keys))
     unique.sort(key=lambda item: order.index(item) if item in order else 99)
     return "+".join(unique)
+
+
+def canonical_hotkey_value(value: str) -> str:
+    return format_hotkey(parse_hotkey(value))
+
+
+def display_hotkey_value(value: str | Iterable[str]) -> str:
+    if isinstance(value, str):
+        keys = parse_hotkey(value)
+    else:
+        keys = frozenset(value)
+    canonical = format_hotkey(keys)
+    if not canonical:
+        return ""
+    return " + ".join(HOTKEY_DISPLAY_NAMES.get(part, part.upper() if len(part) == 1 else part) for part in canonical.split("+"))
+
+
+def default_hotkey_summary() -> str:
+    defaults = DesktopConfig()
+    return " / ".join(display_hotkey_value(getattr(defaults, field)) for field in HOTKEY_LABELS)
 
 
 def key_name(key: keyboard.Key | keyboard.KeyCode) -> str | None:
@@ -1269,7 +1321,7 @@ class DesktopApp:
             self.action_buttons.append(button)
 
         help_text = (
-            "默认热键：rctrl / xbutton1 / lctrl+lwin / esc。"
+            f"默认热键：{default_hotkey_summary()}。"
             "录音结束后会把识别文字粘贴到开始录音前的窗口。"
         )
         self.settings_help_label = tk.Label(
@@ -1369,7 +1421,8 @@ class DesktopApp:
             width=10,
             style="Modern.TEntry",
         )
-        entry.insert(0, str(getattr(self.config, key)))
+        initial_value = display_hotkey_value(str(getattr(self.config, key))) if key in HOTKEY_LABELS else str(getattr(self.config, key))
+        entry.insert(0, initial_value)
         self.entries[key] = entry
         button: tk.Button | None = None
         if key in HOTKEY_LABELS:
@@ -1692,9 +1745,9 @@ class DesktopApp:
         self.layout_action_buttons(force=force)
         if self.settings_help_label is not None:
             help_text = (
-                "默认热键：rctrl / xbutton1 / lctrl+lwin / esc。保存前会检查快捷键冲突。"
+                f"默认热键：{default_hotkey_summary()}。保存前会检查快捷键冲突。"
                 if short
-                else "默认热键：rctrl / xbutton1 / lctrl+lwin / esc。录音结束后会把识别文字粘贴到开始录音前的窗口。"
+                else f"默认热键：{default_hotkey_summary()}。录音结束后会把识别文字粘贴到开始录音前的窗口。"
             )
             self.settings_help_label.configure(
                 text=help_text,
@@ -1827,6 +1880,11 @@ class DesktopApp:
                 }
                 for field, spec in DELAY_SPECS.items()
                 if field in self.delay_vars
+            },
+            "hotkeys": {
+                field: self.entries[field].get()
+                for field in HOTKEY_LABELS
+                if field in self.entries
             },
             "widgets": widgets,
         }
@@ -2108,12 +2166,19 @@ class DesktopApp:
                     messagebox.showwarning("配置错误", f"{key} 必须是数字。")
                     self.status_var.set("配置错误，请检查数字项")
                     return
+            elif key in HOTKEY_LABELS:
+                value = canonical_hotkey_value(value)
             elif key == "credential_path":
                 value = str(resolve_user_path(value))
             setattr(self.config, key, value)
         self.config.protect_clipboard = self.vars["protect_clipboard"].get()
         self.config.startup = self.vars["startup"].get()
         save_config(self.config)
+        for field in HOTKEY_LABELS:
+            entry = self.entries.get(field)
+            if entry is not None:
+                entry.delete(0, "end")
+                entry.insert(0, display_hotkey_value(str(getattr(self.config, field))))
         self.status_var.set("配置已保存")
 
     def reset_settings_to_defaults(self) -> None:
@@ -2121,7 +2186,7 @@ class DesktopApp:
         for key, entry in self.entries.items():
             if key in self.delay_vars:
                 continue
-            value = str(getattr(self.config, key))
+            value = display_hotkey_value(str(getattr(self.config, key))) if key in HOTKEY_LABELS else str(getattr(self.config, key))
             entry.delete(0, "end")
             entry.insert(0, value)
         for key, var in self.delay_vars.items():
@@ -2147,7 +2212,7 @@ class DesktopApp:
             return
         self.active_keys.add(name)
         if self.recording_field:
-            self.status_var.set(f"正在录制：{format_hotkey(self.active_keys)}")
+            self.status_var.set(f"正在录制：{display_hotkey_value(self.active_keys)}")
             return
         self._handle_active_press(name)
 
@@ -2188,9 +2253,10 @@ class DesktopApp:
                 messagebox.showwarning("快捷键冲突", conflict)
                 self.status_var.set("快捷键冲突，请重新录制")
                 return
+            display_value = display_hotkey_value(value)
             self.entries[field].delete(0, "end")
-            self.entries[field].insert(0, value)
-            self.status_var.set(f"已录制：{value}，点击保存配置生效")
+            self.entries[field].insert(0, display_value)
+            self.status_var.set(f"已录制：{display_value}，点击保存配置生效")
 
     def _handle_active_press(self, name: str) -> None:
         cancel_key = parse_hotkey(self.config.cancel_key)
@@ -2437,6 +2503,14 @@ def run_self_test(report_path: str | None = None) -> int:
             raise ValueError("Alt+M hotkey capture would lose Alt")
         if parse_hotkey("atl+m") != frozenset({"alt", "m"}):
             raise ValueError("common Alt typo alias is not normalized")
+        if canonical_hotkey_value("右 Ctrl") != "rctrl":
+            raise ValueError("right Ctrl display label is not parsed")
+        if canonical_hotkey_value("左 Ctrl + 左 Win") != "lctrl+lwin":
+            raise ValueError("left Ctrl + left Win display label is not parsed")
+        if display_hotkey_value("rctrl") != "右 Ctrl":
+            raise ValueError("right Ctrl is not shown as a user-facing label")
+        if display_hotkey_value("lctrl+lwin") != "左 Ctrl + 左 Win":
+            raise ValueError("left Ctrl + left Win is not shown as user-facing labels")
         if generic_hotkey(parse_hotkey("lalt+m")) != frozenset({"alt", "m"}):
             raise ValueError("left/right modifier aliases are not normalized for conflict checks")
         if hotkey_vk(parse_hotkey("alt+m")) != ord("M"):
@@ -2462,7 +2536,7 @@ def run_self_test(report_path: str | None = None) -> int:
                 raise ValueError(f"default reset did not restore {field}")
         if reset_config.credential_path != str(resolve_user_path(custom_config.credential_path)):
             raise ValueError("default reset should preserve the credential path")
-        return "configured hotkeys are valid, bare text start keys are rejected, xian typing is safe, Alt combos are captured, Windows conflicts are checked, and default reset is safe"
+        return "configured hotkeys are valid, user-facing key labels are parsed, bare text start keys are rejected, xian typing is safe, Alt combos are captured, Windows conflicts are checked, and default reset is safe"
 
     def delay_snap_check() -> str:
         for field, (minimum, maximum, step) in DELAY_SPECS.items():

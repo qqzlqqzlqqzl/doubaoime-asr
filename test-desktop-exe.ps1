@@ -509,6 +509,15 @@ function Assert-UiLayoutFits {
       throw "Delay slider does not snap to 50ms steps: $DelayName=$($Delay.value), step=$($Delay.step)"
     }
   }
+  foreach ($HotkeyName in @("hold_key", "toggle_key", "hold_send_key", "cancel_key", "doubao_hotkey")) {
+    $Hotkey = [string]$Layout.hotkeys.$HotkeyName
+    if ([string]::IsNullOrWhiteSpace($Hotkey)) {
+      throw "UI layout report missing hotkey value: $HotkeyName"
+    }
+    if ($Hotkey -match '\b[lr](ctrl|win|alt|shift)\b' -or $Hotkey -match 'xbutton') {
+      throw "Hotkey is exposing internal key names instead of user-facing labels: $HotkeyName=$Hotkey"
+    }
+  }
   $ExpectedActionButtons = 6
   $ActionButtons = @($Layout.widgets | Where-Object { $_.name -like "action-*" })
   if ($ActionButtons.Count -ne $ExpectedActionButtons) {
