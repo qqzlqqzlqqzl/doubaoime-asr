@@ -250,6 +250,153 @@ function Invoke-FloatLayoutTest {
   return $ReportPath
 }
 
+function Invoke-ClipboardInsertTest {
+  param(
+    [Parameter(Mandatory = $true)][string]$ExePath,
+    [Parameter(Mandatory = $true)][string]$ReportName
+  )
+
+  if (-not (Test-Path $ExePath)) {
+    throw "Missing executable: $ExePath"
+  }
+
+  $ReportPath = Join-Path $ReportsDir $ReportName
+  Remove-Item -LiteralPath $ReportPath -Force -ErrorAction SilentlyContinue
+  $Process = Start-Process $ExePath -ArgumentList @("--clipboard-insert-test", "--clipboard-insert-report", $ReportPath) -Wait -PassThru
+  if ($Process.ExitCode -ne 0) {
+    throw "Clipboard insert test failed for $ExePath with exit code $($Process.ExitCode)"
+  }
+  if (-not (Test-Path $ReportPath)) {
+    throw "Clipboard insert report was not written: $ReportPath"
+  }
+
+  $Report = Get-Content -Raw -Encoding UTF8 -LiteralPath $ReportPath | ConvertFrom-Json
+  if (-not $Report.ok) {
+    throw "Clipboard insert report says ok=false: $ReportPath"
+  }
+  if (-not $Report.text_inserted -or -not $Report.clipboard_restored) {
+    throw "Clipboard insert test did not prove both insertion and restore: $ReportPath"
+  }
+  return $ReportPath
+}
+
+function Start-IsolatedProcess {
+  param(
+    [Parameter(Mandatory = $true)][string]$FileName,
+    [Parameter(Mandatory = $true)][string]$Arguments,
+    [Parameter(Mandatory = $true)][hashtable]$Environment,
+    [int]$TimeoutSeconds = 60
+  )
+
+  $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+  $StartInfo.FileName = $FileName
+  $StartInfo.Arguments = $Arguments
+  $StartInfo.UseShellExecute = $false
+  $StartInfo.CreateNoWindow = $true
+  foreach ($Key in $Environment.Keys) {
+    $StartInfo.Environment[$Key] = [string]$Environment[$Key]
+  }
+
+  $Process = [System.Diagnostics.Process]::new()
+  $Process.StartInfo = $StartInfo
+  if (-not $Process.Start()) {
+    throw "Failed to start process: $FileName"
+  }
+  if (-not $Process.WaitForExit($TimeoutSeconds * 1000)) {
+    try {
+      $Process.Kill()
+    }
+    catch {
+    }
+    throw "Timed out waiting for process: $FileName $Arguments"
+  }
+  return $Process.ExitCode
+}
+
+function Invoke-UninstallCleanupTest {
+  param(
+    [Parameter(Mandatory = $true)][string]$SetupExePath,
+    [Parameter(Mandatory = $true)][string]$ReportName
+  )
+
+  if (-not (Test-Path $SetupExePath)) {
+    throw "Missing setup executable: $SetupExePath"
+  }
+
+  $ReportPath = Join-Path $ReportsDir $ReportName
+  $Sandbox = Join-Path $ReportsDir "uninstall-sandbox"
+  Remove-Item -LiteralPath $Sandbox -Recurse -Force -ErrorAction SilentlyContinue
+  $LocalAppData = Join-Path $Sandbox "LocalAppData"
+  $AppData = Join-Path $Sandbox "AppData"
+  $UserProfile = Join-Path $Sandbox "UserProfile"
+  $Desktop = Join-Path $UserProfile "Desktop"
+  New-Item -ItemType Directory -Force -Path $LocalAppData, $AppData, $Desktop | Out-Null
+
+  $EnvMap = @{
+    "LOCALAPPDATA" = $LocalAppData
+    "APPDATA" = $AppData
+    "USERPROFILE" = $UserProfile
+  }
+
+  $InstallExit = Start-IsolatedProcess -FileName $SetupExePath -Arguments "--silent --no-run" -Environment $EnvMap -TimeoutSeconds 90
+  if ($InstallExit -ne 0) {
+    throw "Isolated installer failed with exit code $InstallExit"
+  }
+
+  $InstallDir = Join-Path $LocalAppData "DoubaoASRHelper"
+  $InstalledExe = Join-Path $InstallDir "DoubaoASRHelper.exe"
+  $UninstallCmd = Join-Path $InstallDir "uninstall.cmd"
+  $StartMenuDir = Join-Path $AppData "Microsoft\Windows\Start Menu\Programs\Doubao ASR Helper"
+  $DesktopShortcut = Join-Path $Desktop "Doubao ASR Helper.lnk"
+  $StartupBat = Join-Path $AppData "Microsoft\Windows\Start Menu\Programs\Startup\doubaoime-asr.bat"
+  New-Item -ItemType Directory -Force -Path (Split-Path $StartupBat -Parent) | Out-Null
+  Set-Content -LiteralPath $StartupBat -Value "@echo off`r`nrem uninstall smoke`r`n" -Encoding UTF8
+
+  $InstallChecks = @{
+    installed_exe = Test-Path $InstalledExe
+    uninstall_cmd = Test-Path $UninstallCmd
+    start_menu_app = Test-Path (Join-Path $StartMenuDir "Doubao ASR Helper.lnk")
+    start_menu_help = Test-Path (Join-Path $StartMenuDir "Help.lnk")
+    start_menu_uninstall = Test-Path (Join-Path $StartMenuDir "Uninstall Doubao ASR Helper.lnk")
+    desktop_shortcut = Test-Path $DesktopShortcut
+    startup_bat_seeded = Test-Path $StartupBat
+  }
+  if ($InstallChecks.Values -contains $false) {
+    throw "Isolated install did not create expected files"
+  }
+
+  $UninstallExit = Start-IsolatedProcess -FileName "cmd.exe" -Arguments "/c `"$UninstallCmd`"" -Environment $EnvMap -TimeoutSeconds 90
+
+  $CleanupDeadline = (Get-Date).AddSeconds(15)
+  while ((Get-Date) -lt $CleanupDeadline -and (Test-Path $InstallDir)) {
+    Start-Sleep -Milliseconds 250
+  }
+
+  $CleanupChecks = @{
+    install_dir_removed = -not (Test-Path $InstallDir)
+    start_menu_dir_removed = -not (Test-Path $StartMenuDir)
+    desktop_shortcut_removed = -not (Test-Path $DesktopShortcut)
+    startup_bat_removed = -not (Test-Path $StartupBat)
+  }
+  if ($CleanupChecks.Values -contains $false) {
+    throw "Isolated uninstall did not clean expected files"
+  }
+
+  $Report = [ordered]@{
+    ok = $true
+    test_id = "T16"
+    name = "isolated installer shortcut and uninstall cleanup"
+    sandbox = $Sandbox
+    install_exit_code = $InstallExit
+    uninstall_exit_code = $UninstallExit
+    install_checks = $InstallChecks
+    cleanup_checks = $CleanupChecks
+  }
+  $Report | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $ReportPath -Encoding UTF8
+  Remove-Item -LiteralPath $Sandbox -Recurse -Force -ErrorAction SilentlyContinue
+  return $ReportPath
+}
+
 function Wait-AppWindow {
   param(
     [Parameter(Mandatory = $true)][int]$ProcessId,
@@ -813,6 +960,8 @@ finally {
   $Zip.Dispose()
 }
 
+Invoke-UninstallCleanupTest -SetupExePath $SetupExe -ReportName "isolated-uninstall-cleanup-test.json" | Out-Host
+
 $TempRoot = (Resolve-Path $env:TEMP).Path
 $InstallTarget = Join-Path $TempRoot "DoubaoASRHelperExeTest"
 if (-not $InstallTarget.StartsWith($TempRoot)) {
@@ -831,6 +980,7 @@ Assert-CustomAppIcon -ExePath $InstalledExe | Out-Host
 Assert-ShortcutUsesAppIcon -TargetExe $InstalledExe | Out-Host
 Invoke-TraySelfTest -ExePath $InstalledExe -ReportName "installed-tray-self-test.json" | Out-Host
 Invoke-FloatLayoutTest -ExePath $InstalledExe -ReportName "installed-float-layout-long-text.json" | Out-Host
+Invoke-ClipboardInsertTest -ExePath $InstalledExe -ReportName "installed-clipboard-insert-test.json" | Out-Host
 Assert-SingleInstanceGuard -PrimaryExePath $InstalledExe -SecondaryExePath $PortableExe | Out-Host
 Assert-CloseToTrayKeepsAlive -ExePath $InstalledExe | Out-Host
 

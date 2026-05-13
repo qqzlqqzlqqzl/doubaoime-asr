@@ -60,6 +60,7 @@ def write_uninstaller(install_dir: Path) -> Path:
         "\r\n".join(
             [
                 "@echo off",
+                'set "INSTALL_DIR=%~dp0"',
                 f'taskkill /IM "{APP_EXE}" /F >nul 2>nul',
                 'del "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Doubao ASR Helper\\Doubao ASR Helper.lnk" >nul 2>nul',
                 'del "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Doubao ASR Helper\\Help.lnk" >nul 2>nul',
@@ -68,7 +69,8 @@ def write_uninstaller(install_dir: Path) -> Path:
                 'del "%USERPROFILE%\\Desktop\\Doubao ASR Helper.lnk" >nul 2>nul',
                 'del "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\doubaoime-asr.bat" >nul 2>nul',
                 'cd /d "%LOCALAPPDATA%"',
-                'rmdir /s /q "DoubaoASRHelper"',
+                'start "" /min cmd /c "timeout /t 1 /nobreak >nul 2>nul & rmdir /s /q ""%INSTALL_DIR%"""',
+                'exit /b 0',
             ]
         )
         + "\r\n",

@@ -71,7 +71,7 @@ UI_TOGGLE_OFF = "#f8fafc"
 UI_TOGGLE_OFF_ACTIVE = "#e2e8f0"
 DELAY_SPECS = {
     "insert_delay_ms": (0, 1500, 50),
-    "clipboard_restore_delay_ms": (100, 2000, 50),
+    "clipboard_restore_delay_ms": (500, 2000, 50),
     "auto_send_delay_ms": (0, 500, 50),
 }
 BASE_TK_SCALING = 96 / 72
@@ -596,7 +596,7 @@ class DesktopConfig:
     cancel_key: str = "esc"
     doubao_hotkey: str = "ctrl+d"
     insert_delay_ms: int = 300
-    clipboard_restore_delay_ms: int = 100
+    clipboard_restore_delay_ms: int = 500
     auto_send_delay_ms: int = 50
     protect_clipboard: bool = True
     startup: bool = False
@@ -1063,6 +1063,32 @@ class Clipboard:
         self.root.update_idletasks()
 
 
+def paste_text_with_clipboard_protection(
+    clipboard: Clipboard,
+    text: str,
+    *,
+    protect_clipboard: bool,
+    restore_delay_ms: int,
+    target_hwnd: int | None,
+    schedule_ui: Callable[[int, Callable[[], None]], object],
+    auto_send: bool = False,
+    auto_send_delay_ms: int = 0,
+) -> bool:
+    if not text:
+        return False
+    original = clipboard.get_text() if protect_clipboard else ""
+    clipboard.set_text(text)
+    if target_hwnd:
+        set_foreground_window(target_hwnd)
+        time.sleep(0.05)
+    send_ctrl_v()
+    if auto_send:
+        schedule_ui(auto_send_delay_ms, send_enter)
+    if protect_clipboard:
+        schedule_ui(restore_delay_ms, lambda: clipboard.set_text(original))
+    return True
+
+
 class DesktopApp:
     def __init__(
         self,
@@ -1449,7 +1475,7 @@ class DesktopApp:
 
         advanced_body = self._build_settings_section(table, "高级设置", "")
         self._create_setting_row(advanced_body, "credential_path", "凭据文件：", "设备注册和 token 缓存文件", row_type="path")
-        self._create_delay_entry_row(advanced_body, "clipboard_restore_delay_ms", "剪贴板超时：", "最小 100", *DELAY_SPECS["clipboard_restore_delay_ms"])
+        self._create_delay_entry_row(advanced_body, "clipboard_restore_delay_ms", "剪贴板超时：", "最小 500", *DELAY_SPECS["clipboard_restore_delay_ms"])
         self._create_delay_entry_row(advanced_body, "auto_send_delay_ms", "发送延迟：", "推荐 0~100", *DELAY_SPECS["auto_send_delay_ms"])
 
         buttons = tk.Frame(outer, bg=UI_BG)
@@ -2850,19 +2876,17 @@ class DesktopApp:
         self.insert_text(text, auto_send=auto_send, target_hwnd=target_hwnd)
 
     def insert_text(self, text: str, auto_send: bool, target_hwnd: int | None = None) -> None:
-        if not text:
-            return
-        original = self.clipboard.get_text() if self.config.protect_clipboard else ""
-        self.clipboard.set_text(text)
         destination_hwnd = self.target_hwnd if target_hwnd is None else target_hwnd
-        if destination_hwnd:
-            set_foreground_window(destination_hwnd)
-            time.sleep(0.05)
-        send_ctrl_v()
-        if auto_send:
-            self.schedule_ui(self.config.auto_send_delay_ms, send_enter)
-        if self.config.protect_clipboard:
-            self.schedule_ui(self.config.clipboard_restore_delay_ms, lambda: self.clipboard.set_text(original))
+        paste_text_with_clipboard_protection(
+            self.clipboard,
+            text,
+            protect_clipboard=self.config.protect_clipboard,
+            restore_delay_ms=self.config.clipboard_restore_delay_ms,
+            target_hwnd=destination_hwnd,
+            schedule_ui=self.schedule_ui,
+            auto_send=auto_send,
+            auto_send_delay_ms=self.config.auto_send_delay_ms,
+        )
 
 
 def get_foreground_window() -> int:
@@ -2878,7 +2902,10 @@ def set_foreground_window(hwnd: int) -> None:
     try:
         import ctypes
 
-        ctypes.windll.user32.SetForegroundWindow(hwnd)
+        root_hwnd = ctypes.windll.user32.GetAncestor(hwnd, 2) or hwnd
+        ctypes.windll.user32.ShowWindow(root_hwnd, 5)
+        ctypes.windll.user32.BringWindowToTop(root_hwnd)
+        ctypes.windll.user32.SetForegroundWindow(root_hwnd)
     except Exception:
         pass
 
@@ -3059,8 +3086,9 @@ def run_self_test(report_path: str | None = None) -> int:
                 raise ValueError(f"{field} should snap in 50ms steps")
             if snap_delay_value(492, minimum, maximum, step) != 500:
                 raise ValueError(f"{field} did not snap 492ms to 500ms")
-            if snap_delay_value(92, minimum, maximum, step) != 100:
-                raise ValueError(f"{field} did not snap 92ms to 100ms")
+            expected_low_value = minimum if 92 < minimum else 100
+            if snap_delay_value(92, minimum, maximum, step) != expected_low_value:
+                raise ValueError(f"{field} did not snap/clamp 92ms to {expected_low_value}ms")
             if snap_delay_value(maximum + 100, minimum, maximum, step) != maximum:
                 raise ValueError(f"{field} did not clamp at max")
         normalized = normalize_config(DesktopConfig(insert_delay_ms=492, auto_send_delay_ms=92))
@@ -3243,6 +3271,89 @@ def run_float_layout_test(report_path: str | None = None, text: str | None = Non
             app.quit_app()
 
 
+def run_clipboard_insert_test(report_path: str | None = None) -> int:
+    destination = Path(report_path) if report_path else Path(tempfile.gettempdir()) / "DoubaoASRHelper-clipboard-insert.json"
+    report = {
+        "ok": False,
+        "test_id": "T09",
+        "name": "Clipboard text protection insertion smoke",
+        "restore_delay_ms": DesktopConfig().clipboard_restore_delay_ms,
+        "target": "temporary Tk text box",
+        "paste_method": "clipboard helper plus Tk <<Paste>> event",
+        "text_inserted": False,
+        "clipboard_restored": False,
+        "error": None,
+    }
+    root: tk.Tk | None = None
+    previous_clipboard = ""
+    try:
+        root = tk.Tk()
+        root.title("Doubao ASR Clipboard Insert Test")
+        root.geometry("460x160+80+80")
+        root.attributes("-topmost", True)
+        target = tk.Text(root, width=40, height=5)
+        target.pack(fill="both", expand=True)
+        for _ in range(5):
+            root.update()
+            root.deiconify()
+            root.lift()
+            set_foreground_window(root.winfo_id())
+            target.focus_force()
+            root.update()
+            time.sleep(0.1)
+
+        clipboard = Clipboard(root)
+        previous_clipboard = clipboard.get_text()
+        original = "T09_ORIGINAL_CLIPBOARD_TEXT"
+        inserted = "T09_INSERTED_TEXT_剪贴板保护"
+        clipboard.set_text(original)
+
+        def schedule_ui(delay_ms: int, callback: Callable[[], None]) -> object:
+            return root.after(delay_ms, callback)
+
+        paste_text_with_clipboard_protection(
+            clipboard,
+            inserted,
+            protect_clipboard=True,
+            restore_delay_ms=DesktopConfig().clipboard_restore_delay_ms,
+            target_hwnd=None,
+            schedule_ui=schedule_ui,
+        )
+        target.event_generate("<<Paste>>")
+
+        deadline = time.time() + 2.0
+        while time.time() < deadline:
+            root.update()
+            time.sleep(0.01)
+
+        target_text = target.get("1.0", "end").strip()
+        clipboard_after = clipboard.get_text()
+        report.update(
+            {
+                "target_text": target_text,
+                "clipboard_after": clipboard_after,
+                "text_inserted": inserted in target_text,
+                "clipboard_restored": clipboard_after == original,
+            }
+        )
+        report["ok"] = bool(report["text_inserted"] and report["clipboard_restored"])
+    except Exception as exc:
+        report["error"] = repr(exc)
+    finally:
+        if root is not None:
+            try:
+                Clipboard(root).set_text(previous_clipboard)
+            except Exception:
+                pass
+            try:
+                root.destroy()
+            except Exception:
+                pass
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return 0 if report["ok"] else 1
+
+
 def run_long_text_test(
     audio_path: str | None,
     report_path: str | None,
@@ -3319,6 +3430,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--float-layout-test", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--float-layout-report", help=argparse.SUPPRESS)
     parser.add_argument("--float-layout-text", help=argparse.SUPPRESS)
+    parser.add_argument("--clipboard-insert-test", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--clipboard-insert-report", help=argparse.SUPPRESS)
     parser.add_argument("--long-text-test", action="store_true", help="Generate the long text stress sample and optionally run ASR.")
     parser.add_argument("--long-text-audio", help="Path for the generated long text WAV sample.")
     parser.add_argument("--long-text-report", help="Path for the long text JSON report.")
@@ -3333,6 +3446,8 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(run_tray_self_test(args.tray_self_test_report))
     if args.float_layout_test:
         raise SystemExit(run_float_layout_test(args.float_layout_report, args.float_layout_text))
+    if args.clipboard_insert_test:
+        raise SystemExit(run_clipboard_insert_test(args.clipboard_insert_report))
     if args.long_text_test:
         raise SystemExit(
             run_long_text_test(

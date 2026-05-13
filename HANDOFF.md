@@ -72,7 +72,7 @@ git pull --rebase --autostash
 
 1. 运行 `git status --short`，确认工作区是否干净。
 2. 阅读 `README.md` 的“桌面语音输入助手”部分。
-3. 阅读 `E2E_TEST_EVIDENCE.md`，先弄清哪些端到端项目是真的 PASS，哪些只是 PARTIAL 或 NOT_RUN；当前不能把 T01 默认热键闭环和 T09 剪贴板插入闭环算作通过。
+3. 阅读 `E2E_TEST_EVIDENCE.md`，先弄清哪些端到端项目是真的 PASS，哪些只是 PARTIAL 或 NOT_RUN；当前不能把 T01 默认热键闭环和 T09 剪贴板文本保护烟测算作完整录音热键闭环通过。
 4. 阅读本文件的“核心文件地图”和“桌面应用架构”。
 5. 如果要改 UI 或分发包，先运行一次：
 
@@ -361,7 +361,7 @@ Python 层授权测试，调用 `tests/test_activation.py`。
 - 主界面按参考图的交互骨架组织：`【按着说】模式`、`【自由说】模式`、`【按着说+自动发送】模式` 三个模式块先出现。
 - 三个模式块之后是通用设置：`豆包快捷键`、`插入延迟`、`剪贴板保护`、`开机自启动`。
 - `高级设置` 放 `凭据文件`、`剪贴板超时`、`发送延迟`；极窄/极矮窗口下会隐藏标题、说明、凭据路径或高级区域来保证单页无滚动。
-- `insert_delay_ms` 用滑块并显示秒数；`clipboard_restore_delay_ms` 和 `auto_send_delay_ms` 用 ms 输入框，三者都按 50ms 吸附。
+- `insert_delay_ms` 用滑块并显示秒数；`clipboard_restore_delay_ms` 和 `auto_send_delay_ms` 用 ms 输入框，三者都按 50ms 吸附。剪贴板恢复默认和最小值是 500ms，低于该值容易在真实应用里先恢复剪贴板再触发粘贴。
 
 通用设置选项：
 
@@ -770,6 +770,8 @@ git log --oneline -n 20
 ### 剪贴板保护不是完整剪贴板备份
 
 当前主要保护文本剪贴板。图片、文件列表、富文本可能无法完整恢复。
+
+`installed-clipboard-insert-test.json` 只能证明临时文本框里的文本粘贴和恢复逻辑，不证明物理热键、真人录音或外部应用焦点闭环。真实 T09 仍需要人工点测。
 
 ### 系统托盘是 Win32 手写实现
 
