@@ -666,6 +666,13 @@ HOTKEY_DISPLAY_NAMES = {
     "del": "Delete",
 }
 MODIFIER_KEYS = {"lctrl", "rctrl", "ctrl", "lalt", "ralt", "alt", "lshift", "rshift", "shift", "lwin", "rwin", "win"}
+MODIFIER_FAMILIES = (
+    frozenset({"lctrl", "rctrl", "ctrl"}),
+    frozenset({"lalt", "ralt", "alt"}),
+    frozenset({"lshift", "rshift", "shift"}),
+    frozenset({"lwin", "rwin", "win"}),
+)
+HOLD_RECORDING_MODES = {"hold", "hold_send"}
 MOUSE_HOTKEYS = {"xbutton1", "xbutton2", "middle"}
 CONTROL_HOTKEYS = {"esc", "enter", "tab", "space"}
 SAFE_SINGLE_MODIFIER_START_KEYS = {"rctrl"}
@@ -865,9 +872,48 @@ def active_matches(active: set[str], target: frozenset[str]) -> bool:
 
 
 def active_matches_exact(active: set[str], target: frozenset[str]) -> bool:
+    if len(active) != len(target):
+        return False
     if not active_matches(active, target):
         return False
     return generic_hotkey(active) == generic_hotkey(target)
+
+
+def key_release_variants(name: str) -> frozenset[str]:
+    for family in MODIFIER_FAMILIES:
+        if name in family:
+            return family
+    return frozenset({name})
+
+
+def target_contains_released_key(target: frozenset[str], released_name: str) -> bool:
+    return bool(target & key_release_variants(released_name))
+
+
+def should_stop_hold_on_release(mode: str | None, released_name: str, active_keys: set[str], config: DesktopConfig) -> bool:
+    if mode == "hold":
+        target = parse_hotkey(config.hold_key)
+    elif mode == "hold_send":
+        target = parse_hotkey(config.hold_send_key)
+    else:
+        return False
+    if target_contains_released_key(target, released_name):
+        return True
+    return not active_matches(active_keys, target)
+
+
+def should_show_recognition_float(recording_mode: str | None, pending_mode: str | None) -> bool:
+    if recording_mode is not None:
+        return True
+    return pending_mode == "toggle"
+
+
+def should_show_stop_state_in_float(mode: str | None, cancelled: bool) -> bool:
+    return cancelled or mode == "toggle"
+
+
+def is_current_recording_session(session_id: int, current_session_id: int) -> bool:
+    return session_id == current_session_id
 
 
 def idle_start_mode_for_active_keys(name: str, active_keys: set[str], config: DesktopConfig) -> str | None:
@@ -964,7 +1010,9 @@ class DesktopApp:
         self._layout_after_id: str | None = None
         self._layout_signature: tuple[int, int, int, float] | None = None
         self._action_layout_signature: tuple[int, int, int, bool, bool] | None = None
+        self.recording_session_id = 0
         self.recording_mode: str | None = None
+        self.pending_mode: str | None = None
         self.cancelled = False
         self.target_hwnd: int | None = None
         self.audio_queue: queue.Queue[bytes | None] | None = None
@@ -1099,7 +1147,9 @@ class DesktopApp:
             self.tray_icon.stop()
 
     def _stop_recording_for_exit(self) -> None:
+        self.recording_session_id += 1
         self.recording_mode = None
+        self.pending_mode = None
         self.recording_field = None
         self.active_keys.clear()
         if self.audio_stream is not None:
@@ -2240,8 +2290,8 @@ class DesktopApp:
             self._finish_key_record(format_hotkey(self.active_keys))
             self.active_keys.clear()
             return
-        self.active_keys.discard(name)
-        self._handle_active_release()
+        self._discard_active_key(name)
+        self._handle_active_release(name)
 
     def _on_mouse_click(self, _x: int, _y: int, button: mouse.Button, pressed: bool) -> None:
         name = mouse_name(button)
@@ -2255,8 +2305,12 @@ class DesktopApp:
             self.active_keys.add(name)
             self._handle_active_press(name)
         else:
-            self.active_keys.discard(name)
-            self._handle_active_release()
+            self._discard_active_key(name)
+            self._handle_active_release(name)
+
+    def _discard_active_key(self, name: str) -> None:
+        for variant in key_release_variants(name):
+            self.active_keys.discard(variant)
 
     def _finish_key_record(self, value: str) -> None:
         field = self.recording_field
@@ -2290,32 +2344,55 @@ class DesktopApp:
         if mode:
             self.start_recording(mode)
 
-    def _handle_active_release(self) -> None:
-        if self.recording_mode == "hold" and not active_matches(self.active_keys, parse_hotkey(self.config.hold_key)):
-            self.stop_recording()
-        elif self.recording_mode == "hold_send" and not active_matches(self.active_keys, parse_hotkey(self.config.hold_send_key)):
+    def _handle_active_release(self, released_name: str) -> None:
+        if should_stop_hold_on_release(self.recording_mode, released_name, self.active_keys, self.config):
             self.stop_recording()
 
     def start_recording(self, mode: str) -> None:
         if not self.ensure_license(show_dialog=False):
             return
         self.target_hwnd = get_foreground_window()
+        self.recording_session_id += 1
+        session_id = self.recording_session_id
         self.recording_mode = mode
+        self.pending_mode = None
         self.cancelled = False
         self.final_text = ""
         self.transcript = TranscriptAccumulator()
-        self.audio_queue = queue.Queue()
-        self.schedule_ui(0, lambda: self.show_float("正在听..."))
-        self.audio_stream = sd.InputStream(
-            samplerate=16000,
-            channels=1,
-            dtype="int16",
-            blocksize=320,
-            callback=self._audio_callback,
-        )
-        self.audio_stream.start()
-        self.asr_thread = threading.Thread(target=self._run_asr_thread, daemon=True)
-        self.asr_thread.start()
+        audio_queue: queue.Queue[bytes | None] = queue.Queue()
+        self.audio_queue = audio_queue
+        try:
+            self.audio_stream = sd.InputStream(
+                samplerate=16000,
+                channels=1,
+                dtype="int16",
+                blocksize=320,
+                callback=lambda indata, frames, time_info, status: self._audio_callback(
+                    audio_queue,
+                    indata,
+                    frames,
+                    time_info,
+                    status,
+                ),
+            )
+            self.audio_stream.start()
+            self.asr_thread = threading.Thread(target=self._run_asr_thread, args=(session_id, audio_queue), daemon=True)
+            self.asr_thread.start()
+        except Exception as exc:
+            self.recording_mode = None
+            self.pending_mode = None
+            self.audio_queue = None
+            if self.audio_stream is not None:
+                try:
+                    self.audio_stream.close()
+                except Exception:
+                    pass
+                self.audio_stream = None
+            self.status_var.set(f"录音启动失败：{exc}")
+            self.schedule_ui(0, lambda msg=str(exc): self.show_float(f"录音启动失败：{msg}"))
+            self.schedule_ui(2200, self.hide_float)
+            return
+        self.schedule_ui(0, lambda sid=session_id: self.show_recording_start_float(sid))
         self.status_var.set("正在录音")
 
     def stop_recording(self) -> None:
@@ -2323,6 +2400,7 @@ class DesktopApp:
             return
         mode = self.recording_mode
         self.recording_mode = None
+        self.pending_mode = mode
         if self.audio_stream:
             self.audio_stream.stop()
             self.audio_stream.close()
@@ -2330,53 +2408,104 @@ class DesktopApp:
         if self.audio_queue:
             self.audio_queue.put(None)
         self.status_var.set("正在识别")
-        if self.cancelled:
-            self.schedule_ui(0, lambda: self.show_float("已取消"))
-        self.pending_mode = mode
+        if should_show_stop_state_in_float(mode, self.cancelled):
+            if self.cancelled:
+                self.schedule_ui(0, lambda: self.show_float("已取消"))
+                self.schedule_ui(900, self.hide_float)
+            else:
+                self.schedule_ui(0, lambda: self.show_float("正在识别..."))
+        else:
+            self.schedule_ui(0, self.hide_float)
 
-    def _audio_callback(self, indata, _frames, _time_info, status) -> None:
+    def _audio_callback(self, audio_queue: queue.Queue[bytes | None], indata, _frames, _time_info, status) -> None:
         if status:
             print(status)
-        if self.audio_queue is not None:
-            self.audio_queue.put(bytes(indata))
+        audio_queue.put(bytes(indata))
 
-    def _run_asr_thread(self) -> None:
+    def _run_asr_thread(self, session_id: int, audio_queue: queue.Queue[bytes | None]) -> None:
         async def source() -> Iterable[bytes]:
             while True:
-                chunk = await _run_blocking(self.audio_queue.get)
+                chunk = await _run_blocking(audio_queue.get)
                 if chunk is None:
                     break
                 yield chunk
 
         async def runner() -> None:
+            transcript = TranscriptAccumulator()
+            final_text = ""
             config = ASRConfig(credential_path=str(resolve_user_path(self.config.credential_path)))
             async for response in transcribe_realtime(source(), config=config):
                 if response.type in {ResponseType.INTERIM_RESULT, ResponseType.FINAL_RESULT} and response.text:
-                    text = self._update_asr_text(response)
-                    self.schedule_ui(0, lambda value=text: self.show_float(value))
+                    final_text = self._update_asr_text(session_id, transcript, final_text, response)
+                    self.schedule_ui(0, lambda value=final_text, sid=session_id: self.show_recognition_float(sid, value))
                 if response.type == ResponseType.ERROR:
-                    self.schedule_ui(0, lambda msg=response.error_msg: self.show_float(f"错误：{msg}"))
+                    self.schedule_ui(0, lambda msg=response.error_msg, sid=session_id: self.show_recognition_error(sid, msg))
 
         try:
             asyncio.run(runner())
-            self.schedule_ui(0, self._finish_insert)
+            self.schedule_ui(0, lambda sid=session_id: self._finish_insert(sid))
         except Exception as exc:
-            self.schedule_ui(0, lambda: self.show_float(f"错误：{exc}"))
+            self.schedule_ui(0, lambda msg=str(exc), sid=session_id: self.show_recognition_error(sid, msg))
 
-    def _update_asr_text(self, response) -> str:
+    def _update_asr_text(self, session_id: int, transcript: TranscriptAccumulator, current_text: str, response) -> str:
         if response.text:
-            self.final_text = self.transcript.update(
+            current_text = transcript.update(
                 response.text,
                 is_final=response.type == ResponseType.FINAL_RESULT,
             )
-        return self.final_text
+            if is_current_recording_session(session_id, self.recording_session_id):
+                self.final_text = current_text
+        return current_text
 
-    def _finish_insert(self) -> None:
-        self.status_var.set("识别完成")
-        if self.cancelled or not self.final_text:
+    def _finish_insert(self, session_id: int | None = None) -> None:
+        if session_id is not None and not is_current_recording_session(session_id, self.recording_session_id):
             return
-        auto_send = getattr(self, "pending_mode", "") == "hold_send"
-        self.schedule_ui(self.config.insert_delay_ms, lambda: self.insert_text(self.final_text, auto_send=auto_send))
+        self.status_var.set("识别完成")
+        pending_mode = self.pending_mode
+        if self.cancelled:
+            self.hide_float()
+            self.pending_mode = None
+            return
+        if not self.final_text:
+            if pending_mode in HOLD_RECORDING_MODES:
+                self.hide_float()
+            else:
+                self.show_float("未识别到语音")
+                self.schedule_ui(1200, self.hide_float)
+            self.pending_mode = None
+            return
+        auto_send = pending_mode == "hold_send"
+        if pending_mode in HOLD_RECORDING_MODES:
+            self.hide_float()
+        text_to_insert = self.final_text
+        target_hwnd = self.target_hwnd
+        self.schedule_ui(
+            self.config.insert_delay_ms,
+            lambda sid=session_id, value=text_to_insert, hwnd=target_hwnd: self.insert_text_for_session(
+                sid,
+                value,
+                auto_send=auto_send,
+                target_hwnd=hwnd,
+            ),
+        )
+        self.pending_mode = None
+
+    def show_recording_start_float(self, session_id: int) -> None:
+        if is_current_recording_session(session_id, self.recording_session_id) and self.recording_mode is not None:
+            self.show_float("正在听...")
+
+    def show_recognition_float(self, session_id: int, text: str) -> None:
+        if is_current_recording_session(session_id, self.recording_session_id) and should_show_recognition_float(self.recording_mode, self.pending_mode):
+            self.show_float(text)
+
+    def show_recognition_error(self, session_id: int, message: str) -> None:
+        if not is_current_recording_session(session_id, self.recording_session_id):
+            return
+        self.status_var.set(f"识别错误：{message}")
+        if should_show_recognition_float(self.recording_mode, self.pending_mode):
+            self.show_float(f"错误：{message}")
+        else:
+            self.hide_float()
 
     def show_float(self, text: str) -> None:
         self.float_text.delete("1.0", "end")
@@ -2384,6 +2513,9 @@ class DesktopApp:
         self._resize_float_window_for_text(text)
         self.float_win.deiconify()
         self.float_win.lift()
+
+    def hide_float(self) -> None:
+        self.float_win.withdraw()
 
     def get_float_text(self) -> str:
         return self.float_text.get("1.0", "end").strip()
@@ -2395,13 +2527,19 @@ class DesktopApp:
         self.clipboard.set_text(self.get_float_text())
         self.status_var.set("已复制")
 
-    def insert_text(self, text: str, auto_send: bool) -> None:
+    def insert_text_for_session(self, session_id: int | None, text: str, auto_send: bool, target_hwnd: int | None) -> None:
+        if session_id is not None and not is_current_recording_session(session_id, self.recording_session_id):
+            return
+        self.insert_text(text, auto_send=auto_send, target_hwnd=target_hwnd)
+
+    def insert_text(self, text: str, auto_send: bool, target_hwnd: int | None = None) -> None:
         if not text:
             return
         original = self.clipboard.get_text() if self.config.protect_clipboard else ""
         self.clipboard.set_text(text)
-        if self.target_hwnd:
-            set_foreground_window(self.target_hwnd)
+        destination_hwnd = self.target_hwnd if target_hwnd is None else target_hwnd
+        if destination_hwnd:
+            set_foreground_window(destination_hwnd)
             time.sleep(0.05)
         send_ctrl_v()
         if auto_send:
@@ -2514,6 +2652,14 @@ def run_self_test(report_path: str | None = None) -> int:
         default_config = DesktopConfig()
         if idle_start_mode_for_active_keys("rctrl", {"rctrl"}, default_config) != "hold":
             raise ValueError("default hold key no longer starts hold recording")
+        if idle_start_mode_for_active_keys("rctrl", {"lctrl", "rctrl"}, default_config):
+            raise ValueError("pressing both Ctrl sides should not match the default right-Ctrl hold key")
+        if "rctrl" not in key_release_variants("ctrl"):
+            raise ValueError("generic Ctrl release would leave right Ctrl stuck")
+        if not should_stop_hold_on_release("hold", "ctrl", {"rctrl"}, default_config):
+            raise ValueError("generic Ctrl release should stop default hold recording")
+        if should_stop_hold_on_release("hold", "lalt", {"rctrl"}, default_config):
+            raise ValueError("releasing an extra Alt key should not stop right-Ctrl hold recording")
         if idle_start_mode_for_active_keys("rctrl", {"rctrl", "lalt"}, default_config):
             raise ValueError("default hold key should require an exact active key set")
         if idle_start_mode_for_active_keys("xbutton1", {"xbutton1"}, default_config) != "toggle":
@@ -2522,11 +2668,31 @@ def run_self_test(report_path: str | None = None) -> int:
             raise ValueError("mouse side key should not start while extra modifiers are held")
         if idle_start_mode_for_active_keys("lwin", {"lctrl", "lwin"}, default_config) != "hold_send":
             raise ValueError("default hold-send combo no longer starts hold_send recording")
+        if not should_stop_hold_on_release("hold_send", "win", {"lctrl", "lwin"}, default_config):
+            raise ValueError("generic Win release should stop hold-send recording")
         if idle_start_mode_for_active_keys("lwin", {"lctrl", "lwin", "d"}, default_config):
             raise ValueError("hold-send combo should not start when extra keys are already active")
+        if not should_show_recognition_float("hold", None):
+            raise ValueError("hold mode should show the floating transcript while the key is held")
+        if should_show_recognition_float(None, "hold"):
+            raise ValueError("hold mode should hide the floating transcript after release")
+        if should_show_recognition_float(None, "hold_send"):
+            raise ValueError("hold-send mode should hide the floating transcript after release")
+        if not should_show_recognition_float(None, "toggle"):
+            raise ValueError("toggle mode should keep the floating transcript visible after stop")
+        if should_show_stop_state_in_float("hold", False):
+            raise ValueError("hold mode should not show a persistent recognition state after release")
+        if not should_show_stop_state_in_float("toggle", False):
+            raise ValueError("toggle mode should show recognition state after stop")
+        if not is_current_recording_session(7, 7):
+            raise ValueError("current ASR session updates should be accepted")
+        if is_current_recording_session(6, 7):
+            raise ValueError("stale ASR session updates should be ignored")
         strict_config = DesktopConfig(toggle_key="ctrl+d")
         if idle_start_mode_for_active_keys("d", {"lctrl", "d"}, strict_config) != "toggle":
             raise ValueError("generic Ctrl combo should match either physical Ctrl side")
+        if idle_start_mode_for_active_keys("d", {"lctrl", "rctrl", "d"}, strict_config):
+            raise ValueError("generic Ctrl combo should reject both Ctrl sides as an extra-key match")
         if idle_start_mode_for_active_keys("d", {"lctrl", "lalt", "d"}, strict_config):
             raise ValueError("Ctrl+D should not start from Ctrl+Alt+D")
         if key_name(keyboard.Key.alt) != "alt":
@@ -2568,7 +2734,7 @@ def run_self_test(report_path: str | None = None) -> int:
                 raise ValueError(f"default reset did not restore {field}")
         if reset_config.credential_path != str(resolve_user_path(custom_config.credential_path)):
             raise ValueError("default reset should preserve the credential path")
-        return "configured hotkeys are valid, user-facing key labels are parsed, risky single modifiers and extra-key matches are rejected, xian typing is safe, Alt combos are captured, Windows conflicts are checked, and default reset is safe"
+        return "configured hotkeys are valid, hold release cleanup is covered, stale ASR sessions are ignored, hold floats hide after release, xian typing is safe, Alt combos are captured, Windows conflicts are checked, and default reset is safe"
 
     def delay_snap_check() -> str:
         for field, (minimum, maximum, step) in DELAY_SPECS.items():
