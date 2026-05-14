@@ -369,6 +369,7 @@ class VoiceController {
             VoiceFloat.Update(status.text, "正在聆听")
         else
             VoiceFloat.Update("", "正在聆听")
+        VoiceFloat.UpdateVolume(status.audio_level)
     }
 
     static StartFinishPolling() {
@@ -388,6 +389,7 @@ class VoiceController {
         status := BridgeClient.Status()
         if status.text != ""
             VoiceFloat.Update(status.text, "正在识别...")
+        VoiceFloat.UpdateVolume(0)
 
         if status.error != "" {
             Logger.Error("finish_status_error error=" . status.error)
@@ -596,7 +598,7 @@ if A_Args.Length > 0 && A_Args[1] = "--float-self-test" {
     Logger.Info("float_self_test_start")
     VoiceFloat.Show("", "", "ready")
     Sleep(900)
-    VoiceFloat.Show("这是我用豆包语音输入的内容，效果 very nice，可以实时看到...", "正在聆听", "recording")
+    VoiceFloat.Show("这是我用豆包语音输入的内容，效果 very nice，可以实时看到更长一点的文字。现在测试连续说很多内容时，浮窗应该保留多行文本，不应该因为内容变长就消失。", "正在聆听", "recording")
     Sleep(5000)
     VoiceFloat.Hide()
     Logger.Info("float_self_test_end")

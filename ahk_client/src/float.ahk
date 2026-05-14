@@ -26,9 +26,10 @@ class VoiceFloat {
     static Mode := ""
     static InsertCallback := ""
     static Width := 456
-    static Height := 132
+    static Height := 166
     static WaveTick := 0
     static WaveTimer := 0
+    static WaveMaxHeights := []
 
     static Ensure() {
         if this.FloatGui != ""
@@ -48,6 +49,7 @@ class VoiceFloat {
         this.MicIconCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
 
         for index, height in [4, 5, 4, 6, 5, 4, 6, 7, 5, 6, 8, 10, 13, 18, 24, 28, 24, 18, 13, 10, 8, 7, 6, 6, 5, 4, 5, 4] {
+            this.WaveMaxHeights.Push(height)
             x := 60 + ((index - 1) * 12)
             y := 18 - Round(height / 2)
             this.WaveBars.Push(this.FloatGui.AddProgress("x" . x . " y" . y . " w4 h" . height . " c5A79FF BackgroundFFFFFF Range0-100 -Smooth", 100))
@@ -59,17 +61,17 @@ class VoiceFloat {
         this.StateCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
         this.TextCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
 
-        this.ResultBgCtrl := this.FloatGui.AddText("x12 y34 w432 h86 +Border BackgroundFFFFFF", "")
+        this.ResultBgCtrl := this.FloatGui.AddText("x12 y34 w432 h120 +Border BackgroundFFFFFF", "")
         this.FloatGui.SetFont("s19 c5F9D68", "Segoe MDL2 Assets")
         this.ResultMicCtrl := this.FloatGui.AddText("x28 y54 w30 h34 Center BackgroundTrans", Chr(0xE720))
-        this.FloatGui.SetFont("s12 c3B4258", "Microsoft YaHei")
-        this.ResultTextCtrl := this.FloatGui.AddText("x68 y50 w252 h34 BackgroundTrans +Wrap", "识别内容会显示在这里")
+        this.FloatGui.SetFont("s11 c3B4258", "Microsoft YaHei")
+        this.ResultTextCtrl := this.FloatGui.AddText("x68 y48 w328 h58 BackgroundTrans +Wrap", "识别内容会显示在这里")
         this.FloatGui.SetFont("s11 c9AA0AD", "Microsoft YaHei")
         this.CloseCtrl := this.FloatGui.AddText("x416 y42 w20 h22 Center BackgroundTrans", "×")
         this.FloatGui.SetFont("s9 c555B6E", "Microsoft YaHei")
-        this.ClearBtn := this.FloatGui.AddButton("x220 y86 w56 h26", "清空")
-        this.CopyBtn := this.FloatGui.AddButton("x284 y86 w56 h26", "复制")
-        this.InsertBtn := this.FloatGui.AddButton("x348 y86 w72 h26 Default", "插入")
+        this.ClearBtn := this.FloatGui.AddButton("x220 y120 w56 h26", "清空")
+        this.CopyBtn := this.FloatGui.AddButton("x284 y120 w56 h26", "复制")
+        this.InsertBtn := this.FloatGui.AddButton("x348 y120 w72 h26 Default", "插入")
         this.ClearBtn.OnEvent("Click", (*) => this.ClearText())
         this.CopyBtn.OnEvent("Click", (*) => this.CopyText())
         this.InsertBtn.OnEvent("Click", (*) => this.InsertText())
@@ -103,8 +105,9 @@ class VoiceFloat {
         if showMic {
             this.StopWave()
         } else {
-            this.StartWave()
+            this.StopWave()
         }
+        this.UpdateVolume(0)
         this.ShowResultBox(true)
     }
 
@@ -114,7 +117,6 @@ class VoiceFloat {
             this.StateCtrl.Value := state
         if text != "" {
             this.LastText := text
-            display := StrLen(text) > 90 ? SubStr(text, 1, 90) . "..." : text
             this.TextCtrl.Value := ""
             this.ResultTextCtrl.Value := this.FormatResultText(text)
             this.ShowResultBox(true)
@@ -132,7 +134,23 @@ class VoiceFloat {
     static FormatResultText(text) {
         if text = ""
             return "识别内容会显示在这里"
-        return StrLen(text) > 48 ? SubStr(text, 1, 48) . "..." : text
+        return StrLen(text) > 96 ? SubStr(text, 1, 96) . "..." : text
+    }
+
+    static UpdateVolume(level := 0) {
+        this.Ensure()
+        if level = ""
+            level := 0
+        level := Max(0, Min(100, Integer(level)))
+        for index, bar in this.WaveBars {
+            maxHeight := this.WaveMaxHeights[index]
+            height := level < 3 ? 2 : Max(2, Round(maxHeight * level / 100))
+            y := 18 - Round(height / 2)
+            try {
+                bar.Move(, y, , height)
+                bar.Value := 100
+            }
+        }
     }
 
     static ClearText() {
@@ -172,12 +190,7 @@ class VoiceFloat {
     }
 
     static AnimateWave() {
-        this.WaveTick += 1
-        for index, bar in this.WaveBars {
-            phase := Mod(this.WaveTick + index, 8)
-            value := phase < 4 ? 100 : 65
-            try bar.Value := value
-        }
+        this.UpdateVolume(0)
     }
 
     static Hide() {

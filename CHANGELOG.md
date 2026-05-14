@@ -1,5 +1,22 @@
 # 变更记录
 
+## 2026-05-14：悬浮窗音量指示与长文本显示修复
+
+- 顶部蓝色波形不再使用假动画；`asr_bridge.exe` 在录音回调中计算 `audio_level/audio_peak`，`/status` 返回真实音量，AHK 浮窗按音量重画柱高。静音或底噪时保持低柱，不会无故大幅波动。
+- 悬浮窗结果框高度从 `132` 提升到 `166`，文本区加宽加高，长文本显示上限从 48 字提升到 96 字，避免连续说长句时结果区看起来“消失”。
+- `--float-self-test` 改成长文本样本，用于覆盖多行显示。
+- bridge self-test 新增音量断言：静音必须返回 0，非静音必须返回正音量。
+- 已覆盖 `%LOCALAPPDATA%\DoubaoASRHelper` 下的 `DoubaoASRHelper.exe` 和 `asr_bridge.exe`。
+
+### 本轮验证
+
+- `.venv\Scripts\python.exe -m compileall doubaoime_asr\asr_bridge.py`：通过。
+- `.venv\Scripts\python.exe -m pytest`：`16 passed, 1 warning`。
+- `build-desktop-exe.ps1`：通过。
+- `test-desktop-exe.ps1`：通过，输出 `AHK bridge desktop tests passed.`。
+- 安装版 bridge 录音态状态：`release\test-reports\installed-bridge-audio-level-status.json`，`has_audio_level=true`，无说话底噪 `audio_level=3`。
+- 安装版长文本浮窗：`release\test-reports\installed-long-float-final.json` 和 `installed-long-float-final.png`，窗口 `457x167`，子控件包含长文本及 `清空 / 复制 / 插入`。
+
 ## 2026-05-14：参考图紧凑设置页与小尺寸悬浮窗
 
 - 设置页继续沿用 `xiaohu31/doubao-voice-helper` 的控件文案和分组顺序；在高 DPI 环境下改用 `-DPIScale` 并收敛窗口宽度，避免之前 200% 缩放下控件被挤出窗口或右侧出现大块空白。

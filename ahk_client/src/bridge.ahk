@@ -76,7 +76,7 @@ class BridgeClient {
             return result
         } catch as e {
             Logger.Exception("bridge_start_exception mode=" . mode, e)
-            return { ok: false, text: "", final_text: "", state: "error", error: e.Message, done: false, cancelled: false, session_id: 0 }
+            return { ok: false, text: "", final_text: "", state: "error", error: e.Message, done: false, cancelled: false, session_id: 0, audio_level: 0 }
         }
     }
 
@@ -96,7 +96,7 @@ class BridgeClient {
             return this.ParseResult(response)
         } catch as e {
             Logger.Exception("bridge_stop_async_exception", e)
-            return { ok: false, text: "", final_text: "", state: "error", error: e.Message, done: false, cancelled: false, session_id: 0 }
+            return { ok: false, text: "", final_text: "", state: "error", error: e.Message, done: false, cancelled: false, session_id: 0, audio_level: 0 }
         }
     }
 
@@ -120,7 +120,7 @@ class BridgeClient {
             return this.ParseResult(response)
         } catch as e {
             Logger.Exception("bridge_status_exception", e)
-            return { ok: false, state: "offline", text: "", final_text: "", error: e.Message, done: false, cancelled: false, session_id: 0 }
+            return { ok: false, state: "offline", text: "", final_text: "", error: e.Message, done: false, cancelled: false, session_id: 0, audio_level: 0 }
         }
     }
 
@@ -148,7 +148,8 @@ class BridgeClient {
             error: this.JsonString(jsonText, "error", ""),
             done: this.JsonBool(jsonText, "done", false),
             cancelled: this.JsonBool(jsonText, "cancelled", false),
-            session_id: this.JsonNumber(jsonText, "session_id", 0)
+            session_id: this.JsonNumber(jsonText, "session_id", 0),
+            audio_level: this.JsonNumber(jsonText, "audio_level", 0)
         }
     }
 

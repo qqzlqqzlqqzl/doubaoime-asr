@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import logging
 from logging.handlers import RotatingFileHandler
+import math
 import os
 from pathlib import Path
 import queue
@@ -88,6 +89,8 @@ class RecordingSession:
         self.final_text = ""
         self.error = ""
         self.cancelled = False
+        self.audio_level = 0
+        self.audio_peak = 0
         self.state = "starting"
         self.done = threading.Event()
         self._lock = threading.RLock()
@@ -104,7 +107,12 @@ class RecordingSession:
                 LOGGER.warning("audio_callback_status session=%s status=%s", self.session_id, status)
                 with self._lock:
                     self.error = str(status)
-            self.audio_queue.put(bytes(indata))
+            audio_bytes = bytes(indata)
+            level, peak = self._measure_level(audio_bytes)
+            with self._lock:
+                self.audio_level = level
+                self.audio_peak = peak
+            self.audio_queue.put(audio_bytes)
 
         self._stream = sd.InputStream(
             samplerate=self.config.sample_rate,
@@ -150,9 +158,34 @@ class RecordingSession:
                 "text": "" if self.cancelled else self.transcript.text,
                 "final_text": "" if self.cancelled else self.final_text,
                 "error": self.error,
+                "audio_level": self.audio_level,
+                "audio_peak": self.audio_peak,
                 "thread_alive": self._thread.is_alive(),
                 "done": self.done.is_set(),
             }
+
+    def _measure_level(self, audio_bytes: bytes) -> tuple[int, int]:
+        if not audio_bytes:
+            return 0, 0
+        samples = memoryview(audio_bytes).cast("h")
+        if len(samples) == 0:
+            return 0, 0
+        step = max(1, len(samples) // 320)
+        total = 0
+        count = 0
+        peak = 0
+        for sample in samples[::step]:
+            value = abs(int(sample))
+            peak = max(peak, value)
+            total += value * value
+            count += 1
+        if count == 0:
+            return 0, 0
+        rms = math.sqrt(total / count)
+        # 约 -45dBFS 起跳，普通讲话会落在 30-90。静音/底噪保持 0，避免无声时假波动。
+        level = 0 if rms < 180 else min(100, int(round((rms - 180) / 55)))
+        peak_level = min(100, int(round(peak / 327.67)))
+        return level, peak_level
 
     def _close_stream(self) -> None:
         stream = self._stream
@@ -350,6 +383,11 @@ def run_self_test() -> int:
     status = state.status()
     if status["state"] != "idle":
         raise SystemExit("initial bridge state is not idle")
+    session = RecordingSession(1, ASRConfig(credential_path=state.credential_path))
+    if session._measure_level((0).to_bytes(2, "little", signed=True) * 320)[0] != 0:
+        raise SystemExit("silent audio should report zero level")
+    if session._measure_level((5000).to_bytes(2, "little", signed=True) * 320)[0] <= 0:
+        raise SystemExit("non-silent audio should report positive level")
     result = state.cancel()
     if not result.ok:
         raise SystemExit("cancel without active session failed")
