@@ -44,9 +44,26 @@ public class AhkSmokeWin32 {
 
   Get-Process DoubaoASRHelper,asr_bridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
+  $OldBridgeAppData = $env:APPDATA
+  $env:APPDATA = Join-Path $ReportsDir "bridge-self-test-appdata"
+  Remove-Item -LiteralPath $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force -Path $env:APPDATA | Out-Null
   $BridgeSelfTest = Start-Process -FilePath $BridgeExe -ArgumentList "--self-test" -PassThru -Wait
-  if ($BridgeSelfTest.ExitCode -ne 0) {
-    throw "asr_bridge.exe --self-test failed with exit code $($BridgeSelfTest.ExitCode)"
+  try {
+    if ($BridgeSelfTest.ExitCode -ne 0) {
+      throw "asr_bridge.exe --self-test failed with exit code $($BridgeSelfTest.ExitCode)"
+    }
+    $BridgeLog = Join-Path $env:APPDATA ("DoubaoASRHelper\logs\asr_bridge-" + (Get-Date -Format "yyyyMMdd") + ".log")
+    if (-not (Test-Path $BridgeLog)) {
+      throw "asr_bridge.exe did not create a log file"
+    }
+    $BridgeLogText = Get-Content -LiteralPath $BridgeLog -Raw
+    if ($BridgeLogText -notmatch "self_test_ok") {
+      throw "asr_bridge log missing self_test_ok"
+    }
+  }
+  finally {
+    $env:APPDATA = $OldBridgeAppData
   }
 
   $BridgeProcess = Start-Process -FilePath $BridgeExe -ArgumentList "--port 18767" -PassThru
@@ -74,6 +91,10 @@ public class AhkSmokeWin32 {
     Stop-Process -Id $BridgeProcess.Id -Force -ErrorAction SilentlyContinue
   }
 
+  $OldFloatAppData = $env:APPDATA
+  $env:APPDATA = Join-Path $ReportsDir "ahk-float-self-test-appdata"
+  Remove-Item -LiteralPath $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force -Path $env:APPDATA | Out-Null
   $FloatProcess = Start-Process -FilePath $AhkClientExe -ArgumentList "--float-self-test" -PassThru
   try {
     $FloatRect = $null
@@ -99,9 +120,18 @@ public class AhkSmokeWin32 {
       width = $FloatWidth
       height = $FloatHeight
     } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $ReportsDir "ahk-float-self-test.json")
+    $ClientLog = Join-Path $env:APPDATA ("DoubaoASRHelper\logs\client-" + (Get-Date -Format "yyyyMMdd") + ".log")
+    if (-not (Test-Path $ClientLog)) {
+      throw "AHK client log was not created by float self-test"
+    }
+    $ClientLogText = Get-Content -LiteralPath $ClientLog -Raw
+    if ($ClientLogText -notmatch "float_self_test_start") {
+      throw "AHK client log missing float_self_test_start"
+    }
   }
   finally {
     Stop-Process -Id $FloatProcess.Id -Force -ErrorAction SilentlyContinue
+    $env:APPDATA = $OldFloatAppData
   }
 
   $OldAppData = $env:APPDATA

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import logging
+from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
 import queue
@@ -29,6 +31,42 @@ APP_CONFIG_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / "DoubaoASRHelper
 DEFAULT_CREDENTIAL_PATH = APP_CONFIG_DIR / "credentials.json"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 18765
+LOG_DIR = APP_CONFIG_DIR / "logs"
+
+
+def setup_logging() -> logging.Logger:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger("doubao_asr_bridge")
+    logger.setLevel(logging.INFO)
+    if logger.handlers:
+        return logger
+    log_path = LOG_DIR / f"asr_bridge-{time.strftime('%Y%m%d')}.log"
+    handler = RotatingFileHandler(log_path, maxBytes=2_000_000, backupCount=5, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(threadName)s %(message)s"))
+    logger.addHandler(handler)
+    logger.info("bridge_logger_ready exe=%s frozen=%s", sys.executable, getattr(sys, "frozen", False))
+    return logger
+
+
+LOGGER = setup_logging()
+
+
+def _log_unhandled(exc_type, exc_value, exc_traceback) -> None:
+    LOGGER.exception("unhandled_exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+
+sys.excepthook = _log_unhandled
+
+
+def _log_thread_exception(args: threading.ExceptHookArgs) -> None:
+    LOGGER.exception(
+        "thread_exception name=%s",
+        getattr(args.thread, "name", ""),
+        exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+    )
+
+
+threading.excepthook = _log_thread_exception
 
 
 @dataclass
@@ -58,10 +96,12 @@ class RecordingSession:
         self._thread = threading.Thread(target=self._run_asr_thread, name=f"asr-bridge-{session_id}", daemon=True)
 
     def start(self) -> None:
+        LOGGER.info("session_starting session=%s device=%s", self.session_id, self.device)
         samples_per_frame = self.config.sample_rate * self.config.frame_duration_ms // 1000
 
         def callback(indata, _frames, _time_info, status) -> None:
             if status:
+                LOGGER.warning("audio_callback_status session=%s status=%s", self.session_id, status)
                 with self._lock:
                     self.error = str(status)
             self.audio_queue.put(bytes(indata))
@@ -78,16 +118,20 @@ class RecordingSession:
         with self._lock:
             self.state = "recording"
         self._thread.start()
+        LOGGER.info("session_recording session=%s", self.session_id)
 
     def stop(self) -> None:
+        LOGGER.info("session_stop_requested session=%s", self.session_id)
         with self._lock:
             if self.state in {"finishing", "finished", "cancelled", "error"}:
+                LOGGER.info("session_stop_ignored session=%s state=%s", self.session_id, self.state)
                 return
             self.state = "finishing"
         self._close_stream()
         self.audio_queue.put(None)
 
     def cancel(self) -> None:
+        LOGGER.info("session_cancel_requested session=%s", self.session_id)
         with self._lock:
             self.cancelled = True
             self.state = "cancelled"
@@ -133,9 +177,15 @@ class RecordingSession:
         asyncio.set_event_loop(self._loop)
         try:
             self._loop.run_until_complete(self._run_asr())
+        except Exception:
+            LOGGER.exception("session_thread_failed session=%s", self.session_id)
+            with self._lock:
+                self.error = "internal_bridge_thread_error"
+                self.state = "error"
         finally:
             self._loop.close()
             self.done.set()
+            LOGGER.info("session_done session=%s state=%s chars=%s", self.session_id, self.state, len(self.final_text))
 
     async def _run_asr(self) -> None:
         try:
@@ -149,6 +199,7 @@ class RecordingSession:
                     with self._lock:
                         self.error = response.error_msg
                         self.state = "error"
+                    LOGGER.error("asr_response_error session=%s error=%s", self.session_id, response.error_msg)
                     return
             self.transcript.commit()
             with self._lock:
@@ -162,10 +213,12 @@ class RecordingSession:
             with self._lock:
                 self.error = str(exc)
                 self.state = "error"
+            LOGGER.exception("asr_error session=%s", self.session_id)
         except Exception as exc:  # pragma: no cover - defensive bridge boundary
             with self._lock:
                 self.error = repr(exc)
                 self.state = "error"
+            LOGGER.exception("asr_unexpected_error session=%s", self.session_id)
 
 
 class BridgeState:
@@ -177,8 +230,10 @@ class BridgeState:
         self._session_id = 0
 
     def start(self) -> BridgeResult:
+        LOGGER.info("bridge_start_requested")
         with self._lock:
             if self._session is not None and self._session.snapshot()["state"] in {"starting", "recording", "finishing"}:
+                LOGGER.warning("bridge_start_rejected already_recording state=%s", self._session.snapshot()["state"])
                 return BridgeResult(False, error="already_recording", state=self._session.snapshot()["state"], session_id=self._session.session_id)
             self._session_id += 1
             config = ASRConfig(credential_path=self.credential_path)
@@ -186,15 +241,19 @@ class BridgeState:
             self._session = session
         try:
             session.start()
+            LOGGER.info("bridge_start_ok session=%s", session.session_id)
             return BridgeResult(True, state="recording", session_id=session.session_id)
         except Exception as exc:
             with self._lock:
                 self._session = None
+            LOGGER.exception("bridge_start_failed session=%s", session.session_id)
             return BridgeResult(False, error=repr(exc), state="error", session_id=session.session_id)
 
     def stop(self, timeout: float = 30.0, wait: bool = True) -> BridgeResult:
+        LOGGER.info("bridge_stop_requested wait=%s timeout=%s", wait, timeout)
         session = self._session
         if session is None:
+            LOGGER.warning("bridge_stop_no_active_session")
             return BridgeResult(False, error="no_active_session", state="idle")
         session.stop()
         if wait:
@@ -205,9 +264,11 @@ class BridgeState:
         if snapshot.get("cancelled"):
             text = ""
             ok = True
+        LOGGER.info("bridge_stop_result session=%s ok=%s state=%s chars=%s error=%s", session.session_id, ok, snapshot.get("state"), len(text), snapshot.get("error") or "")
         return BridgeResult(ok, text=text, error=str(snapshot.get("error") or ""), state=str(snapshot.get("state") or ""), session_id=session.session_id)
 
     def cancel(self) -> BridgeResult:
+        LOGGER.info("bridge_cancel_requested")
         session = self._session
         if session is None:
             return BridgeResult(True, state="idle")
@@ -284,6 +345,7 @@ class BridgeServer(ThreadingHTTPServer):
 
 
 def run_self_test() -> int:
+    LOGGER.info("self_test_start")
     state = BridgeState(credential_path=Path(os.getenv("TEMP", ".")) / f"doubao-bridge-self-test-{os.getpid()}.json")
     status = state.status()
     if status["state"] != "idle":
@@ -291,6 +353,7 @@ def run_self_test() -> int:
     result = state.cancel()
     if not result.ok:
         raise SystemExit("cancel without active session failed")
+    LOGGER.info("self_test_ok")
     return 0
 
 
@@ -306,6 +369,7 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(run_self_test())
 
     APP_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    LOGGER.info("server_start host=%s port=%s credential_path=%s device=%s", args.host, args.port, args.credential_path, args.device)
     state = BridgeState(args.credential_path, args.device)
     server = BridgeServer((args.host, args.port), state)
     try:
@@ -313,6 +377,7 @@ def main(argv: list[str] | None = None) -> None:
     except KeyboardInterrupt:
         pass
     finally:
+        LOGGER.info("server_stop")
         state.cancel()
         time.sleep(0.1)
         server.server_close()

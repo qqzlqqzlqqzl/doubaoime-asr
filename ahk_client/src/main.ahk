@@ -8,6 +8,7 @@
 SetWorkingDir(A_ScriptDir)
 
 ; 引入模块
+#Include logger.ahk
 #Include config.ahk
 #Include clipboard.ahk
 #Include window.ahk
@@ -16,6 +17,9 @@ SetWorkingDir(A_ScriptDir)
 #Include doubao.ahk
 #Include bridge.ahk
 #Include float.ahk
+
+Logger.Init()
+OnError(LogUnhandledError)
 
 ; ============================================
 ; 语音流程控制器
@@ -35,6 +39,7 @@ class VoiceController {
 
     ; 初始化
     static Init() {
+        Logger.Info("voice_controller_init")
         ; 加载配置并检查是否是首次运行（配置文件不存在）
         isFirstRun := !Config.Init()
 
@@ -55,8 +60,10 @@ class VoiceController {
         this.InitHotkeys()
 
         ; 提前拉起本地 ASR bridge；失败时热键触发也会再次尝试
-        if !BridgeClient.EnsureRunning()
+        if !BridgeClient.EnsureRunning() {
+            Logger.Warn("bridge_startup_deferred")
             this.ShowTrayTip("提示", "ASR bridge 暂未启动，首次录音时会再次尝试")
+        }
 
         ; 设置托盘
         this.SetupTray()
@@ -209,8 +216,9 @@ class VoiceController {
         if this.IsProcessing || !this.IsEnabled
             return
 
+        Logger.Info("voice_start mode=hold")
         this.IsProcessing := true
-        VoiceFloat.Show("正在准备录音...", "正在启动")
+        VoiceFloat.Show("", "", "ready")
 
         ; 1. 记录当前焦点窗口
         WindowManager.SaveCurrentWindow()
@@ -218,13 +226,15 @@ class VoiceController {
         ; 2. 启动本地 ASR bridge 录音
         result := BridgeClient.Start("hold")
         if !result.ok {
+            Logger.Error("voice_start_failed mode=hold error=" . result.error)
             this.IsProcessing := false
             HotkeyManager.ResetState()
             this.ShowTrayTip("错误", result.error)
             VoiceFloat.Hide()
             return
         }
-        VoiceFloat.Show("开始说话...", "正在聆听")
+        Logger.Info("voice_started mode=hold session=" . result.session_id)
+        VoiceFloat.Show("", "", "recording")
         this.StartStatusPolling()
     }
 
@@ -254,9 +264,10 @@ class VoiceController {
         if this.IsProcessing || !this.IsEnabled
             return
 
+        Logger.Info("voice_start mode=autoSend")
         this.IsProcessing := true
         this.IsAutoSendEnabled := true  ; 标记需要自动发送
-        VoiceFloat.Show("正在准备录音...", "正在启动")
+        VoiceFloat.Show("", "", "ready")
 
         ; 1. 记录当前焦点窗口
         WindowManager.SaveCurrentWindow()
@@ -264,6 +275,7 @@ class VoiceController {
         ; 2. 启动本地 ASR bridge 录音
         result := BridgeClient.Start("autoSend")
         if !result.ok {
+            Logger.Error("voice_start_failed mode=autoSend error=" . result.error)
             this.IsProcessing := false
             this.IsAutoSendEnabled := false
             HotkeyManager.ResetState()
@@ -271,7 +283,8 @@ class VoiceController {
             VoiceFloat.Hide()
             return
         }
-        VoiceFloat.Show("开始说话...", "正在聆听")
+        Logger.Info("voice_started mode=autoSend session=" . result.session_id)
+        VoiceFloat.Show("", "", "recording")
         this.StartStatusPolling()
     }
 
@@ -290,6 +303,7 @@ class VoiceController {
             return
 
         ; 通知本地 ASR bridge 取消本次录音
+        Logger.Info("voice_cancel")
         BridgeClient.Cancel()
         this.StopStatusPolling()
         this.StopFinishPolling()
@@ -307,6 +321,7 @@ class VoiceController {
     ; 执行插入流程
     static DoInsertProcess() {
         ; 1. 非阻塞停止 bridge 录音，后续用定时器轮询最终结果，避免 AHK UI 卡死
+        Logger.Info("voice_stop_async auto_send=" . (this.IsAutoSendEnabled ? "1" : "0"))
         this.StopStatusPolling()
         delay := Config.Get("InsertDelay")
         if delay > 0
@@ -314,6 +329,7 @@ class VoiceController {
 
         result := BridgeClient.StopAsync()
         if !result.ok {
+            Logger.Error("voice_stop_failed error=" . result.error)
             this.ShowTrayTip("错误", result.error)
             this.ResetAfterFinish()
             return
@@ -343,6 +359,7 @@ class VoiceController {
         }
         status := BridgeClient.Status()
         if status.error != "" {
+            Logger.Error("recording_status_error error=" . status.error)
             this.ShowTrayTip("错误", status.error)
             this.ResetAfterFinish()
             return
@@ -372,6 +389,7 @@ class VoiceController {
             VoiceFloat.Update(status.text, "正在识别...")
 
         if status.error != "" {
+            Logger.Error("finish_status_error error=" . status.error)
             this.ShowTrayTip("错误", status.error)
             this.ResetAfterFinish()
             return
@@ -379,6 +397,7 @@ class VoiceController {
 
         if !status.done {
             if (A_TickCount - this.FinishStartedAt) > 35000 {
+                Logger.Error("finish_timeout")
                 this.ShowTrayTip("错误", "识别超时")
                 this.ResetAfterFinish()
             }
@@ -393,8 +412,10 @@ class VoiceController {
         if text != "" {
             inserted := ClipboardManager.InsertText(text, Config.Get("ClipboardProtect"))
             if !inserted {
+                Logger.Error("insert_failed chars=" . StrLen(text))
                 this.ShowTrayTip("错误", "识别文本写入剪贴板失败")
             } else {
+                Logger.Info("insert_ok chars=" . StrLen(text) . " auto_send=" . (this.IsAutoSendEnabled ? "1" : "0"))
                 VoiceFloat.Update(text, "已插入")
             }
             ; 自动发送逻辑：如果是自动发送模式，发送回车键
@@ -404,6 +425,7 @@ class VoiceController {
                 SendInput("{Enter}")
             }
         } else {
+            Logger.Warn("finish_empty_text")
             VoiceFloat.Update("没有识别到内容", "已结束")
         }
         SetTimer(() => VoiceFloat.Hide(), -800)
@@ -559,9 +581,13 @@ A: 可能是识别延迟设置过短，请适当增加延迟时间。
 ; 程序启动
 ; ============================================
 if A_Args.Length > 0 && A_Args[1] = "--float-self-test" {
-    VoiceFloat.Show("悬浮窗测试", "正在聆听")
+    Logger.Info("float_self_test_start")
+    VoiceFloat.Show("", "", "ready")
+    Sleep(900)
+    VoiceFloat.Show("", "", "recording")
     Sleep(5000)
     VoiceFloat.Hide()
+    Logger.Info("float_self_test_end")
     ExitApp(0)
 }
 

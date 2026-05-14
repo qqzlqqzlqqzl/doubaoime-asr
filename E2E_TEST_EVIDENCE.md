@@ -34,6 +34,8 @@ AHK 悬浮窗和不卡 UI 修复：2026-05-14，新增 `ahk_client/src/float.ahk
 
 AHK 悬浮窗可见性修复：2026-05-14，用户反馈录音时仍没有悬浮框。已把 `VoiceFloat.Show` 提前到 bridge `/start` 调用之前，并新增 `DoubaoASRHelper.exe --float-self-test`。最新 `test-desktop-exe.ps1` 会枚举打包 EXE 创建的 `DoubaoASRHelperFloat` 窗口，当前 `release/test-reports/ahk-float-self-test.json` 为 `ok=true`、窗口 `rect=[510,496,1031,609]`、尺寸 `521x113`。
 
+参考图式悬浮窗和日志修复：2026-05-14，AHK 悬浮窗改成两态视觉：待说话显示蓝色麦克风图和“点击/长按说话”，录音中显示蓝色声波条和“点击结束语音输入”。最新 `release/test-reports/ahk-float-self-test.json` 为 `ok=true`、窗口 `rect=[521,496,998,732]`、尺寸 `477x236`。新增 AHK 客户端日志和 Python bridge 日志，`test-desktop-exe.ps1` 已在隔离 `APPDATA` 中验证 `client-20260514.log` 包含 `float_self_test_start`、`asr_bridge-20260514.log` 包含 `self_test_ok`。
+
 耳机声学当前复测备注：2026-05-14，本机重新执行耳机声学录回 + ASR，显式选择 `外部麦克风 (2- Realtek(R) Audio)` 输入 index 15 和 `耳机 (2- Realtek(R) Audio)` 输出 index 12，拒绝 `Microsoft 声音映射器 - Output`、所有 `扬声器` 和 `Speakers` 输出端点。报告 `headset-loopback-asr-current.json` 中 `no_pc_speaker_used=true`、`ok=true`，录回 `raw_rms=0.0177557`、`raw_peak=0.77187`、包络相关性 `corr=0.2486`，ASR `recognized_chars=77`、关键词命中 8 个、`errors=[]`。该项当前可按 T11 PASS 计算。
 
 ## 汇总表

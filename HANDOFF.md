@@ -61,6 +61,7 @@ git pull --rebase --autostash
 - 2026-05-14 追加修复：新增 `ahk_client/src/float.ahk`，录音时显示本地悬浮窗并轮询 bridge `/status` 展示实时文本；`POST /stop` 支持 `wait=false`，AHK 松手后不再同步阻塞等待 ASR 完成，而是用定时器轮询最终文本再自动粘贴，解决说话/识别期间界面像冻结的问题。
 - 2026-05-14 追加上游差异审计：新增 `UPSTREAM_DIFF_AUDIT.md`，以 `yangmoling/doubaoime-asr@267972f` 和 `xiaohu31/doubao-voice-helper@12fb747` 为基线，解释文件级 diff。审计中修复了三处解释不通的漂移：`DoubaoASR(config=None)` 默认配置、AHK 配置目录迁移到 `%APPDATA%\DoubaoASRHelper`、源码模式自动加载 `.devtools\opus\bin`。同时恢复 `ahk_client/.gitignore` 和 `ahk_client/tools/window-spy.ahk`，避免无理由裁剪参考客户端开发能力。
 - 这次审计后的验证结果：`python -m pytest -q` 为 `16 passed, 1 warning`，源码 `--self-test` 通过且报告 `ok=true`，`build-desktop-exe.ps1` 通过，`test-desktop-exe.ps1` 通过并新增 AHK 旧配置迁移断言。
+- 2026-05-14 追加参考图式悬浮窗和日志：`ahk_client/src/float.ahk` 现在有待说话蓝色麦克风图、录音中蓝色声波条两种状态；`ahk_client/src/logger.ahk` 写 `client-YYYYMMDD.log`；`doubaoime_asr/asr_bridge.py` 写 `asr_bridge-YYYYMMDD.log`。两个日志都在 `%APPDATA%\DoubaoASRHelper\logs`。`test-desktop-exe.ps1` 会验证悬浮窗窗口可见且两类日志生成。
 
 2026-05-13，本轮按用户参考截图继续收紧主设置 UI：
 

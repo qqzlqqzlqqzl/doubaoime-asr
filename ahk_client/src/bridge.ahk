@@ -32,12 +32,17 @@ class BridgeClient {
             return true
 
         exe := this.BridgeExePath()
-        if exe = ""
+        if exe = "" {
+            Logger.Error("bridge_exe_missing")
             return false
+        }
 
         try {
+            Logger.Info("bridge_launch exe=" . exe . " port=" . this.Port)
             Run('"' . exe . '" --host ' . this.Host . ' --port ' . this.Port, , "Hide", &pid)
+            Logger.Info("bridge_launch_pid pid=" . pid)
         } catch {
+            Logger.Error("bridge_launch_failed exe=" . exe)
             return false
         }
 
@@ -63,8 +68,16 @@ class BridgeClient {
         if !this.EnsureRunning()
             return { ok: false, error: "ASR bridge 未启动" }
         body := '{"mode":"' . mode . '"}'
-        response := this.Request("POST", "/start", body, 3000)
-        return this.ParseResult(response)
+        try {
+            response := this.Request("POST", "/start", body, 3000)
+            result := this.ParseResult(response)
+            if !result.ok
+                Logger.Error("bridge_start_rejected mode=" . mode . " error=" . result.error)
+            return result
+        } catch as e {
+            Logger.Exception("bridge_start_exception mode=" . mode, e)
+            return { ok: false, text: "", final_text: "", state: "error", error: e.Message, done: false, cancelled: false, session_id: 0 }
+        }
     }
 
     static Stop(timeoutMs := 30000) {
@@ -78,22 +91,37 @@ class BridgeClient {
     static StopAsync() {
         if !this.EnsureRunning()
             return { ok: false, text: "", error: "ASR bridge 未启动" }
-        response := this.Request("POST", "/stop", '{"wait":false,"timeout_ms":1}', 2000)
-        return this.ParseResult(response)
+        try {
+            response := this.Request("POST", "/stop", '{"wait":false,"timeout_ms":1}', 2000)
+            return this.ParseResult(response)
+        } catch as e {
+            Logger.Exception("bridge_stop_async_exception", e)
+            return { ok: false, text: "", final_text: "", state: "error", error: e.Message, done: false, cancelled: false, session_id: 0 }
+        }
     }
 
     static Cancel() {
         if !this.EnsureRunning()
             return { ok: true, error: "" }
-        response := this.Request("POST", "/cancel", "{}", 3000)
-        return this.ParseResult(response)
+        try {
+            response := this.Request("POST", "/cancel", "{}", 3000)
+            return this.ParseResult(response)
+        } catch as e {
+            Logger.Exception("bridge_cancel_exception", e)
+            return { ok: false, error: e.Message }
+        }
     }
 
     static Status() {
         if !this.EnsureRunning()
             return { ok: false, state: "offline", text: "", error: "ASR bridge 未启动" }
-        response := this.Request("GET", "/status", "", 1000)
-        return this.ParseResult(response)
+        try {
+            response := this.Request("GET", "/status", "", 1000)
+            return this.ParseResult(response)
+        } catch as e {
+            Logger.Exception("bridge_status_exception", e)
+            return { ok: false, state: "offline", text: "", final_text: "", error: e.Message, done: false, cancelled: false, session_id: 0 }
+        }
     }
 
     static Request(method, path, body := "", timeoutMs := 3000) {
@@ -119,7 +147,8 @@ class BridgeClient {
             state: this.JsonString(jsonText, "state", ""),
             error: this.JsonString(jsonText, "error", ""),
             done: this.JsonBool(jsonText, "done", false),
-            cancelled: this.JsonBool(jsonText, "cancelled", false)
+            cancelled: this.JsonBool(jsonText, "cancelled", false),
+            session_id: this.JsonNumber(jsonText, "session_id", 0)
         }
     }
 
@@ -134,6 +163,13 @@ class BridgeClient {
         pattern := '"' . key . '"\s*:\s*"((?:\\.|[^"\\])*)"'
         if RegExMatch(jsonText, pattern, &match)
             return this.JsonUnescape(match[1])
+        return defaultValue
+    }
+
+    static JsonNumber(jsonText, key, defaultValue := 0) {
+        pattern := '"' . key . '"\s*:\s*(-?\d+)'
+        if RegExMatch(jsonText, pattern, &match)
+            return Integer(match[1])
         return defaultValue
     }
 
