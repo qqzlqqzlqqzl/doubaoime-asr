@@ -45,6 +45,7 @@ git pull --rebase --autostash
 - 新增 `ahk_client/src/bridge.ahk`，AHK 主程序启动时自动拉起同目录的 `asr_bridge.exe`；热键按下调用 `start`，松开调用 `stop`，取消调用 `cancel`，识别文本仍由 AHK 的剪贴板保护逻辑粘贴回原窗口。
 - `build-desktop-exe.ps1` 现在构建两个运行时文件：AHK 主程序 `dist\DoubaoASRHelper.exe` 和 Python 后端 `dist\asr_bridge.exe`。便携 zip 和安装器都必须包含两者。
 - `test-desktop-exe.ps1` 对新架构走快速烟测：bridge self-test、HTTP health/status、AHK 自动拉起 bridge、安装目录包含两个 EXE、zip 包包含 `asr_bridge.exe`。
+- 2026-05-14 追加修复：新增 `ahk_client/src/float.ahk`，录音时显示本地悬浮窗并轮询 bridge `/status` 展示实时文本；`POST /stop` 支持 `wait=false`，AHK 松手后不再同步阻塞等待 ASR 完成，而是用定时器轮询最终文本再自动粘贴，解决说话/识别期间界面像冻结的问题。
 
 2026-05-13，本轮按用户参考截图继续收紧主设置 UI：
 

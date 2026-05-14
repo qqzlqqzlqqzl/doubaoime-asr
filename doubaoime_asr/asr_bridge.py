@@ -192,15 +192,16 @@ class BridgeState:
                 self._session = None
             return BridgeResult(False, error=repr(exc), state="error", session_id=session.session_id)
 
-    def stop(self, timeout: float = 30.0) -> BridgeResult:
+    def stop(self, timeout: float = 30.0, wait: bool = True) -> BridgeResult:
         session = self._session
         if session is None:
             return BridgeResult(False, error="no_active_session", state="idle")
         session.stop()
-        session.wait(timeout)
+        if wait:
+            session.wait(timeout)
         snapshot = session.snapshot()
         text = str(snapshot.get("final_text") or snapshot.get("text") or "")
-        ok = bool(snapshot.get("done")) and not snapshot.get("error")
+        ok = (not wait or bool(snapshot.get("done"))) and not snapshot.get("error")
         if snapshot.get("cancelled"):
             text = ""
             ok = True
@@ -246,7 +247,8 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             return
         if path == "/stop":
             timeout_ms = int(payload.get("timeout_ms", 30000))
-            self._send_json(self.bridge.stop(timeout=max(timeout_ms, 1) / 1000).__dict__)
+            wait = bool(payload.get("wait", True))
+            self._send_json(self.bridge.stop(timeout=max(timeout_ms, 1) / 1000, wait=wait).__dict__)
             return
         if path == "/cancel":
             self._send_json(self.bridge.cancel().__dict__)

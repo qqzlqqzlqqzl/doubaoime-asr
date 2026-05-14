@@ -75,6 +75,13 @@ class BridgeClient {
         return this.ParseResult(response)
     }
 
+    static StopAsync() {
+        if !this.EnsureRunning()
+            return { ok: false, text: "", error: "ASR bridge 未启动" }
+        response := this.Request("POST", "/stop", '{"wait":false,"timeout_ms":1}', 2000)
+        return this.ParseResult(response)
+    }
+
     static Cancel() {
         if !this.EnsureRunning()
             return { ok: true, error: "" }
@@ -110,7 +117,9 @@ class BridgeClient {
             text: this.JsonString(jsonText, "text", ""),
             final_text: this.JsonString(jsonText, "final_text", ""),
             state: this.JsonString(jsonText, "state", ""),
-            error: this.JsonString(jsonText, "error", "")
+            error: this.JsonString(jsonText, "error", ""),
+            done: this.JsonBool(jsonText, "done", false),
+            cancelled: this.JsonBool(jsonText, "cancelled", false)
         }
     }
 

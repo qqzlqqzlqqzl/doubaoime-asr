@@ -15,6 +15,7 @@ SetWorkingDir(A_ScriptDir)
 #Include gui.ahk
 #Include doubao.ahk
 #Include bridge.ahk
+#Include float.ahk
 
 ; ============================================
 ; 语音流程控制器
@@ -28,6 +29,9 @@ class VoiceController {
     ; 防重复提示
     static LastTipTime := 0
     static TipDebounceInterval := 2000  ; 2秒内不重复相同提示
+    static StatusPollTimer := 0
+    static FinishPollTimer := 0
+    static FinishStartedAt := 0
 
     ; 初始化
     static Init() {
@@ -216,7 +220,11 @@ class VoiceController {
             this.IsProcessing := false
             HotkeyManager.ResetState()
             this.ShowTrayTip("错误", result.error)
+            VoiceFloat.Hide()
+            return
         }
+        VoiceFloat.Show("开始说话...", "🎙 正在聆听")
+        this.StartStatusPolling()
     }
 
     ; 按着说模式松开
@@ -258,7 +266,11 @@ class VoiceController {
             this.IsAutoSendEnabled := false
             HotkeyManager.ResetState()
             this.ShowTrayTip("错误", result.error)
+            VoiceFloat.Hide()
+            return
         }
+        VoiceFloat.Show("开始说话...", "🎙 正在聆听")
+        this.StartStatusPolling()
     }
 
     ; 按着说+自动发送模式松开
@@ -277,6 +289,9 @@ class VoiceController {
 
         ; 通知本地 ASR bridge 取消本次录音
         BridgeClient.Cancel()
+        this.StopStatusPolling()
+        this.StopFinishPolling()
+        VoiceFloat.Hide()
 
         ; 重置状态
         this.IsProcessing := false
@@ -289,21 +304,96 @@ class VoiceController {
 
     ; 执行插入流程
     static DoInsertProcess() {
-        ; 1. 停止 bridge 录音并等待 ASR 返回最终文本
+        ; 1. 非阻塞停止 bridge 录音，后续用定时器轮询最终结果，避免 AHK UI 卡死
+        this.StopStatusPolling()
         delay := Config.Get("InsertDelay")
         if delay > 0
             Sleep(delay)
 
-        result := BridgeClient.Stop(30000)
-        text := result.text
+        result := BridgeClient.StopAsync()
+        if !result.ok {
+            this.ShowTrayTip("错误", result.error)
+            this.ResetAfterFinish()
+            return
+        }
+        VoiceFloat.Update(result.text, "正在识别...")
+        this.FinishStartedAt := A_TickCount
+        this.StartFinishPolling()
+    }
+
+    static StartStatusPolling() {
+        this.StopStatusPolling()
+        this.StatusPollTimer := ObjBindMethod(this, "PollRecordingStatus")
+        SetTimer(this.StatusPollTimer, 250)
+    }
+
+    static StopStatusPolling() {
+        if this.StatusPollTimer {
+            SetTimer(this.StatusPollTimer, 0)
+            this.StatusPollTimer := 0
+        }
+    }
+
+    static PollRecordingStatus() {
+        if !this.IsProcessing {
+            this.StopStatusPolling()
+            return
+        }
+        status := BridgeClient.Status()
+        if status.error != "" {
+            this.ShowTrayTip("错误", status.error)
+            this.ResetAfterFinish()
+            return
+        }
+        if status.text != ""
+            VoiceFloat.Update(status.text, "🎙 正在聆听")
+        else
+            VoiceFloat.Update("", "🎙 正在聆听")
+    }
+
+    static StartFinishPolling() {
+        this.StopFinishPolling()
+        this.FinishPollTimer := ObjBindMethod(this, "PollInsertProcess")
+        SetTimer(this.FinishPollTimer, 200)
+    }
+
+    static StopFinishPolling() {
+        if this.FinishPollTimer {
+            SetTimer(this.FinishPollTimer, 0)
+            this.FinishPollTimer := 0
+        }
+    }
+
+    static PollInsertProcess() {
+        status := BridgeClient.Status()
+        if status.text != ""
+            VoiceFloat.Update(status.text, "正在识别...")
+
+        if status.error != "" {
+            this.ShowTrayTip("错误", status.error)
+            this.ResetAfterFinish()
+            return
+        }
+
+        if !status.done {
+            if (A_TickCount - this.FinishStartedAt) > 35000 {
+                this.ShowTrayTip("错误", "识别超时")
+                this.ResetAfterFinish()
+            }
+            return
+        }
+
+        text := status.final_text
         if text = ""
-            text := result.final_text
+            text := status.text
 
         ; 2. 根据识别结果插入文本
-        if result.ok && text != "" {
+        if text != "" {
             inserted := ClipboardManager.InsertText(text, Config.Get("ClipboardProtect"))
             if !inserted {
                 this.ShowTrayTip("错误", "识别文本写入剪贴板失败")
+            } else {
+                VoiceFloat.Update(text, "已插入")
             }
             ; 自动发送逻辑：如果是自动发送模式，发送回车键
             if this.IsAutoSendEnabled {
@@ -311,10 +401,18 @@ class VoiceController {
                 Sleep(autoSendDelay)  ; 等待内容完全粘贴
                 SendInput("{Enter}")
             }
-        } else if result.error != "" {
-            this.ShowTrayTip("错误", result.error)
+        } else {
+            VoiceFloat.Update("没有识别到内容", "已结束")
         }
+        SetTimer(() => VoiceFloat.Hide(), -800)
+        this.ResetAfterFinish(false)
+    }
 
+    static ResetAfterFinish(hideFloat := true) {
+        this.StopStatusPolling()
+        this.StopFinishPolling()
+        if hideFloat
+            VoiceFloat.Hide()
         ; 重置状态
         this.IsProcessing := false
         this.IsAutoSendEnabled := false  ; 重置自动发送标志
