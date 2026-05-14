@@ -40,7 +40,7 @@ git pull --rebase --autostash
 - 同步更新 `test-desktop-exe.ps1` 的 200% 默认窗口尺寸期望，从 `900x680` 改为 `760x520`。
 - 已跑：`python -m compileall doubaoime_asr`、`python -m pytest -q`、源码 UI 布局 JSON 断言、源码按钮点击烟测、`build-desktop-exe.ps1`、`test-activation.ps1`、`test-license-stress.ps1`、`test-windows-compat.ps1`、`test-desktop-exe.ps1`、`test-long-text-asr.ps1`。
 - 注意：此前新打包 `dist\DoubaoASRHelper.exe` 曾被 Windows 应用控制策略拦截；本轮对 EXE 执行 `Unblock-File` 后，单独重跑 `test-desktop-exe.ps1` 已通过。正式分发仍建议做可信代码签名，避免其他机器触发 Smart App Control / Code Integrity。
-- 耳机声学闭环最新重跑失败：`headset-loopback-asr-rerun.json` 明确只用了 `耳机 (2- Realtek(R) Audio)` 输出和 `外部麦克风 (2- Realtek(R) Audio)` 输入，未使用电脑扬声器，但录回电平太低，ASR `recognized_chars=0`。旧 `headset-loopback-asr.json` 仍是通过证据，但当前物理摆放/音量状态需要重调后再测。
+- 耳机声学闭环当前已重跑通过：`headset-loopback-asr-current.json` 明确只用了 `耳机 (2- Realtek(R) Audio)` 输出 index 12 和 `外部麦克风 (2- Realtek(R) Audio)` 输入 index 15，未使用电脑扬声器，录回 `raw_rms=0.0177557`、`raw_peak=0.77187`，ASR `recognized_chars=77`、关键词 8 个、`ok=true`。旧 `headset-loopback-asr.json` 仍是长文本通过证据。
 
 2026-05-13，本轮继续补齐可自动化的端到端缺口：
 

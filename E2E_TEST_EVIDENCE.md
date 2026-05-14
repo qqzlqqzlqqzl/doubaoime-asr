@@ -24,7 +24,7 @@
 
 紧凑 UI 复测备注：2026-05-13 本轮将默认主窗口基准改为 `760x520`，热键行改成“标签 + 输入框 + 录制/选择按钮”的参考图顺序，并同步更新 200% 默认窗口断言。源码布局报告已重新生成并通过本地 JSON 断言：`source-ui-default-layout.json` 为 `root=1519x1039`、`content=1509x934`、`widgets=73`；`source-ui-compact-layout.json` 为 `root=760x567`、`content=754x557`、`widgets=50`；`source-ui-narrow-layout.json` 为 `root=760x567`、`content=754x470`；`source-ui-minimum-layout.json` 为 `root=756x567`、`content=750x557`。这些报告均为 `fits_horizontally=true` 且 `fits_vertically=true`。随后单独重跑 `test-desktop-exe.ps1` 已通过，并重新生成安装版 UI 截图和布局报告。
 
-全量重跑备注：2026-05-13 23:38-23:45，本机重新执行 `python -m compileall doubaoime_asr`、`python -m pytest -q`、`test-activation.ps1`、`test-license-stress.ps1`、`build-desktop-exe.ps1`、`test-windows-compat.ps1`、`test-desktop-exe.ps1`、`test-long-text-asr.ps1` 和源码按钮点击烟测。自动化项除耳机声学重跑外均通过。耳机声学重跑明确使用 `外部麦克风 (2- Realtek(R) Audio)` 输入和 `耳机 (2- Realtek(R) Audio)` 输出，报告 `headset-loopback-asr-rerun.json` 中 `no_pc_speaker_used=true`，但录回 `rms=0.00246`、ASR `recognized_chars=0`，所以最新耳机声学闭环不能算通过；需要重新摆放耳机/麦克风或调整耳机输出音量后复测。
+耳机声学当前复测备注：2026-05-14，本机重新执行耳机声学录回 + ASR，显式选择 `外部麦克风 (2- Realtek(R) Audio)` 输入 index 15 和 `耳机 (2- Realtek(R) Audio)` 输出 index 12，拒绝 `Microsoft 声音映射器 - Output`、所有 `扬声器` 和 `Speakers` 输出端点。报告 `headset-loopback-asr-current.json` 中 `no_pc_speaker_used=true`、`ok=true`，录回 `raw_rms=0.0177557`、`raw_peak=0.77187`、包络相关性 `corr=0.2486`，ASR `recognized_chars=77`、关键词命中 8 个、`errors=[]`。该项当前可按 T11 PASS 计算。
 
 ## 汇总表
 
@@ -40,7 +40,7 @@
 | T08 | 热键冲突弹窗闭环 | PARTIAL | 逻辑规则 PASS：`release/test-reports/e2e-source-self-test.json` 覆盖重复/危险/保留热键检查。真实弹窗交互尚未跑。 |
 | T09 | 剪贴板文本保护闭环 | PARTIAL | 新证据 `release/test-reports/installed-clipboard-insert-test.json`：`text_inserted=true`、`clipboard_restored=true`、`restore_delay_ms=500`，目标是临时 Tk 文本框，`paste_method=clipboard helper plus Tk <<Paste>> event`。旧证据 `release/test-reports/e2e-t09-clipboard-text.json` 仍记录真实前台自动化未闭合，`text_inserted=false`。所以该项证明了文本剪贴板保护逻辑，但还不能算“录音 + 外部应用 + 物理热键”完整闭环。 |
 | T10 | 剪贴板图片/文件保护闭环 | PARTIAL | 新证据 `release/test-reports/installed-clipboard-complex-test.json`：`ok=true`，`CF_DIB image` 和 `CF_HDROP file list` 两个 case 均 `text_inserted=true`、`format_restored=true`；报告明确跳过 `CF_BITMAP` 和 `CF_DIBV5` 这类 Windows 派生/不可搬运格式。该项仍未覆盖“真实录音 + 物理热键 + 外部应用焦点”的完整闭环，也未覆盖富文本等所有复杂格式。 |
-| T11 | 耳机声学闭环 | PARTIAL | 旧证据 `release/test-reports/headset-loopback-asr.json`：只用耳机输出和外部麦克风输入；`recognized_chars=552`、关键词 9 个、相关性 `0.7176`、`ok=true`。最新重跑证据 `release/test-reports/headset-loopback-asr-rerun.json`：明确未使用电脑扬声器，输入 `外部麦克风 (2- Realtek(R) Audio)`，输出 `耳机 (2- Realtek(R) Audio)`，但录回音量太低，`recognized_chars=0`、`ok=false`。当前不能按 PASS 计算，需要重新摆放耳机/麦克风或调高耳机输出后复测。 |
+| T11 | 耳机声学闭环 | PASS | 当前证据 `release/test-reports/headset-loopback-asr-current.json`：只用 `耳机 (2- Realtek(R) Audio)` 输出和 `外部麦克风 (2- Realtek(R) Audio)` 输入，`no_pc_speaker_used=true`；明确拒绝声音映射器、`扬声器` 和 `Speakers` 输出。录回 `raw_rms=0.0177557`、`raw_peak=0.77187`、相关性 `0.2486`；ASR `recognized_chars=77`，关键词命中 8 个，`errors=[]`，`ok=true`。旧长文本耳机证据 `headset-loopback-asr.json` 也为 `ok=true`，识别 552 字、关键词 9 个。 |
 | T12 | 真人讲话闭环 | NOT_RUN | 未跑。需要真人对外部麦克风说正常音量/小声/长停顿/长句，不能由 TTS 完全替代。 |
 | T13 | 开机自启动闭环 | PARTIAL | 新证据 `release/test-reports/installed-startup-script-test.json`：隔离 `APPDATA` 中 Startup bat 创建/删除均成功，内容包含安装版 EXE 路径和 `--hidden`。没有真实重启 Windows，也没有登录后验证托盘、热键和单实例，因此不能算完整 PASS。 |
 | T14 | 干净电脑安装包闭环 | NOT_RUN | 未跑。需要一台无 Python、无项目环境的 Win10/Win11。当前机器是开发机，不符合“干净电脑”条件。 |
@@ -58,7 +58,7 @@
 - 打包 EXE/UI/托盘/安装版测试：`test-desktop-exe.ps1` 最新重跑已通过，证据在 `release/test-reports/dist-self-test.json`、`portable-self-test.json`、`installed-self-test.json`、`dist-hold-release-auto-insert.json`、`portable-hold-release-auto-insert.json`、`installed-hold-release-auto-insert.json`、`installed-tray-self-test.json`、`installed-ui-smoke*.json/png`、`installed-clipboard-insert-test.json`、`installed-clipboard-complex-test.json`、`installed-startup-script-test.json`、`installed-license-network-test.json`、`isolated-uninstall-cleanup-test.json`。
 - 本机追加验证：在 `64e49f0` 之前的工作区运行过 `build-desktop-exe.ps1`、`test-desktop-exe.ps1`、`test-windows-compat.ps1`、`test-activation.ps1`、`test-license-stress.ps1`、`test-long-text-asr.ps1`。本轮紧凑 UI 后已重新运行 `python -m compileall doubaoime_asr`、`python -m pytest -q`、源码 UI 布局 JSON 断言、源码按钮点击烟测、`build-desktop-exe.ps1`、`test-activation.ps1`、`test-license-stress.ps1`、`test-windows-compat.ps1`、`test-desktop-exe.ps1`、`test-long-text-asr.ps1`。
 - 长文本文件 ASR：`release/test-reports/long-text-asr.json`，`ok=true`，识别 556 字，关键词 9 个。
-- 耳机声学 ASR：`release/test-reports/headset-loopback-asr.json`，`ok=true`，识别 552 字，关键词 9 个。
+- 耳机声学 ASR：`release/test-reports/headset-loopback-asr-current.json`，`ok=true`，识别 77 字，关键词 8 个；旧长文本证据 `headset-loopback-asr.json` 也为 `ok=true`，识别 552 字，关键词 9 个。
 
 ## 后续要真正补齐的项目
 
