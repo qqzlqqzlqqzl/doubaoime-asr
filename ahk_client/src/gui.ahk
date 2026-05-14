@@ -41,10 +41,9 @@ class GuiManager {
     ; 创建主窗口
     static CreateMainWindow() {
         this.MainGui := Gui("+Resize -MaximizeBox -DPIScale", "豆包语音助手 - 设置")
-        this.MainGui.SetFont("s10", "Microsoft YaHei")
+        this.MainGui.SetFont("s6", "Microsoft YaHei")
         this.MainGui.OnEvent("Close", (*) => this.OnClose())
-        dpiScale := A_ScreenDPI > 0 ? A_ScreenDPI / 96 : 1
-        contentWidth := dpiScale > 1.25 ? 480 : 380
+        contentWidth := 380
 
         ; ===== 按着说模式 =====
         this.MainGui.AddGroupBox("x10 y10 w" . contentWidth . " h80", "【按着说】模式")
@@ -125,10 +124,7 @@ class GuiManager {
         this.LoadConfigToGui()
 
         dpiScale := A_ScreenDPI > 0 ? A_ScreenDPI / 96 : 1
-        baseWidth := dpiScale > 1.25 ? 500 : 400
-        windowWidth := Round(baseWidth * dpiScale)
-        windowHeight := Round(630 * dpiScale)
-        this.MainGui.Show("w" . windowWidth . " h" . windowHeight)
+        this.MainGui.Show("w" . Round(400 * dpiScale) . " h" . Round(630 * dpiScale))
     }
 
     ; 隐藏主窗口

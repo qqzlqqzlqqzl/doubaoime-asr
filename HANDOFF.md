@@ -8,7 +8,7 @@
 
 当前最新大变更：`185e2a7 Audit upstream diffs and fix drift`。这一版把“为什么不用纯自写桌面壳、为什么要接入两个参考仓库、哪些 diff 是必要胶水、哪些 diff 已修成 bug”写进了 [CHANGELOG.md](CHANGELOG.md) 和 [UPSTREAM_DIFF_AUDIT.md](UPSTREAM_DIFF_AUDIT.md)。接手者必须先读这两份文档，否则很容易把 AHK 主客户端、Python bridge、旧 Python Tk 自测入口三者的职责搞混。
 
-最新未发布前置：2026-05-14 本机又做了一轮参考图 UI 收敛。AHK 设置页现在在高 DPI 下使用 `-DPIScale` 加紧凑窗口宽度，安装版截图证据为 `release/test-reports/installed-final-settings-panel-fit.png`，窗口 `513x666`；本地识别悬浮窗压缩为 `457x133`，证据为 `release/test-reports/installed-final-compact-float-test.json`。本轮新打包的 `dist/asr_bridge.exe` 被 Windows 应用控制策略拦截，`Unblock-File` 无效，所以只把新版 `DoubaoASRHelper.exe` 覆盖到 `%LOCALAPPDATA%\DoubaoASRHelper`，没有覆盖当前可用的已安装 `asr_bridge.exe`。
+最新未发布前置：2026-05-14 本机又做了一轮参考图 UI 收敛。AHK 设置页现在在高 DPI 下使用 `-DPIScale` 加紧凑窗口宽度，安装版截图证据为 `release/test-reports/installed-final-settings-panel-fit.png`，窗口 `413x666`；本地识别悬浮窗压缩为 `457x133`，证据为 `release/test-reports/installed-final-compact-float-test.json`。本轮新打包的 `dist/asr_bridge.exe` 被 Windows 应用控制策略拦截，`Unblock-File` 无效，所以只把新版 `DoubaoASRHelper.exe` 覆盖到 `%LOCALAPPDATA%\DoubaoASRHelper`，没有覆盖当前可用的已安装 `asr_bridge.exe`。
 
 当前生产桌面链路：
 
@@ -52,7 +52,7 @@ git pull --rebase --autostash
 - 主界面只保留截图中的文案和控件：三个模式块、豆包快捷键、插入延迟、剪贴板保护、开机自启动、高级设置、保存、取消、状态。主界面不再显示恢复默认、显示悬浮窗、使用说明、打开配置目录、凭据文件等额外入口。
 - 默认值已改为不依赖鼠标侧键：`右Ctrl`、`Ctrl+Alt+Space`、`Ctrl+Alt+Enter`、`Esc`、`Ctrl+Alt+D`、插入延迟 `300ms`、剪贴板超时 `100ms`、发送延迟 `50ms`。避免 `Ctrl+Q`、`Ctrl+D`、裸字母、鼠标侧键、AltGr 和 Windows 自带语音输入 `Win+H`。
 - 本轮默认热键调整已跑：`python -m compileall doubaoime_asr\desktop_app.py doubaoime_asr\desktop_help.py doubaoime_asr\asr_bridge.py`、`python -m pytest -q`、源码 `--self-test`、`build-desktop-exe.ps1`、`test-desktop-exe.ps1`。另用隔离 `%APPDATA%` 烟测旧默认迁移，`xbutton1/f9/f12/ctrl+alt+shift+d` 会迁到 `Ctrl+Alt+Space / Ctrl+Alt+Enter / Esc / Ctrl+Alt+D`。
-- 最新 AHK 设置页复测：`source-ahk-settings-panel-fit.png` 和 `installed-final-settings-panel-fit.png` 均为 `513x666`；如果继续调 UI，优先保持参考图文案和单页无滚动，不要重新引入 Python/Tk 大界面。完整 EXE 测试当前被未签名 `asr_bridge.exe` 的系统策略拦截，需代码签名或策略放行后再重跑 `test-desktop-exe.ps1`。
+- 最新 AHK 设置页复测：`source-ahk-settings-panel-fit.png` 和 `installed-final-settings-panel-fit.png` 均为 `413x666`；如果继续调 UI，优先保持参考图文案和单页无滚动，不要重新引入 Python/Tk 大界面。完整 EXE 测试当前被未签名 `asr_bridge.exe` 的系统策略拦截，需代码签名或策略放行后再重跑 `test-desktop-exe.ps1`。
 
 2026-05-14，架构改为“AHK 客户端 + Python ASR bridge”：
 
