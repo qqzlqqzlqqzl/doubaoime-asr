@@ -191,6 +191,8 @@ config = ASRConfig(credential_path="~/.config/doubaoime-asr/credentials.json")
 
 Windows 桌面版的正式目标是 Windows 10/11 x64。Win7、Win8、Win8.1 和 32 位 Windows 不作为支持目标，对外分发优先使用主发布包。
 
+当前桌面版改为薄桥接架构：`ahk_client` 直接使用 `xiaohu31/doubao-voice-helper` 的 AutoHotkey v2 客户端结构，保留设置页、热键、托盘、剪贴板保护和自动发送；`doubaoime_asr.asr_bridge` 复用 Python 豆包 ASR API，在本机提供 `start / stop / cancel / status`。AHK 只负责交互和粘贴，Python 只负责录音识别。
+
 本地开发建议先在 PowerShell 中启用项目隔离环境：
 
 ```powershell
@@ -232,13 +234,15 @@ EXE 内置「使用说明」窗口，安装后开始菜单也会生成 Help 快�
 .\build-desktop-exe.ps1
 ```
 
+构建结果里 `DoubaoASRHelper.exe` 是 AHK 主客户端，`asr_bridge.exe` 是 Python ASR 后端。免安装版必须把这两个 EXE 放在同一个目录。
+
 测试已打包的 exe、安装器和分发 zip：
 
 ```powershell
 .\test-desktop-exe.ps1
 ```
 
-这一步会同时覆盖安装版/便携版自测、托盘图标、单实例、关闭后后台保活、UI 截图和 150%/200% DPI 布局、文本剪贴板恢复、图片/文件剪贴板格式恢复、开机启动脚本无重启烟测、授权断网烟测、隔离卸载清理。
+这一步会覆盖 bridge 自测、HTTP health/status、AHK 主客户端自动拉起 bridge、安装目录包含双 EXE、便携 zip 包含 bridge。
 
 其中按着说的核心闭环必须满足：松开触发键后自动插入识别文字，不需要点击悬浮窗“插入”。可单独跑：
 

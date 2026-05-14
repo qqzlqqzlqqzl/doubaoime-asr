@@ -12,6 +12,7 @@ from tkinter import messagebox
 
 APP_NAME = "Doubao ASR Helper"
 APP_EXE = "DoubaoASRHelper.exe"
+BRIDGE_EXE = "asr_bridge.exe"
 INSTALL_DIR = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "DoubaoASRHelper"
 START_MENU_DIR = Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming")) / "Microsoft/Windows/Start Menu/Programs/Doubao ASR Helper"
 
@@ -20,6 +21,12 @@ def bundled_app_exe() -> Path:
     if getattr(sys, "frozen", False):
         return Path(getattr(sys, "_MEIPASS")) / APP_EXE
     return Path(__file__).resolve().parent / "dist" / APP_EXE
+
+
+def bundled_bridge_exe() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS")) / BRIDGE_EXE
+    return Path(__file__).resolve().parent / "dist" / BRIDGE_EXE
 
 
 def desktop_dir() -> Path:
@@ -46,12 +53,13 @@ $shortcut.Save()
 
 
 def stop_running_app() -> None:
-    subprocess.run(
-        ["taskkill", "/IM", APP_EXE, "/F"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-    )
+    for exe in (APP_EXE, BRIDGE_EXE):
+        subprocess.run(
+            ["taskkill", "/IM", exe, "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
 
 
 def write_uninstaller(install_dir: Path) -> Path:
@@ -62,6 +70,7 @@ def write_uninstaller(install_dir: Path) -> Path:
                 "@echo off",
                 'set "INSTALL_DIR=%~dp0"',
                 f'taskkill /IM "{APP_EXE}" /F >nul 2>nul',
+                f'taskkill /IM "{BRIDGE_EXE}" /F >nul 2>nul',
                 'del "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Doubao ASR Helper\\Doubao ASR Helper.lnk" >nul 2>nul',
                 'del "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Doubao ASR Helper\\Help.lnk" >nul 2>nul',
                 'del "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Doubao ASR Helper\\Uninstall Doubao ASR Helper.lnk" >nul 2>nul',
@@ -83,11 +92,16 @@ def install(target: Path, shortcuts: bool = True) -> Path:
     source = bundled_app_exe()
     if not source.exists():
         raise FileNotFoundError(f"找不到主程序：{source}")
+    bridge_source = bundled_bridge_exe()
+    if not bridge_source.exists():
+        raise FileNotFoundError(f"找不到 ASR bridge：{bridge_source}")
 
     target.mkdir(parents=True, exist_ok=True)
     stop_running_app()
     target_exe = target / APP_EXE
+    target_bridge = target / BRIDGE_EXE
     shutil.copy2(source, target_exe)
+    shutil.copy2(bridge_source, target_bridge)
 
     write_uninstaller(target)
     (target / "install.json").write_text(

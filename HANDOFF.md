@@ -38,6 +38,14 @@ git pull --rebase --autostash
 - 默认值同步截图：`右Ctrl`、`Ctrl+Q`、`左Ctrl+左Win`、`Z`、`Ctrl+D`、插入延迟 `300ms`、剪贴板超时 `100ms`、发送延迟 `50ms`。热键显示去掉空格，如 `左Ctrl+左Win`。
 - 已跑：`python -m compileall doubaoime_asr\desktop_app.py`、`python -m pytest -q`、源码 `--self-test`、`build-desktop-exe.ps1`、`test-desktop-exe.ps1`、安装版隔离默认配置 UI 报告和截图 `release\test-reports\installed-reference-ui-default-layout.json/png`。
 
+2026-05-14，架构改为“AHK 客户端 + Python ASR bridge”：
+
+- `ahk_client` 来自 `xiaohu31/doubao-voice-helper` 的 AutoHotkey v2 客户端，保留其设置页、热键、托盘、剪贴板保护和自动发送状态机。
+- 新增 `doubaoime_asr/asr_bridge.py`，本地监听 `127.0.0.1:18765`，提供 `/health`、`/status`、`POST /start`、`POST /stop`、`POST /cancel`。bridge 复用 `transcribe_realtime`、`ASRConfig` 和 `TranscriptAccumulator`。
+- 新增 `ahk_client/src/bridge.ahk`，AHK 主程序启动时自动拉起同目录的 `asr_bridge.exe`；热键按下调用 `start`，松开调用 `stop`，取消调用 `cancel`，识别文本仍由 AHK 的剪贴板保护逻辑粘贴回原窗口。
+- `build-desktop-exe.ps1` 现在构建两个运行时文件：AHK 主程序 `dist\DoubaoASRHelper.exe` 和 Python 后端 `dist\asr_bridge.exe`。便携 zip 和安装器都必须包含两者。
+- `test-desktop-exe.ps1` 对新架构走快速烟测：bridge self-test、HTTP health/status、AHK 自动拉起 bridge、安装目录包含两个 EXE、zip 包包含 `asr_bridge.exe`。
+
 2026-05-13，本轮按用户参考截图继续收紧主设置 UI：
 
 - 默认窗口基准从 `900x680` 改为 `760x520`。在当前 200% DPI 开发机上，源码默认布局报告为 `1519x1039`，内容边界为 `1509x934`，不再留下大块底部空白。

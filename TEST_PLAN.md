@@ -59,12 +59,12 @@
 
 | 编号 | 测试项 | 预期 |
 |------|------|------|
-| E01 | `dist\DoubaoASRHelper.exe --self-test` | 自测报告 `ok=true` |
-| E02 | `release\DoubaoASRHelper-portable.exe --self-test` | 自测报告 `ok=true` |
+| E01 | `dist\asr_bridge.exe --self-test` | bridge 自测退出码为 0 |
+| E02 | AHK 主客户端启动烟测 | `dist\DoubaoASRHelper.exe` 启动后能自动拉起 `asr_bridge.exe`，`/health` 返回 `ok=true` |
 | E03 | 强制激活配置自测 | 报告里 `license_config.require_activation=true`，未激活状态不让主流程通过 |
 | E04 | 分发 zip 完整性 | 完整包包含安装器、便携版、README 和 HELP；免安装包包含便携版、README 和 HELP |
 | E05 | 安装器静默安装 | 安装到临时目录成功 |
-| E06 | 安装后 EXE 自测 | 安装目录里的 EXE 自测通过 |
+| E06 | 安装后 EXE 自测 | 安装目录同时包含 `DoubaoASRHelper.exe` 和 `asr_bridge.exe`，bridge 自测通过 |
 | E07 | 安装后可见 UI 截图和布局报告 | 启动可见窗口并写出 `release\test-reports\installed-ui-smoke.png`、`installed-ui-smoke-narrow.png`、`installed-ui-smoke-minimum.png`、`installed-ui-smoke-scale200-default.png` 及对应 `*-layout.json`，自动断言参考图式三模式块、豆包快捷键、插入延迟滑块、剪贴板保护/开机自启动开关和 2 个底部按钮都在单页可见区域内；正常/窄/最小窗口下主界面不需要滚动、控件不溢出，设置区 entry、录制按钮、delay 控件和 hotkey 显示值都有语义化布局项；同时用 `--ui-scale-factor` 模拟 150% 和 200% 缩放并断言布局仍不溢出、200% 控件物理尺寸不偏小，200% 默认窗口会按参考图 `392x648` 逻辑基准随 DPI 放大，而不是停留在固定小窗 |
 | E08 | 托盘图标烟测 | `--tray-self-test` 能创建并删除 Windows 系统托盘图标，报告 `started=true`、`stopped=true` |
 | E09 | 关闭窗口后台保活 | 对安装后主窗口发送关闭消息后，进程保持运行且主窗口不可见 |

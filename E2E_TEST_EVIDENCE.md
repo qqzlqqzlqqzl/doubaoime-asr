@@ -26,6 +26,8 @@
 
 参考图 UI 复刻备注：2026-05-14，本轮按用户截图将设置页收敛为 `【按着说】模式`、`【自由说】模式`、`【按着说+自动发送】模式`、豆包快捷键、插入延迟、剪贴板保护、开机自启动、高级设置、`保存`、`取消` 和底部状态文案，移除主界面多余按钮和说明。隔离配置安装版布局报告 `installed-reference-ui-default-layout.json`：默认 200% DPI 窗口 `root=783x1294`、`content.right=767`、`content.bottom=1217`，`fits_horizontally=true`、`fits_vertically=true`；默认热键显示为 `右Ctrl`、`Ctrl+Q`、`左Ctrl+左Win`、`Z`、`Ctrl+D`，延迟为 `300/100/50ms`。截图证据 `installed-reference-ui-default.png` 已生成。重新打包后，安装版完整桌面测试 `test-desktop-exe.ps1` 通过。
 
+AHK bridge 改造备注：2026-05-14，本轮将主客户端切换为 `xiaohu31/doubao-voice-helper` 风格的 AutoHotkey v2 客户端，Python 新增 `asr_bridge.exe` 只提供本地 HTTP `start/stop/cancel/status/health`。`build-desktop-exe.ps1` 已改为构建 AHK 主程序 `DoubaoASRHelper.exe` 和 Python 后端 `asr_bridge.exe`；便携包和安装包都包含两个 EXE。验证：源码和打包版 bridge self-test 通过，打包版 `/health` 和 `/status` 返回 `ok=true/state=idle`，AHK 主程序启动后能自动拉起 bridge，静默安装目录包含 `DoubaoASRHelper.exe`、`asr_bridge.exe` 和 `install.json`，`test-desktop-exe.ps1` 输出 `AHK bridge desktop tests passed.`。
+
 耳机声学当前复测备注：2026-05-14，本机重新执行耳机声学录回 + ASR，显式选择 `外部麦克风 (2- Realtek(R) Audio)` 输入 index 15 和 `耳机 (2- Realtek(R) Audio)` 输出 index 12，拒绝 `Microsoft 声音映射器 - Output`、所有 `扬声器` 和 `Speakers` 输出端点。报告 `headset-loopback-asr-current.json` 中 `no_pc_speaker_used=true`、`ok=true`，录回 `raw_rms=0.0177557`、`raw_peak=0.77187`、包络相关性 `corr=0.2486`，ASR `recognized_chars=77`、关键词命中 8 个、`errors=[]`。该项当前可按 T11 PASS 计算。
 
 ## 汇总表

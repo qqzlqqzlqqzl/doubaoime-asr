@@ -30,8 +30,9 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText($GeneratedLicenseConfig, $LicenseConfigJson, $Utf8NoBom)
 
 $AppExe = Join-Path $PSScriptRoot "dist\DoubaoASRHelper.exe"
+$BridgeExe = Join-Path $PSScriptRoot "dist\asr_bridge.exe"
 Get-CimInstance Win32_Process |
-  Where-Object { $_.ExecutablePath -eq $AppExe } |
+  Where-Object { $_.ExecutablePath -eq $AppExe -or $_.ExecutablePath -eq $BridgeExe } |
   ForEach-Object {
     Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
     Wait-Process -Id $_.ProcessId -Timeout 10 -ErrorAction SilentlyContinue
@@ -45,7 +46,7 @@ pyinstaller `
   --clean `
   --onefile `
   --windowed `
-  --name DoubaoASRHelper `
+  --name asr_bridge `
   --icon "$AppIcon" `
   --add-binary ".devtools\opus\bin\opus.dll;." `
   --add-data "$GeneratedLicenseConfig;doubaoime_asr" `
@@ -54,7 +55,27 @@ pyinstaller `
   --hidden-import doubaoime_asr.long_text_sample `
   --hidden-import pynput.keyboard._win32 `
   --hidden-import pynput.mouse._win32 `
-  doubaoime_asr\desktop_app.py
+  doubaoime_asr\asr_bridge.py
+
+$AhkDir = Join-Path $PSScriptRoot ".devtools\autohotkey\2.0.26"
+$AhkBase = Join-Path $AhkDir "AutoHotkey64.exe"
+$AhkZip = Join-Path $PSScriptRoot ".devtools\autohotkey\AutoHotkey_2.0.26.zip"
+if (-not (Test-Path $AhkBase)) {
+  New-Item -ItemType Directory -Force -Path (Split-Path $AhkZip) | Out-Null
+  if (-not (Test-Path $AhkZip)) {
+    Invoke-WebRequest -Uri "https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.26/AutoHotkey_2.0.26.zip" -OutFile $AhkZip
+  }
+  Expand-Archive -LiteralPath $AhkZip -DestinationPath $AhkDir -Force
+}
+$AhkCompiler = Join-Path $PSScriptRoot "ahk_client\tools\compiler\Ahk2Exe.exe"
+if (-not (Test-Path $AhkCompiler)) {
+  throw "Missing AHK compiler: $AhkCompiler"
+}
+& $AhkCompiler `
+  /in (Join-Path $PSScriptRoot "ahk_client\src\main.ahk") `
+  /out $AppExe `
+  /base $AhkBase `
+  /icon (Join-Path $PSScriptRoot "ahk_client\assets\icon.ico")
 
 pyinstaller `
   --noconfirm `
@@ -64,11 +85,13 @@ pyinstaller `
   --name DoubaoASRHelperSetup `
   --icon "$AppIcon" `
   --add-binary "dist\DoubaoASRHelper.exe;." `
+  --add-binary "dist\asr_bridge.exe;." `
   windows_installer.py
 
 $ReleaseDir = Join-Path $PSScriptRoot "release"
 New-Item -ItemType Directory -Force -Path $ReleaseDir | Out-Null
 Copy-Item -Force (Join-Path $PSScriptRoot "dist\DoubaoASRHelper.exe") (Join-Path $ReleaseDir "DoubaoASRHelper-portable.exe")
+Copy-Item -Force (Join-Path $PSScriptRoot "dist\asr_bridge.exe") (Join-Path $ReleaseDir "asr_bridge.exe")
 Copy-Item -Force (Join-Path $PSScriptRoot "dist\DoubaoASRHelperSetup.exe") (Join-Path $ReleaseDir "DoubaoASRHelperSetup.exe")
 $HelpPath = Join-Path $ReleaseDir "HELP.md"
 python -m doubaoime_asr.desktop_help $HelpPath
@@ -83,7 +106,7 @@ $Readme = @(
   "",
   "Recommended files:",
   "- DoubaoASRHelperSetup.exe: installer for the current Windows user. It creates Start Menu and Desktop shortcuts.",
-  "- DoubaoASRHelper-portable.exe: portable one-file app. Run it directly without shortcuts.",
+  "- DoubaoASRHelper-Portable.zip: portable build. Extract it and keep DoubaoASRHelper-portable.exe together with asr_bridge.exe.",
   "- HELP.md: offline usage guide.",
   "",
   $ActivationReadme,
@@ -99,7 +122,7 @@ $PortableReadme = @(
   "",
   "How to run:",
   "1. Extract this zip to any folder.",
-  "2. Double-click DoubaoASRHelper-portable.exe.",
+  "2. Double-click DoubaoASRHelper-portable.exe. Keep asr_bridge.exe in the same folder.",
   "3. Windows may show a SmartScreen warning because this build is not code-signed.",
   "",
   "No installer is required. Config and credential cache are saved under %APPDATA%\DoubaoASRHelper on first run.",
@@ -110,6 +133,7 @@ $PortableReadme | Set-Content -Encoding UTF8 $PortableReadmePath
 $PortableZipPath = Join-Path $ReleaseDir "DoubaoASRHelper-Portable.zip"
 Compress-Archive -Force -Path @(
   (Join-Path $ReleaseDir "DoubaoASRHelper-portable.exe"),
+  (Join-Path $ReleaseDir "asr_bridge.exe"),
   $PortableReadmePath,
   $HelpPath
 ) -DestinationPath $PortableZipPath
@@ -118,11 +142,13 @@ $ZipPath = Join-Path $ReleaseDir "DoubaoASRHelper-Windows.zip"
 Compress-Archive -Force -Path @(
   (Join-Path $ReleaseDir "DoubaoASRHelperSetup.exe"),
   (Join-Path $ReleaseDir "DoubaoASRHelper-portable.exe"),
+  (Join-Path $ReleaseDir "asr_bridge.exe"),
   (Join-Path $ReleaseDir "README-Windows.txt"),
   $HelpPath
 ) -DestinationPath $ZipPath
 
 Write-Host "Built dist\DoubaoASRHelper.exe"
+Write-Host "Built dist\asr_bridge.exe"
 Write-Host "Built dist\DoubaoASRHelperSetup.exe"
 Write-Host "Built release\DoubaoASRHelper-Portable.zip"
 Write-Host "Built release\DoubaoASRHelper-Windows.zip"

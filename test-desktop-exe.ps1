@@ -1,5 +1,101 @@
 $ErrorActionPreference = "Stop"
 
+$BridgeExe = Join-Path $PSScriptRoot "dist\asr_bridge.exe"
+$AhkClientExe = Join-Path $PSScriptRoot "dist\DoubaoASRHelper.exe"
+if ((Test-Path $BridgeExe) -and (Test-Path $AhkClientExe)) {
+  $ReportsDir = Join-Path $PSScriptRoot "release\test-reports"
+  New-Item -ItemType Directory -Force -Path $ReportsDir | Out-Null
+
+  Get-Process DoubaoASRHelper,asr_bridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+  $BridgeSelfTest = Start-Process -FilePath $BridgeExe -ArgumentList "--self-test" -PassThru -Wait
+  if ($BridgeSelfTest.ExitCode -ne 0) {
+    throw "asr_bridge.exe --self-test failed with exit code $($BridgeSelfTest.ExitCode)"
+  }
+
+  $BridgeProcess = Start-Process -FilePath $BridgeExe -ArgumentList "--port 18767" -PassThru
+  try {
+    $Deadline = (Get-Date).AddSeconds(15)
+    $Health = $null
+    while ((Get-Date) -lt $Deadline) {
+      try {
+        $Health = Invoke-RestMethod -Uri "http://127.0.0.1:18767/health" -TimeoutSec 1
+        break
+      }
+      catch {
+        Start-Sleep -Milliseconds 250
+      }
+    }
+    if (-not $Health.ok) {
+      throw "asr_bridge.exe did not answer /health"
+    }
+    $Status = Invoke-RestMethod -Uri "http://127.0.0.1:18767/status" -TimeoutSec 2
+    if (-not $Status.ok -or $Status.state -ne "idle") {
+      throw "asr_bridge.exe status is not idle"
+    }
+  }
+  finally {
+    Stop-Process -Id $BridgeProcess.Id -Force -ErrorAction SilentlyContinue
+  }
+
+  $OldAppData = $env:APPDATA
+  $env:APPDATA = Join-Path $ReportsDir "ahk-client-smoke-appdata"
+  Remove-Item -LiteralPath $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force -Path $env:APPDATA | Out-Null
+  $ClientProcess = Start-Process -FilePath $AhkClientExe -PassThru
+  try {
+    $Deadline = (Get-Date).AddSeconds(15)
+    $Health = $null
+    while ((Get-Date) -lt $Deadline) {
+      try {
+        $Health = Invoke-RestMethod -Uri "http://127.0.0.1:18765/health" -TimeoutSec 1
+        break
+      }
+      catch {
+        Start-Sleep -Milliseconds 250
+      }
+    }
+    if (-not $Health.ok) {
+      throw "AHK client did not launch the local ASR bridge"
+    }
+  }
+  finally {
+    Get-Process DoubaoASRHelper,asr_bridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    $env:APPDATA = $OldAppData
+  }
+
+  $SetupExe = Join-Path $PSScriptRoot "dist\DoubaoASRHelperSetup.exe"
+  $InstallTarget = Join-Path $ReportsDir "ahk-install-smoke"
+  Remove-Item -LiteralPath $InstallTarget -Recurse -Force -ErrorAction SilentlyContinue
+  $Setup = Start-Process -FilePath $SetupExe -ArgumentList @("--silent", "--no-shortcuts", "--no-run", "--target", $InstallTarget) -PassThru -Wait
+  if ($Setup.ExitCode -ne 0) {
+    throw "installer failed with exit code $($Setup.ExitCode)"
+  }
+  foreach ($Name in @("DoubaoASRHelper.exe", "asr_bridge.exe", "install.json")) {
+    if (-not (Test-Path (Join-Path $InstallTarget $Name))) {
+      throw "installed build missing $Name"
+    }
+  }
+
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  foreach ($ZipName in @("DoubaoASRHelper-Portable.zip", "DoubaoASRHelper-Windows.zip")) {
+    $ZipPath = Join-Path $PSScriptRoot "release\$ZipName"
+    $ZipArchive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $ZipPath))
+    try {
+      $Names = @($ZipArchive.Entries | ForEach-Object { $_.FullName })
+      if ($Names -notcontains "asr_bridge.exe") {
+        throw "$ZipName missing asr_bridge.exe"
+      }
+    }
+    finally {
+      $ZipArchive.Dispose()
+    }
+  }
+
+  "AHK bridge desktop tests passed."
+  exit 0
+}
+
 $Root = $PSScriptRoot
 $DistExe = Join-Path $Root "dist\DoubaoASRHelper.exe"
 $SetupExe = Join-Path $Root "dist\DoubaoASRHelperSetup.exe"

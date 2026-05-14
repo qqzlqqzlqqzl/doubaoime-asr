@@ -20,6 +20,7 @@ dependencies = [
 
 [project.scripts]
 doubaoime-asr-desktop = "doubaoime_asr.desktop_app:main"
+doubaoime-asr-bridge = "doubaoime_asr.asr_bridge:main"
 
 [project.optional-dependencies]
 dev = [
