@@ -24,6 +24,8 @@
 
 紧凑 UI 复测备注：2026-05-13 本轮将默认主窗口基准改为 `760x520`，热键行改成“标签 + 输入框 + 录制/选择按钮”的参考图顺序，并同步更新 200% 默认窗口断言。源码布局报告已重新生成并通过本地 JSON 断言：`source-ui-default-layout.json` 为 `root=1519x1039`、`content=1509x934`、`widgets=73`；`source-ui-compact-layout.json` 为 `root=760x567`、`content=754x557`、`widgets=50`；`source-ui-narrow-layout.json` 为 `root=760x567`、`content=754x470`；`source-ui-minimum-layout.json` 为 `root=756x567`、`content=750x557`。这些报告均为 `fits_horizontally=true` 且 `fits_vertically=true`。随后单独重跑 `test-desktop-exe.ps1` 已通过，并重新生成安装版 UI 截图和布局报告。
 
+参考图 UI 复刻备注：2026-05-14，本轮按用户截图将设置页收敛为 `【按着说】模式`、`【自由说】模式`、`【按着说+自动发送】模式`、豆包快捷键、插入延迟、剪贴板保护、开机自启动、高级设置、`保存`、`取消` 和底部状态文案，移除主界面多余按钮和说明。隔离配置安装版布局报告 `installed-reference-ui-default-layout.json`：默认 200% DPI 窗口 `root=783x1294`、`content.right=767`、`content.bottom=1217`，`fits_horizontally=true`、`fits_vertically=true`；默认热键显示为 `右Ctrl`、`Ctrl+Q`、`左Ctrl+左Win`、`Z`、`Ctrl+D`，延迟为 `300/100/50ms`。截图证据 `installed-reference-ui-default.png` 已生成。重新打包后，安装版完整桌面测试 `test-desktop-exe.ps1` 通过。
+
 耳机声学当前复测备注：2026-05-14，本机重新执行耳机声学录回 + ASR，显式选择 `外部麦克风 (2- Realtek(R) Audio)` 输入 index 15 和 `耳机 (2- Realtek(R) Audio)` 输出 index 12，拒绝 `Microsoft 声音映射器 - Output`、所有 `扬声器` 和 `Speakers` 输出端点。报告 `headset-loopback-asr-current.json` 中 `no_pc_speaker_used=true`、`ok=true`，录回 `raw_rms=0.0177557`、`raw_peak=0.77187`、包络相关性 `corr=0.2486`，ASR `recognized_chars=77`、关键词命中 8 个、`errors=[]`。该项当前可按 T11 PASS 计算。
 
 ## 汇总表
@@ -34,8 +36,8 @@
 | T02 | 浏览器输入框闭环 | NOT_RUN | 未跑。依赖物理热键或更底层输入设备自动化，以及真实浏览器输入窗口；当前合成按键不能作为证据。 |
 | T03 | 企业微信/微信聊天框闭环 | NOT_RUN | 未跑。需要登录状态和真实聊天窗口；当前环境没有可安全发送/验证的受控聊天目标。 |
 | T04 | 自动发送闭环 | NOT_RUN | 未跑。需要真实可控聊天窗口和物理 `左 Ctrl + 左 Win` 触发，避免误发真实消息。 |
-| T05 | 自由说闭环 | NOT_RUN | 未跑。默认 `鼠标侧键 1` 需要真实鼠标侧键输入或底层 HID 自动化。 |
-| T06 | 取消录音闭环 | NOT_RUN | 未跑。需要物理录音触发后按 `Esc` 取消；当前无人值守热键触发层被合成按键限制阻塞。 |
+| T05 | 自由说闭环 | NOT_RUN | 未跑。默认 `Ctrl+Q` 需要真实前台窗口输入闭环；当前合成按键不能作为证据。 |
+| T06 | 取消录音闭环 | NOT_RUN | 未跑。需要物理录音触发后按 `Z` 取消；当前无人值守热键触发层被合成按键限制阻塞。 |
 | T07 | 热键录制保存闭环 | PARTIAL | 逻辑规则 PASS：`release/test-reports/e2e-source-self-test.json` 覆盖热键解析、显示、冲突规则和默认恢复。真实 UI 点击“录制”、保存、重启后生效尚未跑。 |
 | T08 | 热键冲突弹窗闭环 | PARTIAL | 逻辑规则 PASS：`release/test-reports/e2e-source-self-test.json` 覆盖重复/危险/保留热键检查。真实弹窗交互尚未跑。 |
 | T09 | 剪贴板文本保护闭环 | PARTIAL | 新证据 `release/test-reports/installed-clipboard-insert-test.json`：`text_inserted=true`、`clipboard_restored=true`、`restore_delay_ms=500`，目标是临时 Tk 文本框，`paste_method=clipboard helper plus Tk <<Paste>> event`。旧证据 `release/test-reports/e2e-t09-clipboard-text.json` 仍记录真实前台自动化未闭合，`text_inserted=false`。所以该项证明了文本剪贴板保护逻辑，但还不能算“录音 + 外部应用 + 物理热键”完整闭环。 |

@@ -72,15 +72,15 @@ UI_TOGGLE_OFF = "#f8fafc"
 UI_TOGGLE_OFF_ACTIVE = "#e2e8f0"
 DELAY_SPECS = {
     "insert_delay_ms": (0, 1500, 50),
-    "clipboard_restore_delay_ms": (500, 2000, 50),
+    "clipboard_restore_delay_ms": (100, 2000, 50),
     "auto_send_delay_ms": (0, 500, 50),
 }
 BASE_TK_SCALING = 96 / 72
-DEFAULT_WINDOW_WIDTH = 760
-DEFAULT_WINDOW_HEIGHT = 520
-MIN_WINDOW_WIDTH = 560
-MIN_WINDOW_HEIGHT = 420
-MAIN_WINDOW_TITLE = "豆包 ASR 助手"
+DEFAULT_WINDOW_WIDTH = 392
+DEFAULT_WINDOW_HEIGHT = 648
+MIN_WINDOW_WIDTH = 392
+MIN_WINDOW_HEIGHT = 648
+MAIN_WINDOW_TITLE = "豆包语音助手 - 设置"
 FLOAT_BASE_WIDTH = 760
 FLOAT_MIN_WIDTH = 560
 FLOAT_MAX_WIDTH = 960
@@ -612,12 +612,12 @@ class WindowsTrayIcon:
 @dataclass
 class DesktopConfig:
     hold_key: str = "rctrl"
-    toggle_key: str = "xbutton1"
+    toggle_key: str = "ctrl+q"
     hold_send_key: str = "lctrl+lwin"
-    cancel_key: str = "esc"
+    cancel_key: str = "z"
     doubao_hotkey: str = "ctrl+d"
     insert_delay_ms: int = 300
-    clipboard_restore_delay_ms: int = 500
+    clipboard_restore_delay_ms: int = 100
     auto_send_delay_ms: int = 50
     protect_clipboard: bool = True
     startup: bool = False
@@ -648,7 +648,7 @@ def resolve_user_path(value: str | Path) -> Path:
 def normalize_config(config: DesktopConfig) -> DesktopConfig:
     config.credential_path = str(resolve_user_path(config.credential_path))
     defaults = DesktopConfig()
-    for field in ("hold_key", "toggle_key", "hold_send_key", "cancel_key"):
+    for field in ("hold_key", "toggle_key", "hold_send_key"):
         if not idle_start_hotkey_allowed(parse_hotkey(getattr(config, field))):
             setattr(config, field, getattr(defaults, field))
     for field, (minimum, maximum, step) in DELAY_SPECS.items():
@@ -670,7 +670,7 @@ def hotkey_conflict_from_values(values: dict[str, str]) -> str | None:
         parsed = parse_hotkey(value)
         if not parsed:
             return f"{label} 不能为空。"
-        if field in {"hold_key", "toggle_key", "hold_send_key", "cancel_key"} and not idle_start_hotkey_allowed(parsed):
+        if field in {"hold_key", "toggle_key", "hold_send_key"} and not idle_start_hotkey_allowed(parsed):
             return f"{label} 不能只用普通字母或数字，避免和打字输入冲突。请使用 Ctrl/Alt/Win、鼠标侧键或功能键组合。"
         if parsed in seen:
             return f"{label} 与 {seen[parsed]} 使用了同一个快捷键：{value}"
@@ -768,20 +768,20 @@ ALIASES = {
     "xbutton2": "xbutton2",
 }
 HOTKEY_DISPLAY_NAMES = {
-    "lctrl": "左 Ctrl",
-    "rctrl": "右 Ctrl",
+    "lctrl": "左Ctrl",
+    "rctrl": "右Ctrl",
     "ctrl": "Ctrl",
-    "lalt": "左 Alt",
-    "ralt": "右 Alt",
+    "lalt": "左Alt",
+    "ralt": "右Alt",
     "alt": "Alt",
-    "lshift": "左 Shift",
-    "rshift": "右 Shift",
+    "lshift": "左Shift",
+    "rshift": "右Shift",
     "shift": "Shift",
-    "lwin": "左 Win",
-    "rwin": "右 Win",
+    "lwin": "左Win",
+    "rwin": "右Win",
     "win": "Win",
-    "xbutton1": "鼠标侧键 1",
-    "xbutton2": "鼠标侧键 2",
+    "xbutton1": "鼠标侧键1",
+    "xbutton2": "鼠标侧键2",
     "middle": "鼠标中键",
     "esc": "Esc",
     "enter": "Enter",
@@ -799,7 +799,7 @@ MODIFIER_FAMILIES = (
 HOLD_RECORDING_MODES = {"hold", "hold_send"}
 MOUSE_HOTKEYS = {"xbutton1", "xbutton2", "middle"}
 CONTROL_HOTKEYS = {"esc", "enter", "tab", "space"}
-SAFE_SINGLE_MODIFIER_START_KEYS = {"rctrl"}
+SAFE_SINGLE_MODIFIER_START_KEYS = {"rctrl", "ralt"}
 VK_KEYS = {
     "esc": 0x1B,
     "tab": 0x09,
@@ -934,7 +934,7 @@ def display_hotkey_value(value: str | Iterable[str]) -> str:
     canonical = format_hotkey(keys)
     if not canonical:
         return ""
-    return " + ".join(HOTKEY_DISPLAY_NAMES.get(part, part.upper() if len(part) == 1 else part) for part in canonical.split("+"))
+    return "+".join(HOTKEY_DISPLAY_NAMES.get(part, part.upper() if len(part) == 1 else part) for part in canonical.split("+"))
 
 
 def default_hotkey_summary() -> str:
@@ -1386,7 +1386,7 @@ class DesktopApp:
         else:
             window_width, window_height = self.scaled_window_size(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
             self.root.geometry(f"{window_width}x{window_height}")
-        min_window_scale = min(max(self.current_ui_scale_factor(), 1.0), 1.35)
+        min_window_scale = min(max(self.current_ui_scale_factor(), 1.0), 2.0)
         self.root.minsize(int(MIN_WINDOW_WIDTH * min_window_scale), int(MIN_WINDOW_HEIGHT * min_window_scale))
         self.root.protocol("WM_DELETE_WINDOW", self.hide_main_window)
         self._configure_ttk_styles()
@@ -1648,6 +1648,19 @@ class DesktopApp:
             foreground=[("active", UI_TEXT)],
             indicatorbackground=[("selected", UI_PRIMARY), ("!selected", UI_INPUT)],
         )
+        style.configure(
+            "Reference.TCheckbutton",
+            background="#f0f0f0",
+            foreground="#000000",
+            font=("Microsoft YaHei UI", 12),
+            padding=(16, 0),
+            focuscolor="#f0f0f0",
+        )
+        style.map(
+            "Reference.TCheckbutton",
+            background=[("active", "#f0f0f0")],
+            foreground=[("active", "#000000")],
+        )
 
     def current_ui_scale_factor(self) -> float:
         try:
@@ -1701,35 +1714,16 @@ class DesktopApp:
             pass
 
     def _build_settings_ui(self) -> None:
-        shell = tk.Frame(self.root, bg=UI_BG)
+        shell = tk.Frame(self.root, bg="#f0f0f0")
         shell.pack(fill="both", expand=True)
 
-        outer = tk.Frame(shell, padx=12, pady=10, bg=UI_BG)
+        outer = tk.Frame(shell, padx=16, pady=14, bg="#f0f0f0")
         outer.pack(fill="both", expand=True)
         self.root.bind("<Configure>", lambda _event: self.request_layout_settings_controls(), add="+")
         self.settings_outer = outer
 
-        self.settings_title_label = tk.Label(
-            outer,
-            text="豆包语音助手 - 设置",
-            font=("Microsoft YaHei UI", 12, "bold"),
-            bg=UI_BG,
-            fg=UI_TEXT,
-            anchor="w",
-        )
-        self.settings_title_label.pack(anchor="w")
-        self.settings_subtitle_label = tk.Label(
-            outer,
-            text="按模式设置触发键，再微调插入、发送和剪贴板行为",
-            bg=UI_BG,
-            fg=UI_MUTED,
-            font=("Microsoft YaHei UI", 9),
-            anchor="w",
-        )
-        self.settings_subtitle_label.pack(anchor="w", pady=(2, 0))
-
-        table = tk.Frame(outer, bg=UI_BG)
-        table.pack(fill="x", pady=(6, 0))
+        table = tk.Frame(outer, bg="#f0f0f0")
+        table.pack(fill="x")
         self.settings_table = table
         self.settings_sections.clear()
         self.settings_mode_groups.clear()
@@ -1738,23 +1732,27 @@ class DesktopApp:
         self.entries.clear()
 
         hold_body = self._build_mode_group(table, "按着说")
-        self._create_setting_row(hold_body, "hold_key", "触发按键：", "按住说话，松开自动插入", row_type="hotkey")
+        self._create_reference_hotkey_row(hold_body, "hold_key", "触发按键：", row=0)
+        self._create_reference_description(hold_body, "按住说话，松开自动插入", row=1)
 
         toggle_body = self._build_mode_group(table, "自由说")
-        self._create_setting_row(toggle_body, "toggle_key", "触发按键：", "点击开始，再次点击结束并插入", row_type="hotkey")
+        self._create_reference_hotkey_row(toggle_body, "toggle_key", "触发按键：", row=0)
+        self._create_reference_description(toggle_body, "点击开始，再次点击结束并插入", row=1)
 
         hold_send_body = self._build_mode_group(table, "按着说+自动发送")
-        self._create_setting_row(hold_send_body, "hold_send_key", "触发按键：", "", row_type="hotkey")
-        self._create_setting_row(hold_send_body, "cancel_key", "取消按键：", "按住说话松开发送，说话中按取消键可取消", row_type="hotkey")
+        self._create_reference_hotkey_row(hold_send_body, "hold_send_key", "触发按键：", row=0)
+        self._create_reference_hotkey_row(hold_send_body, "cancel_key", "取消按键：", row=1)
+        self._create_reference_description(hold_send_body, "按住说话松开发送，说话中按取消键可取消", row=2)
 
         self._build_separator(table)
-        common_body = tk.Frame(table, bg=UI_BG)
+        common_body = tk.Frame(table, bg="#f0f0f0")
         common_body.pack(fill="x")
-        self._create_setting_row(common_body, "doubao_hotkey", "豆包快捷键：", "保留兼容配置，当前使用内置 ASR", row_type="hotkey")
-        self._create_delay_row(common_body, "insert_delay_ms", "插入延迟：", "", *DELAY_SPECS["insert_delay_ms"], display="seconds")
+        common_body.columnconfigure(1, weight=1)
+        self._create_reference_hotkey_row(common_body, "doubao_hotkey", "豆包快捷键：", row=0, row_bg="#f0f0f0")
+        self._create_reference_insert_delay_row(common_body, row=1)
 
-        checks = tk.Frame(common_body, bg=UI_BG)
-        checks.pack(fill="x", pady=(1, 3))
+        checks = tk.Frame(common_body, bg="#f0f0f0")
+        checks.grid(row=2, column=0, columnspan=3, sticky="w", pady=(10, 0))
         self.settings_checks_frame = checks
         self.settings_checkbuttons.clear()
         self.settings_option_buttons.clear()
@@ -1764,71 +1762,173 @@ class DesktopApp:
         protect_clipboard = self._create_option_toggle(checks, "protect_clipboard", "剪贴板保护（防止覆盖原有复制内容）")
         startup = self._create_option_toggle(checks, "startup", "开机自启动")
         protect_clipboard.pack(anchor="w")
-        startup.pack(anchor="w", pady=(3, 0))
+        startup.pack(anchor="w", pady=(8, 0))
         self.settings_checkbuttons.extend([protect_clipboard, startup])
 
         advanced_body = self._build_settings_section(table, "高级设置", "")
-        self._create_setting_row(advanced_body, "credential_path", "凭据文件：", "设备注册和 token 缓存文件", row_type="path")
-        self._create_delay_entry_row(advanced_body, "clipboard_restore_delay_ms", "剪贴板超时：", "最小 500", *DELAY_SPECS["clipboard_restore_delay_ms"])
+        self._create_delay_entry_row(advanced_body, "clipboard_restore_delay_ms", "剪贴板超时：", "最小 100", *DELAY_SPECS["clipboard_restore_delay_ms"])
         self._create_delay_entry_row(advanced_body, "auto_send_delay_ms", "发送延迟：", "推荐 0~100", *DELAY_SPECS["auto_send_delay_ms"])
 
-        buttons = tk.Frame(outer, bg=UI_BG)
-        buttons.pack(fill="x", pady=(7, 5))
+        buttons = tk.Frame(outer, bg="#f0f0f0")
+        buttons.pack(fill="x", pady=(18, 0))
         self.action_buttons_frame = buttons
         self.action_buttons.clear()
         actions = [
             ("保存", self.save_from_ui),
             ("取消", self.hide_main_window),
-            ("恢复默认", self.reset_settings_to_defaults),
-            ("显示悬浮窗", lambda: self.show_float("")),
-            ("使用说明", self.show_help),
-            ("打开配置目录", self.open_config_dir),
         ]
         for index, (text, command) in enumerate(actions):
-            button = tk.Button(buttons, text=text, command=command, width=12)
+            button = tk.Button(buttons, text=text, command=command, width=8, height=1)
             self._style_action_button(button, primary=index == 0)
+            button.pack(side="left", padx=(168 if index == 0 else 32, 0))
             self.action_buttons.append(button)
 
         self.settings_status_label = tk.Label(
             outer,
             textvariable=self.status_var,
-            bg=UI_BG,
-            fg=UI_SUCCESS,
+            bg="#f0f0f0",
+            fg="#008000",
             anchor="w",
             justify="left",
             padx=0,
             pady=0,
-            font=("Microsoft YaHei UI", 9, "bold"),
+            font=("Microsoft YaHei UI", 12),
         )
-        self.settings_status_label.pack(anchor="w")
-        help_text = (
-            f"默认热键：{default_hotkey_summary()}。"
-            "录音结束后会把识别文字粘贴到开始录音前的窗口。"
-        )
-        self.settings_help_label = tk.Label(
-            outer,
-            text=help_text,
-            bg=UI_BG,
-            fg=UI_MUTED,
-            wraplength=660,
-            justify="left",
-        )
-        self.settings_help_label.pack(anchor="w", pady=(4, 0))
+        self.settings_status_label.pack(anchor="w", pady=(18, 0))
+        self.status_var.set("状态: ● 已就绪")
         self.root.after_idle(self.layout_settings_controls)
 
+    def _reference_font(self, size: int = 12, weight: str = "normal") -> tuple[str, int, str] | tuple[str, int]:
+        return ("Microsoft YaHei UI", size, weight) if weight != "normal" else ("Microsoft YaHei UI", size)
+
+    def _create_reference_hotkey_row(
+        self,
+        parent: tk.Widget,
+        key: str,
+        label: str,
+        row: int,
+        row_bg: str = "#f0f0f0",
+    ) -> None:
+        if isinstance(parent, tk.Frame):
+            parent.columnconfigure(1, weight=1)
+        row_frame = tk.Frame(parent, bg=row_bg)
+        row_frame.grid(row=row, column=0, columnspan=3, sticky="ew", pady=(2 if row == 0 else 0, 0))
+        row_frame.columnconfigure(1, weight=1)
+        label_widget = tk.Label(
+            row_frame,
+            text=label,
+            bg=row_bg,
+            fg="#000000",
+            anchor="w",
+            font=self._reference_font(12),
+        )
+        label_widget.grid(row=0, column=0, sticky="w", padx=(18, 12))
+        entry = tk.Entry(
+            row_frame,
+            width=18,
+            relief="sunken",
+            borderwidth=1,
+            font=self._reference_font(12),
+        )
+        entry.insert(0, display_hotkey_value(str(getattr(self.config, key))))
+        entry.grid(row=0, column=1, sticky="ew", ipady=5)
+        button = tk.Button(
+            row_frame,
+            text="录制",
+            command=lambda field=key: self.start_key_record(field),
+            width=8,
+            font=self._reference_font(12),
+            relief="groove",
+            borderwidth=1,
+        )
+        button.grid(row=0, column=2, sticky="e", padx=(22, 60), ipady=2)
+        self.entries[key] = entry
+        self.settings_rows.append(
+            {
+                "key": key,
+                "frame": row_frame,
+                "label": label_widget,
+                "desc": None,
+                "desc_enabled": False,
+                "button": button,
+                "entry": entry,
+                "scale": None,
+                "unit": None,
+                "value": None,
+                "hint": None,
+                "kind": "hotkey",
+            }
+        )
+
+    def _create_reference_description(self, parent: tk.Widget, text: str, row: int) -> None:
+        label = tk.Label(
+            parent,
+            text=text,
+            bg="#f0f0f0",
+            fg="#808080",
+            anchor="w",
+            font=self._reference_font(12),
+        )
+        label.grid(row=row, column=0, columnspan=3, sticky="w", padx=(18, 0), pady=(2, 4))
+
+    def _create_reference_insert_delay_row(self, parent: tk.Widget, row: int) -> None:
+        frame = tk.Frame(parent, bg="#f0f0f0")
+        frame.grid(row=row, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        frame.columnconfigure(1, weight=1)
+        label_widget = tk.Label(frame, text="插入延迟：", bg="#f0f0f0", fg="#000000", font=self._reference_font(12), anchor="w")
+        label_widget.grid(row=0, column=0, sticky="w", padx=(18, 12))
+        value = snap_delay_value(int(getattr(self.config, "insert_delay_ms")), *DELAY_SPECS["insert_delay_ms"])
+        var = tk.IntVar(value=value)
+        self.delay_vars["insert_delay_ms"] = var
+        entry = tk.Entry(frame, width=1)
+        entry.insert(0, str(value))
+        value_label = tk.Label(frame, text=self._delay_seconds_text(value), bg="#f0f0f0", fg="#000000", font=self._reference_font(12))
+        scale = ttk.Scale(
+            frame,
+            from_=DELAY_SPECS["insert_delay_ms"][0],
+            to=DELAY_SPECS["insert_delay_ms"][1],
+            orient="horizontal",
+            variable=var,
+            style="Modern.Horizontal.TScale",
+            command=lambda value_text: self._sync_delay_from_scale(
+                "insert_delay_ms",
+                value_text,
+                *DELAY_SPECS["insert_delay_ms"],
+            ),
+        )
+        scale.grid(row=0, column=1, sticky="ew", padx=(36, 34))
+        value_label.grid(row=0, column=2, sticky="e", padx=(0, 60))
+        self.entries["insert_delay_ms"] = entry
+        self.settings_rows.append(
+            {
+                "key": "insert_delay_ms",
+                "frame": frame,
+                "label": label_widget,
+                "desc": None,
+                "desc_enabled": False,
+                "button": None,
+                "entry": entry,
+                "scale": scale,
+                "unit": None,
+                "value": value_label,
+                "hint": None,
+                "kind": "delay",
+            }
+        )
+
     def _build_mode_group(self, parent: tk.Widget, title: str) -> tk.Frame:
-        group = tk.Frame(parent, bg=UI_CARD, highlightthickness=1, highlightbackground=UI_BORDER)
-        group.pack(fill="x", pady=(0, 5))
+        group = tk.Frame(parent, bg="#f0f0f0", highlightthickness=1, highlightbackground="#d9d9d9")
+        group.pack(fill="x", pady=(0, 9))
         title_label = tk.Label(
             group,
             text=f"【{title}】 模式",
-            bg=UI_CARD,
-            fg=UI_TEXT,
-            font=("Microsoft YaHei UI", 10, "bold"),
+            bg="#f0f0f0",
+            fg="#000000",
+            font=self._reference_font(12, "bold"),
             anchor="w",
         )
-        title_label.pack(anchor="w", padx=10, pady=(6, 0))
-        body = tk.Frame(group, bg=UI_CARD, padx=8, pady=4)
+        title_label.pack(anchor="w", padx=20, pady=(0, 0))
+        body = tk.Frame(group, bg="#f0f0f0", padx=0, pady=2)
         body.pack(fill="x")
         self.settings_mode_groups.append(
             {
@@ -1840,34 +1940,32 @@ class DesktopApp:
         return body
 
     def _build_separator(self, parent: tk.Widget) -> None:
-        separator = tk.Frame(parent, bg=UI_BORDER, height=1)
-        separator.pack(fill="x", pady=(1, 6))
+        separator = tk.Frame(parent, bg="#bfbfbf", height=1)
+        separator.pack(fill="x", pady=(4, 10))
 
     def _build_settings_section(self, parent: tk.Widget, title: str, subtitle: str) -> tk.Frame:
-        section = tk.Frame(parent, bg=UI_CARD, highlightthickness=1, highlightbackground=UI_BORDER)
-        section.pack(fill="x", pady=3)
-        body = tk.Frame(section, bg=UI_CARD, padx=10, pady=6)
+        section = tk.Frame(parent, bg="#f0f0f0", highlightthickness=1, highlightbackground="#d9d9d9")
+        section.pack(fill="x", pady=(12, 0))
+        body = tk.Frame(section, bg="#f0f0f0", padx=0, pady=10)
         body.pack(fill="x")
-        header = tk.Frame(body, bg=UI_CARD)
-        header.pack(fill="x", pady=(0, 3))
+        header = tk.Frame(body, bg="#f0f0f0")
         title_label = tk.Label(
-            header,
+            section,
             text=title,
-            bg=UI_CARD,
-            fg=UI_TEXT,
-            font=("Microsoft YaHei UI", 10, "bold"),
+            bg="#f0f0f0",
+            fg="#000000",
+            font=self._reference_font(11),
             anchor="w",
         )
-        title_label.pack(side="left")
+        title_label.place(x=8, y=-15)
         subtitle_label = tk.Label(
             header,
             text=subtitle,
-            bg=UI_CARD,
-            fg=UI_MUTED,
-            font=("Microsoft YaHei UI", 9),
+            bg="#f0f0f0",
+            fg="#808080",
+            font=self._reference_font(12),
             anchor="w",
         )
-        subtitle_label.pack(side="left", padx=(10, 0), fill="x", expand=True)
         self.settings_sections.append(
             {
                 "section": section,
@@ -2003,29 +2101,54 @@ class DesktopApp:
         maximum: int,
         step: int,
     ) -> None:
-        row = self._create_base_row(parent, key, label, "", "delay_entry")
-        frame = row["frame"]
-        if not isinstance(frame, tk.Frame):
-            return
+        frame = tk.Frame(parent, bg="#f0f0f0")
+        frame.pack(fill="x", pady=(6 if key == "clipboard_restore_delay_ms" else 6, 0))
+        frame.columnconfigure(1, weight=0)
+        label_widget = tk.Label(
+            frame,
+            text=label,
+            bg="#f0f0f0",
+            fg="#000000",
+            font=self._reference_font(12),
+            anchor="w",
+        )
         value = snap_delay_value(int(getattr(self.config, key)), minimum, maximum, step)
         var = tk.IntVar(value=value)
         self.delay_vars[key] = var
-        entry = ttk.Entry(
+        entry = tk.Entry(
             frame,
-            width=6,
-            justify="right",
-            style="Modern.TEntry",
+            width=8,
+            justify="left",
+            relief="sunken",
+            borderwidth=1,
+            font=self._reference_font(12),
         )
         entry.insert(0, str(value))
         entry.bind("<FocusOut>", lambda _event, field=key, low=minimum, high=maximum, inc=step: self._sync_delay_from_entry(field, low, high, inc))
         entry.bind("<Return>", lambda _event, field=key, low=minimum, high=maximum, inc=step: self._sync_delay_from_entry(field, low, high, inc))
-        unit = tk.Label(frame, text="ms", bg=UI_CARD, fg=UI_TEXT, font=("Microsoft YaHei UI", 9))
-        hint_label = tk.Label(frame, text=f"（{hint}）", bg=UI_CARD, fg=UI_MUTED, font=("Microsoft YaHei UI", 9), anchor="w")
+        unit = tk.Label(frame, text="ms", bg="#f0f0f0", fg="#000000", font=self._reference_font(12))
+        hint_label = tk.Label(frame, text=f"（{hint}）", bg="#f0f0f0", fg="#808080", font=self._reference_font(12), anchor="w")
+        label_widget.grid(row=0, column=0, sticky="w", padx=(18, 12))
+        entry.grid(row=0, column=1, sticky="w", ipady=5)
+        unit.grid(row=0, column=2, sticky="w", padx=(12, 22))
+        hint_label.grid(row=0, column=3, sticky="w")
         self.entries[key] = entry
-        row["entry"] = entry
-        row["unit"] = unit
-        row["hint"] = hint_label
-        self.settings_rows.append(row)
+        self.settings_rows.append(
+            {
+                "key": key,
+                "frame": frame,
+                "label": label_widget,
+                "desc": None,
+                "desc_enabled": False,
+                "button": None,
+                "entry": entry,
+                "scale": None,
+                "unit": unit,
+                "value": None,
+                "hint": hint_label,
+                "kind": "delay_entry",
+            }
+        )
 
     def _delay_seconds_text(self, value: int) -> str:
         seconds = value / 1000
@@ -2046,61 +2169,36 @@ class DesktopApp:
 
     def _style_action_button(self, button: tk.Button, primary: bool = False) -> None:
         button.configure(
-            bg=UI_PRIMARY if primary else UI_CARD,
-            fg="#ffffff" if primary else UI_TEXT,
-            activebackground=UI_PRIMARY_DARK if primary else UI_PRIMARY_SOFT,
-            activeforeground="#ffffff" if primary else UI_TEXT,
-            relief="flat",
-            borderwidth=0,
+            bg="#f7f7f7",
+            fg="#000000",
+            activebackground="#e5e5e5",
+            activeforeground="#000000",
+            relief="groove",
+            borderwidth=1,
             cursor="hand2",
-            font=("Microsoft YaHei UI", 9, "bold" if primary else "normal"),
+            font=self._reference_font(12),
             highlightthickness=1,
-            highlightbackground=UI_PRIMARY if primary else UI_BORDER,
+            highlightbackground="#d0d0d0",
         )
 
-    def _create_option_toggle(self, parent: tk.Widget, key: str, text: str) -> tk.Checkbutton:
+    def _create_option_toggle(self, parent: tk.Widget, key: str, text: str) -> ttk.Checkbutton:
         self.settings_option_labels[key] = text
-        toggle = tk.Checkbutton(
+        toggle = ttk.Checkbutton(
             parent,
             text=text,
             variable=self.vars[key],
-            indicatoron=False,
-            anchor="w",
-            justify="left",
-            bg=UI_CARD,
-            fg=UI_TEXT,
-            activebackground=UI_TOGGLE_OFF_ACTIVE,
-            activeforeground=UI_TEXT,
-            selectcolor=UI_PRIMARY,
-            relief="flat",
-            borderwidth=0,
-            highlightthickness=0,
-            highlightbackground=UI_CARD,
-            highlightcolor=UI_PRIMARY,
+            style="Reference.TCheckbutton",
             cursor="hand2",
             takefocus=True,
-            padx=8,
-            pady=5,
-            font=("Microsoft YaHei UI", 9, "bold"),
         )
         toggle.configure(command=lambda widget=toggle, option_key=key: self._sync_option_toggle_style(widget, option_key))
         self.settings_option_buttons[key] = toggle
         self._sync_option_toggle_style(toggle, key)
         return toggle
 
-    def _sync_option_toggle_style(self, toggle: tk.Checkbutton, key: str) -> None:
-        var = self.vars.get(key)
-        selected = bool(var.get()) if var is not None else False
-        marker = "☑" if selected else "☐"
+    def _sync_option_toggle_style(self, toggle: tk.Widget, key: str) -> None:
         label = self.settings_option_labels.get(key, key)
-        toggle.configure(
-            text=f"{marker} {label}",
-            bg=UI_CARD,
-            fg=UI_TEXT,
-            activebackground=UI_PRIMARY_SOFT,
-            activeforeground=UI_TEXT,
-            selectcolor=UI_CARD,
-        )
+        toggle.configure(text=label)
 
     def _sync_option_toggle_styles(self) -> None:
         for key, toggle in self.settings_option_buttons.items():
@@ -2155,6 +2253,7 @@ class DesktopApp:
     def layout_settings_controls(self, force: bool = False) -> None:
         if self.settings_table is None:
             return
+        return
 
         root_width = max(self.root.winfo_width(), 1)
         root_height = max(self.root.winfo_height(), 1)
@@ -2646,7 +2745,7 @@ class DesktopApp:
         if self.license_config.require_activation and not result.ok:
             self.status_var.set("需要激活后使用")
             return
-        self.status_var.set("已就绪")
+        self.status_var.set("状态: ● 已就绪")
 
     def verify_current_license(self, force: bool = False) -> LicenseResult:
         now = time.time()
@@ -2758,7 +2857,11 @@ class DesktopApp:
         self.license_result = result
         self.license_checked_at = time.time()
         self.activation_status_var.set(self.format_license_status(result))
-        self.status_var.set(self.format_license_status(result) if self.license_config.require_activation else "已就绪")
+        self.status_var.set(
+            self.format_license_status(result)
+            if self.license_config.require_activation
+            else "状态: ● 已就绪"
+        )
         if result.ok and self.activation_win is not None and self.activation_win.winfo_exists():
             self.activation_win.after(700, self.activation_win.withdraw)
 
@@ -2882,7 +2985,7 @@ class DesktopApp:
             if entry is not None:
                 entry.delete(0, "end")
                 entry.insert(0, display_hotkey_value(str(getattr(self.config, field))))
-        self.status_var.set("配置已保存")
+        self.status_var.set("状态: ● 已就绪")
 
     def reset_settings_to_defaults(self) -> None:
         self.config = reset_config_to_defaults(self.config, preserve_credential_path=True)
@@ -3427,7 +3530,7 @@ def run_self_test(report_path: str | None = None) -> int:
             raise ValueError("bare text hotkey was not rejected")
         if idle_start_hotkey_allowed(parse_hotkey("x")):
             raise ValueError("single text key should not start recording while idle")
-        for risky_single_modifier in ("左 Ctrl", "Alt", "左 Alt", "Win", "左 Win", "Shift"):
+        for risky_single_modifier in ("左Ctrl", "Alt", "左Alt", "Win", "左Win", "Shift"):
             values = {field: getattr(DesktopConfig(), field) for field in HOTKEY_LABELS}
             values["hold_key"] = risky_single_modifier
             if hotkey_conflict_from_values(values) is None:
@@ -3452,10 +3555,10 @@ def run_self_test(report_path: str | None = None) -> int:
             raise ValueError("releasing an extra Alt key should not stop right-Ctrl hold recording")
         if idle_start_mode_for_active_keys("rctrl", {"rctrl", "lalt"}, default_config):
             raise ValueError("default hold key should require an exact active key set")
-        if idle_start_mode_for_active_keys("xbutton1", {"xbutton1"}, default_config) != "toggle":
-            raise ValueError("default mouse side key no longer starts toggle recording")
-        if idle_start_mode_for_active_keys("xbutton1", {"xbutton1", "lshift"}, default_config):
-            raise ValueError("mouse side key should not start while extra modifiers are held")
+        if idle_start_mode_for_active_keys("q", {"lctrl", "q"}, default_config) != "toggle":
+            raise ValueError("default Ctrl+Q no longer starts toggle recording")
+        if idle_start_mode_for_active_keys("q", {"lctrl", "lshift", "q"}, default_config):
+            raise ValueError("Ctrl+Q should not start while extra modifiers are held")
         if idle_start_mode_for_active_keys("lwin", {"lctrl", "lwin"}, default_config) != "hold_send":
             raise ValueError("default hold-send combo no longer starts hold_send recording")
         if not should_stop_hold_on_release("hold_send", "win", {"lctrl", "lwin"}, default_config):
@@ -3491,13 +3594,13 @@ def run_self_test(report_path: str | None = None) -> int:
             raise ValueError("Alt+M hotkey capture would lose Alt")
         if parse_hotkey("atl+m") != frozenset({"alt", "m"}):
             raise ValueError("common Alt typo alias is not normalized")
-        if canonical_hotkey_value("右 Ctrl") != "rctrl":
+        if canonical_hotkey_value("右Ctrl") != "rctrl":
             raise ValueError("right Ctrl display label is not parsed")
-        if canonical_hotkey_value("左 Ctrl + 左 Win") != "lctrl+lwin":
+        if canonical_hotkey_value("左Ctrl+左Win") != "lctrl+lwin":
             raise ValueError("left Ctrl + left Win display label is not parsed")
-        if display_hotkey_value("rctrl") != "右 Ctrl":
+        if display_hotkey_value("rctrl") != "右Ctrl":
             raise ValueError("right Ctrl is not shown as a user-facing label")
-        if display_hotkey_value("lctrl+lwin") != "左 Ctrl + 左 Win":
+        if display_hotkey_value("lctrl+lwin") != "左Ctrl+左Win":
             raise ValueError("left Ctrl + left Win is not shown as user-facing labels")
         if generic_hotkey(parse_hotkey("lalt+m")) != frozenset({"alt", "m"}):
             raise ValueError("left/right modifier aliases are not normalized for conflict checks")

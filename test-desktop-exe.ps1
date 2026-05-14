@@ -68,7 +68,7 @@ $HwndNoTopMost = [IntPtr](-2)
 $HwndBottom = [IntPtr](1)
 $SwpShowWindow = [uint32]0x0040
 $SwpNoActivate = [uint32]0x0010
-$MainWindowTitle = [string]::Concat([char]0x8C46, [char]0x5305, " ASR ", [char]0x52A9, [char]0x624B)
+$MainWindowTitle = [string]::Concat([char]0x8C46, [char]0x5305, [char]0x8BED, [char]0x97F3, [char]0x52A9, [char]0x624B, " - ", [char]0x8BBE, [char]0x7F6E)
 
 function Assert-CustomAppIcon {
   param([Parameter(Mandatory = $true)][string]$ExePath)
@@ -875,7 +875,7 @@ function Assert-UiLayoutFits {
       throw "Hotkey is exposing internal key names instead of user-facing labels: $HotkeyName=$Hotkey"
     }
   }
-  $ExpectedActionButtons = 6
+  $ExpectedActionButtons = 2
   $ActionButtons = @($Layout.widgets | Where-Object { $_.name -like "action-*" })
   if ($ActionButtons.Count -ne $ExpectedActionButtons) {
     throw "UI layout report expected $ExpectedActionButtons action buttons, found $($ActionButtons.Count)"
@@ -943,8 +943,8 @@ function Assert-DefaultScaleWindowComfortable {
   $ScreenWidth = [int]$Layout.display.screen_width
   $ScreenHeight = [int]$Layout.display.screen_height
   $WindowScale = [Math]::Min([Math]::Max($Scale, 1.0), 2.5)
-  $ExpectedWidth = [Math]::Min([int][Math]::Round(760 * $WindowScale), [int]($ScreenWidth * 0.9))
-  $ExpectedHeight = [Math]::Min([int][Math]::Round(520 * $WindowScale), [int]($ScreenHeight * 0.88))
+  $ExpectedWidth = [Math]::Min([int][Math]::Round(392 * $WindowScale), [int]($ScreenWidth * 0.9))
+  $ExpectedHeight = [Math]::Min([int][Math]::Round(648 * $WindowScale), [int]($ScreenHeight * 0.88))
   $RootWidth = [int]$Layout.root.width
   $RootHeight = [int]$Layout.root.height
   if ($RootWidth -lt ($ExpectedWidth - 32) -or $RootHeight -lt ($ExpectedHeight - 32)) {
