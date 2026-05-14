@@ -99,9 +99,10 @@ git pull --rebase --autostash
 . .\enter-dev.ps1
 python -m compileall -q doubaoime_asr
 python -m doubaoime_asr.desktop_app --self-test --self-test-report release\test-reports\source-self-test.json
+python -m doubaoime_asr.desktop_app --hold-release-auto-insert-test --hold-release-auto-insert-report release\test-reports\hold-release-auto-insert.json
 ```
 
-6. 修改后至少运行对应的源码自测。涉及 EXE、托盘、UI、安装器、打包资源时必须重新跑：
+6. 修改后至少运行对应的源码自测。涉及 EXE、托盘、UI、安装器、打包资源时必须重新跑；`test-desktop-exe.ps1` 已包含 dist、portable、installed 三种 EXE 的按着说释放自动插入烟测：
 
 ```powershell
 .\build-desktop-exe.ps1

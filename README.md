@@ -240,6 +240,12 @@ EXE 内置「使用说明」窗口，安装后开始菜单也会生成 Help 快�
 
 这一步会同时覆盖安装版/便携版自测、托盘图标、单实例、关闭后后台保活、UI 截图和 150%/200% DPI 布局、文本剪贴板恢复、图片/文件剪贴板格式恢复、开机启动脚本无重启烟测、授权断网烟测、隔离卸载清理。
 
+其中按着说的核心闭环必须满足：松开触发键后自动插入识别文字，不需要点击悬浮窗“插入”。可单独跑：
+
+```powershell
+python -m doubaoime_asr.desktop_app --hold-release-auto-insert-test --hold-release-auto-insert-report release\test-reports\hold-release-auto-insert.json
+```
+
 测试激活码、设备绑定和授权服务器边界场景：
 
 ```powershell

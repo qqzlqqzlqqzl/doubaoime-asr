@@ -280,6 +280,44 @@ function Invoke-ClipboardInsertTest {
   return $ReportPath
 }
 
+function Invoke-HoldReleaseAutoInsertTest {
+  param(
+    [Parameter(Mandatory = $true)][string]$ExePath,
+    [Parameter(Mandatory = $true)][string]$ReportName
+  )
+
+  if (-not (Test-Path $ExePath)) {
+    throw "Missing executable: $ExePath"
+  }
+
+  $ReportPath = Join-Path $ReportsDir $ReportName
+  Remove-Item -LiteralPath $ReportPath -Force -ErrorAction SilentlyContinue
+  $Process = Start-Process $ExePath -ArgumentList @("--hold-release-auto-insert-test", "--hold-release-auto-insert-report", $ReportPath) -Wait -PassThru
+  if ($Process.ExitCode -ne 0) {
+    throw "Hold release auto-insert test failed for $ExePath with exit code $($Process.ExitCode)"
+  }
+  if (-not (Test-Path $ReportPath)) {
+    throw "Hold release auto-insert report was not written: $ReportPath"
+  }
+
+  $Report = Get-Content -Raw -Encoding UTF8 -LiteralPath $ReportPath | ConvertFrom-Json
+  if (-not $Report.ok) {
+    throw "Hold release auto-insert report says ok=false: $ReportPath"
+  }
+  $HoldCase = $Report.cases | Where-Object { $_.mode -eq "hold" } | Select-Object -First 1
+  $HoldSendCase = $Report.cases | Where-Object { $_.mode -eq "hold_send" } | Select-Object -First 1
+  if ($null -eq $HoldCase -or $null -eq $HoldSendCase) {
+    throw "Hold release auto-insert report is missing hold or hold_send case: $ReportPath"
+  }
+  if (-not $HoldCase.insert_scheduled -or $HoldCase.inserted.Count -ne 1 -or $HoldCase.inserted[0].auto_send) {
+    throw "Hold case did not prove automatic non-send insertion: $ReportPath"
+  }
+  if (-not $HoldSendCase.insert_scheduled -or $HoldSendCase.inserted.Count -ne 1 -or -not $HoldSendCase.inserted[0].auto_send) {
+    throw "Hold-send case did not prove automatic send insertion: $ReportPath"
+  }
+  return $ReportPath
+}
+
 function Invoke-ClipboardComplexTest {
   param(
     [Parameter(Mandatory = $true)][string]$ExePath,
@@ -1023,6 +1061,8 @@ function Remove-WithRetry {
 
 Invoke-AppSelfTest -ExePath $DistExe -ReportName "dist-self-test.json" | Out-Host
 Invoke-AppSelfTest -ExePath $PortableExe -ReportName "portable-self-test.json" | Out-Host
+Invoke-HoldReleaseAutoInsertTest -ExePath $DistExe -ReportName "dist-hold-release-auto-insert.json" | Out-Host
+Invoke-HoldReleaseAutoInsertTest -ExePath $PortableExe -ReportName "portable-hold-release-auto-insert.json" | Out-Host
 Assert-CustomAppIcon -ExePath $DistExe | Out-Host
 Assert-CustomAppIcon -ExePath $SetupExe | Out-Host
 Assert-CustomAppIcon -ExePath $PortableExe | Out-Host
@@ -1099,6 +1139,7 @@ if ($Install.ExitCode -ne 0) {
 
 $InstalledExe = Join-Path $InstallTarget "DoubaoASRHelper.exe"
 Invoke-AppSelfTest -ExePath $InstalledExe -ReportName "installed-self-test.json" | Out-Host
+Invoke-HoldReleaseAutoInsertTest -ExePath $InstalledExe -ReportName "installed-hold-release-auto-insert.json" | Out-Host
 Assert-CustomAppIcon -ExePath $InstalledExe | Out-Host
 Assert-ShortcutUsesAppIcon -TargetExe $InstalledExe | Out-Host
 Invoke-TraySelfTest -ExePath $InstalledExe -ReportName "installed-tray-self-test.json" | Out-Host

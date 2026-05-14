@@ -1,6 +1,6 @@
 # 端到端闭环测试证据
 
-运行日期：2026-05-13
+运行日期：2026-05-13 至 2026-05-14
 
 结论：没有全部测完。当前环境已经跑完一部分能自动化闭合的链路；需要真人按键、真实外部应用、重启、干净电脑、长时间运行或受控授权服务器的项目，下面明确标为 `BLOCKED` 或 `NOT_RUN`，不按通过计算。
 
@@ -15,6 +15,7 @@
 - `T10` 新增了安装版 `--clipboard-complex-test`，能证明常见图片 `CF_DIB` 和文件列表 `CF_HDROP` 在插入测试文本后恢复；它仍是临时 Tk 文本框烟测，不是真实录音热键和外部应用闭环。
 - `T13` 新增了安装版 `--startup-script-test`，能证明 Startup bat 写入当前 EXE 路径和 `--hidden` 后可删除；它没有重启 Windows，因此不算完整开机自启动闭环。
 - `T20` 新增了安装版 `--license-network-test`，能证明普通版授权断网不阻塞、受控版服务器不可达时保留本地 token 并给出错误；它没有覆盖系统级断网、弱网和真实 ASR 服务异常。
+- 2026-05-14 新增 `--hold-release-auto-insert-test`：证明 `hold` 和 `hold_send` 在释放触发键后会自动调度插入，不需要点击悬浮窗“插入”；取消、空文本以及“松手后很快开始下一段”的延迟插入场景均不会丢上一句。源码证据 `release/test-reports/hold-release-auto-insert.json` 和 `source-self-test-auto-insert.json` 均为 `ok=true`；打包测试 `test-desktop-exe.ps1` 也已覆盖 `dist-hold-release-auto-insert.json`、`portable-hold-release-auto-insert.json`、`installed-hold-release-auto-insert.json`。该项证明释放后的插入逻辑，不替代物理右 Ctrl 热键 + 真实记事本完整验收。
 
 音频约束：所有音频测试禁止使用电脑扬声器。已使用的输出端点是 `耳机 (2- Realtek(R) Audio)`，输入端点是 `外部麦克风 (2- Realtek(R) Audio)`。测试后确认 `扬声器 (2- Realtek(R) Audio)` 仍为 `volume=0.0, mute=true`。
 
@@ -28,7 +29,7 @@
 
 | 编号 | 测试项 | 状态 | 证据 |
 |------|------|------|------|
-| T01 | 记事本按着说闭环 | PARTIAL | 核心链路 PASS 但不是完整 EXE 热键闭环：`release/test-reports/e2e-t01-notepad-direct-record.json`，源码 `DesktopApp` 直接录音，真实记事本 + 外部麦克风 + ASR + 插入，插入 70 字并命中 `清晨/早餐/城市/测试`。默认右 Ctrl 物理热键自动化 BLOCKED：`release/test-reports/e2e-t01-notepad-hold.json`，合成键盘事件未驱动打包 EXE 完成录音。 |
+| T01 | 记事本按着说闭环 | PARTIAL | 核心链路 PASS 但不是完整 EXE 热键闭环：`release/test-reports/e2e-t01-notepad-direct-record.json`，源码 `DesktopApp` 直接录音，真实记事本 + 外部麦克风 + ASR + 插入，插入 70 字并命中 `清晨/早餐/城市/测试`。新增释放自动插入逻辑证据 `release/test-reports/hold-release-auto-insert.json` 和打包 EXE 证据 `dist-hold-release-auto-insert.json`、`portable-hold-release-auto-insert.json`、`installed-hold-release-auto-insert.json`：`hold` 松开后 `inserted[0].auto_send=false`，`hold_send` 松开后 `inserted[0].auto_send=true`，均不需要点击悬浮窗“插入”；快速开始下一段也不会吞掉上一句延迟插入。默认右 Ctrl 物理热键自动化 BLOCKED：`release/test-reports/e2e-t01-notepad-hold.json`，合成键盘事件未驱动打包 EXE 完成录音。 |
 | T02 | 浏览器输入框闭环 | NOT_RUN | 未跑。依赖物理热键或更底层输入设备自动化，以及真实浏览器输入窗口；当前合成按键不能作为证据。 |
 | T03 | 企业微信/微信聊天框闭环 | NOT_RUN | 未跑。需要登录状态和真实聊天窗口；当前环境没有可安全发送/验证的受控聊天目标。 |
 | T04 | 自动发送闭环 | NOT_RUN | 未跑。需要真实可控聊天窗口和物理 `左 Ctrl + 左 Win` 触发，避免误发真实消息。 |
@@ -51,8 +52,9 @@
 
 ## 已完成的基础证据
 
-- 源码自测：`release/test-reports/e2e-source-self-test.json`，状态 PASS。
-- 打包 EXE/UI/托盘/安装版测试：`test-desktop-exe.ps1` 最新重跑已通过，证据在 `release/test-reports/dist-self-test.json`、`portable-self-test.json`、`installed-self-test.json`、`installed-tray-self-test.json`、`installed-ui-smoke*.json/png`、`installed-clipboard-insert-test.json`、`installed-clipboard-complex-test.json`、`installed-startup-script-test.json`、`installed-license-network-test.json`、`isolated-uninstall-cleanup-test.json`。
+- 源码自测：`release/test-reports/e2e-source-self-test.json`，状态 PASS；追加 `release/test-reports/source-self-test-auto-insert.json`，新增 `auto_insert` 检查 PASS。
+- 按着说释放自动插入烟测：`release/test-reports/hold-release-auto-insert.json`，状态 PASS，覆盖 `hold`、`hold_send`、取消和空文本。
+- 打包 EXE/UI/托盘/安装版测试：`test-desktop-exe.ps1` 最新重跑已通过，证据在 `release/test-reports/dist-self-test.json`、`portable-self-test.json`、`installed-self-test.json`、`dist-hold-release-auto-insert.json`、`portable-hold-release-auto-insert.json`、`installed-hold-release-auto-insert.json`、`installed-tray-self-test.json`、`installed-ui-smoke*.json/png`、`installed-clipboard-insert-test.json`、`installed-clipboard-complex-test.json`、`installed-startup-script-test.json`、`installed-license-network-test.json`、`isolated-uninstall-cleanup-test.json`。
 - 本机追加验证：在 `64e49f0` 之前的工作区运行过 `build-desktop-exe.ps1`、`test-desktop-exe.ps1`、`test-windows-compat.ps1`、`test-activation.ps1`、`test-license-stress.ps1`、`test-long-text-asr.ps1`。本轮紧凑 UI 后已重新运行 `python -m compileall doubaoime_asr`、`python -m pytest -q`、源码 UI 布局 JSON 断言、源码按钮点击烟测、`build-desktop-exe.ps1`、`test-activation.ps1`、`test-license-stress.ps1`、`test-windows-compat.ps1`、`test-desktop-exe.ps1`、`test-long-text-asr.ps1`。
 - 长文本文件 ASR：`release/test-reports/long-text-asr.json`，`ok=true`，识别 556 字，关键词 9 个。
 - 耳机声学 ASR：`release/test-reports/headset-loopback-asr.json`，`ok=true`，识别 552 字，关键词 9 个。

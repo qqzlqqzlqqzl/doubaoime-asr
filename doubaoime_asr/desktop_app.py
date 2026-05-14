@@ -3077,6 +3077,7 @@ class DesktopApp:
                 value,
                 auto_send=auto_send,
                 target_hwnd=hwnd,
+                allow_completed=True,
             ),
         )
         self.pending_mode = None
@@ -3118,8 +3119,19 @@ class DesktopApp:
         self.clipboard.set_text(self.get_float_text())
         self.status_var.set("已复制")
 
-    def insert_text_for_session(self, session_id: int | None, text: str, auto_send: bool, target_hwnd: int | None) -> None:
-        if session_id is not None and not is_current_recording_session(session_id, self.recording_session_id):
+    def insert_text_for_session(
+        self,
+        session_id: int | None,
+        text: str,
+        auto_send: bool,
+        target_hwnd: int | None,
+        allow_completed: bool = False,
+    ) -> None:
+        if (
+            session_id is not None
+            and not allow_completed
+            and not is_current_recording_session(session_id, self.recording_session_id)
+        ):
             return
         self.insert_text(text, auto_send=auto_send, target_hwnd=target_hwnd)
 
@@ -3135,6 +3147,143 @@ class DesktopApp:
             auto_send=auto_send,
             auto_send_delay_ms=self.config.auto_send_delay_ms,
         )
+
+
+def simulate_hold_release_auto_insert_cases() -> list[dict[str, object]]:
+    class FakeStatus:
+        def __init__(self) -> None:
+            self.values: list[str] = []
+
+        def set(self, value: str) -> None:
+            self.values.append(value)
+
+    class FakeStream:
+        def __init__(self) -> None:
+            self.stopped = False
+            self.closed = False
+
+        def stop(self) -> None:
+            self.stopped = True
+
+        def close(self) -> None:
+            self.closed = True
+
+    def build_app(
+        mode: str,
+        *,
+        auto_run_callbacks: bool = True,
+    ) -> tuple[DesktopApp, list[dict[str, object]], list[dict[str, object]], FakeStream]:
+        app = DesktopApp.__new__(DesktopApp)
+        app.config = DesktopConfig(insert_delay_ms=0)
+        app.recording_session_id = 9001
+        app.recording_mode = mode
+        app.pending_mode = None
+        app.cancelled = False
+        app.final_text = ""
+        app.target_hwnd = 24680
+        app.active_keys = {"rctrl"} if mode == "hold" else {"lctrl", "lwin"}
+        app.audio_queue = queue.Queue()
+        stream = FakeStream()
+        app.audio_stream = stream
+        app.status_var = FakeStatus()
+        scheduled: list[dict[str, object]] = []
+        inserted: list[dict[str, object]] = []
+
+        def schedule_ui(delay_ms: int, callback: Callable[[], None]) -> object:
+            scheduled.append({"delay_ms": delay_ms, "callback": callback})
+            if auto_run_callbacks:
+                callback()
+            return object()
+
+        app.schedule_ui = schedule_ui  # type: ignore[method-assign]
+        app.hide_float = lambda: None  # type: ignore[method-assign]
+        app.show_float = lambda _text: None  # type: ignore[method-assign]
+        app.insert_text = (  # type: ignore[method-assign]
+            lambda text, auto_send, target_hwnd=None: inserted.append(
+                {"text": text, "auto_send": auto_send, "target_hwnd": target_hwnd}
+            )
+        )
+        return app, scheduled, inserted, stream
+
+    cases: list[dict[str, object]] = []
+    for mode, released_key, expected_auto_send in (
+        ("hold", "rctrl", False),
+        ("hold_send", "lwin", True),
+    ):
+        app, scheduled, inserted, stream = build_app(mode)
+        expected_text = f"{mode} release auto insert"
+        app._handle_active_release(released_key)
+        app.final_text = expected_text
+        app._finish_insert(app.recording_session_id)
+        expected_insert = [{"text": expected_text, "auto_send": expected_auto_send, "target_hwnd": 24680}]
+        cases.append(
+            {
+                "mode": mode,
+                "released_key": released_key,
+                "stopped_on_release": app.recording_mode is None,
+                "stream_stopped": stream.stopped,
+                "stream_closed": stream.closed,
+                "insert_scheduled": any(item["delay_ms"] == 0 for item in scheduled),
+                "inserted": inserted,
+                "expected_insert": expected_insert,
+                "ok": inserted == expected_insert and app.pending_mode is None and stream.stopped and stream.closed,
+            }
+        )
+
+    app, _scheduled, inserted, _stream = build_app("hold")
+    app.cancelled = True
+    app._handle_active_release("rctrl")
+    app.final_text = "cancelled text"
+    app._finish_insert(app.recording_session_id)
+    cases.append({"mode": "hold_cancelled", "inserted": inserted, "ok": inserted == []})
+
+    app, _scheduled, inserted, _stream = build_app("hold")
+    app._handle_active_release("rctrl")
+    app._finish_insert(app.recording_session_id)
+    cases.append({"mode": "hold_empty", "inserted": inserted, "ok": inserted == []})
+
+    app, scheduled, inserted, _stream = build_app("hold", auto_run_callbacks=False)
+    app._handle_active_release("rctrl")
+    app.final_text = "delayed insert survives next recording"
+    original_session_id = app.recording_session_id
+    app._finish_insert(original_session_id)
+    app.recording_session_id += 1
+    for item in scheduled:
+        if item["delay_ms"] == 0:
+            callback = item.get("callback")
+            if callable(callback):
+                callback()
+    cases.append(
+        {
+            "mode": "hold_delayed_after_restart",
+            "original_session_id": original_session_id,
+            "current_session_id": app.recording_session_id,
+            "inserted": inserted,
+            "ok": inserted == [
+                {
+                    "text": "delayed insert survives next recording",
+                    "auto_send": False,
+                    "target_hwnd": 24680,
+                }
+            ],
+        }
+    )
+    return cases
+
+
+def run_hold_release_auto_insert_test(report_path: str | None = None) -> int:
+    cases = simulate_hold_release_auto_insert_cases()
+    report = {
+        "ok": all(bool(case["ok"]) for case in cases),
+        "test_id": "T01-auto-insert",
+        "name": "Hold release automatically inserts recognized text",
+        "scope": "source/packaged logic smoke; no manual float button click",
+        "cases": cases,
+    }
+    destination = Path(report_path) if report_path else Path(tempfile.gettempdir()) / "DoubaoASRHelper-hold-release-auto-insert.json"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    return 0 if report["ok"] else 1
 
 
 def get_foreground_window() -> int:
@@ -3328,6 +3477,13 @@ def run_self_test(report_path: str | None = None) -> int:
             raise ValueError("default reset should preserve the credential path")
         return "configured hotkeys are valid, hold release cleanup is covered, stale ASR sessions are ignored, hold floats hide after release, xian typing is safe, Alt combos are captured, Windows conflicts are checked, and default reset is safe"
 
+    def auto_insert_check() -> str:
+        cases = simulate_hold_release_auto_insert_cases()
+        failed = [case for case in cases if not case["ok"]]
+        if failed:
+            raise ValueError(f"hold release auto-insert failed: {failed}")
+        return "hold and hold-send release paths schedule insertion automatically without the float Insert button; cancelled, empty, and delayed-after-next-recording cases are safe"
+
     def delay_snap_check() -> str:
         for field, (minimum, maximum, step) in DELAY_SPECS.items():
             if step != 50:
@@ -3436,6 +3592,7 @@ def run_self_test(report_path: str | None = None) -> int:
     check("config_dir", config_dir_check)
     check("credential_path", credential_path_check)
     check("hotkeys", hotkey_check)
+    check("auto_insert", auto_insert_check)
     check("delay_snap", delay_snap_check)
     check("opus_encoder", opus_check)
     check("audio_devices", sounddevice_check)
@@ -3957,6 +4114,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--clipboard-insert-report", help=argparse.SUPPRESS)
     parser.add_argument("--clipboard-complex-test", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--clipboard-complex-report", help=argparse.SUPPRESS)
+    parser.add_argument("--hold-release-auto-insert-test", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--hold-release-auto-insert-report", help=argparse.SUPPRESS)
     parser.add_argument("--startup-script-test", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--startup-script-report", help=argparse.SUPPRESS)
     parser.add_argument("--license-network-test", action="store_true", help=argparse.SUPPRESS)
@@ -3979,6 +4138,8 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(run_clipboard_insert_test(args.clipboard_insert_report))
     if args.clipboard_complex_test:
         raise SystemExit(run_clipboard_complex_test(args.clipboard_complex_report))
+    if args.hold_release_auto_insert_test:
+        raise SystemExit(run_hold_release_auto_insert_test(args.hold_release_auto_insert_report))
     if args.startup_script_test:
         raise SystemExit(run_startup_script_test(args.startup_script_report))
     if args.license_network_test:
