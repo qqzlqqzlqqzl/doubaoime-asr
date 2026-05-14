@@ -2134,7 +2134,7 @@ class DesktopApp:
         compact = narrow or logical_available_width < 760 or logical_height < 640
         show_desc = not compact and not narrow and logical_height > 700
         show_section_headers = not tiny
-        hide_advanced_section = logical_height < 500
+        hide_advanced_section = logical_height <= 700
         desc_wrap = int(
             min(
                 max(220 * ui_scale, available_width * 0.24),
