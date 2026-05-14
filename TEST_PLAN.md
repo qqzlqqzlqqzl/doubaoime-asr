@@ -81,6 +81,20 @@
 | E19 | 剪贴板图片/文件格式恢复烟测 | 安装版运行 `--clipboard-complex-test`，写出 `installed-clipboard-complex-test.json`，断言 `CF_DIB` 图片剪贴板和 `CF_HDROP` 文件列表在临时文本插入后恢复；跳过 Windows 自动派生的 `CF_BITMAP/CF_DIBV5`，避免冻结 EXE 读取不可搬运句柄 |
 | E20 | 开机启动脚本无重启烟测 | 安装版运行 `--startup-script-test`，写出 `installed-startup-script-test.json`，在隔离 `APPDATA` 中验证 Startup bat 会写入当前 EXE 路径和 `--hidden`，取消后能删除；该项不等价于真实重启闭环 |
 | E21 | 授权断网打包版烟测 | 安装版运行 `--license-network-test`，写出 `installed-license-network-test.json`，验证普通版不受授权断网影响，受控版服务器不可达时阻止使用但保留本地 token |
+| E22 | AHK 旧配置迁移烟测 | `test-desktop-exe.ps1` 在隔离 `APPDATA` 下预置旧目录 `%APPDATA%\DouBaoVoiceHelper\config.ini` | AHK 主客户端启动后创建 `%APPDATA%\DoubaoASRHelper\config.ini`，并把旧默认 `XButton1/F9/F12/Ctrl+Alt+Shift+D` 迁移为 `Ctrl+Alt+Space/Ctrl+Alt+Enter/Esc/Ctrl+Alt+D`，`ConfigVersion=3` |
+| E23 | 上游差异审计复核 | 阅读 [UPSTREAM_DIFF_AUDIT.md](UPSTREAM_DIFF_AUDIT.md)，并用两个参考仓库当前 HEAD 对照源码 | 每个新增/修改/保留差异都有 why；解释不成立的差异必须修复或补测试，不能只写文档掩盖 |
+
+### 上游差异审计测试
+
+这类测试用于防止项目偏离两个参考仓库后没人知道原因。它不是运行时功能测试，但每次大改架构、热键、打包或 AHK 客户端时都要做。
+
+| 编号 | 测试项 | 操作 | 预期 |
+|------|------|------|------|
+| D01 | ASR 上游基线确认 | `git ls-remote https://github.com/yangmoling/doubaoime-asr.git HEAD` | 文档记录的 commit 和实际审计时使用的 commit 一致，或明确说明更新原因 |
+| D02 | AHK 上游基线确认 | `git ls-remote https://github.com/xiaohu31/doubao-voice-helper.git HEAD` | 文档记录的 commit 和实际审计时使用的 commit 一致，或明确说明更新原因 |
+| D03 | 文件级差异解释 | 对照 `git ls-files` 和 `UPSTREAM_DIFF_AUDIT.md` | 新增、修改、删除、保留文件都能在文档中找到解释 |
+| D04 | 无理由 drift 修复 | 对解释不通的 diff 做代码修复 | 修复后必须补对应自动化或 smoke 证据，例如配置迁移、默认配置、DLL 搜索路径 |
+| D05 | 文档闭环 | 更新 `CHANGELOG.md`、`README.md`、`HANDOFF.md`、`REFERENCE_PARITY.md` | 接手者不需要翻聊天记录即可理解这一版为什么这样做 |
 
 ### 长文本 ASR 测试
 

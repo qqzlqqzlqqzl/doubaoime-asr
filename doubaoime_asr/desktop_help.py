@@ -9,6 +9,11 @@ HELP_TEXT = """豆包 ASR 助手使用说明
 一、这是什么
 豆包 ASR 助手是一个 Windows 桌面语音输入工具。它会在后台监听你设置的快捷键，录音结束后把识别出来的文字粘贴回你原来正在输入的窗口。
 
+当前版本采用双组件架构：
+DoubaoASRHelper.exe：主界面、热键、托盘、悬浮窗、剪贴板保护和插入。
+asr_bridge.exe：录音和豆包 ASR 识别后端。
+安装版会自动放好这两个文件；免安装版请不要只复制主程序，两个 EXE 必须在同一目录。
+
 二、首次运行
 1. 双击 DoubaoASRHelper.exe，或通过开始菜单打开 Doubao ASR Helper。
 2. 第一次使用时，程序会在当前 Windows 用户目录下创建配置和凭据缓存：
@@ -78,6 +83,7 @@ HELP_TEXT = """豆包 ASR 助手使用说明
 zip 里通常包含：
 DoubaoASRHelperSetup.exe：安装器，安装到当前用户目录并创建快捷方式。
 DoubaoASRHelper-portable.exe：便携版，双击即可运行。
+asr_bridge.exe：语音识别后端，必须和主程序放在同一目录。
 HELP.md：这份使用说明。
 
 安装器默认安装到：

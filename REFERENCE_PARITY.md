@@ -4,6 +4,18 @@
 
 本项目不是直接调用豆包桌面版悬浮窗，而是内置豆包 ASR 协议客户端，所以实现方式不同；用户可见功能按参考工具逐项对齐。
 
+2026-05-14 之后的实现原则是“参考工具负责交互形态，Python ASR 负责识别能力”。因此和参考工具的主要差异不是 UI 功能缺失，而是底层数据来源不同：
+
+| 层级 | 参考工具 | 本项目 |
+|---|---|---|
+| 语音来源 | 调用/驱动豆包桌面版语音输入 | `asr_bridge.exe` 直接录音并调用豆包 ASR 协议 |
+| 桌面交互 | AutoHotkey v2 | AutoHotkey v2，保留参考客户端结构 |
+| 实时悬浮窗 | 依赖豆包桌面版悬浮窗/结果 | `ahk_client/src/float.ahk` 本地悬浮窗，轮询 `/status` |
+| 结束录音 | 等待豆包桌面版输出/剪贴板 | AHK 调 `/stop wait=false`，异步轮询最终文本后自动插入 |
+| 配置目录 | `%APPDATA%\DouBaoVoiceHelper` | `%APPDATA%\DoubaoASRHelper`，会迁移旧配置 |
+
+完整文件级差异解释见 [UPSTREAM_DIFF_AUDIT.md](UPSTREAM_DIFF_AUDIT.md)。后续维护时，如果一个偏离参考工具的行为不能解释为“桥接 Python ASR 必需”“规避热键/分发风险必需”或“用户明确要求”，应优先视为 bug。
+
 | 参考功能 | 参考行为 | 当前状态 | 本项目实现/证据 |
 |---|---|---|---|
 | 按着说 | 按住右 Ctrl，说话，松开自动插入 | 已覆盖 | `hold_key=右 Ctrl`；`--hold-release-auto-insert-test` 覆盖松手自动插入 |

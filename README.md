@@ -4,6 +4,8 @@
 
 当前维护仓库：`https://github.com/qqzlqqzlqqzl/doubaoime-asr.git`。原始上游项目来自 `starccy/doubaoime-asr`，本仓库在其基础上补充了 Windows 桌面助手、打包、托盘、热键、激活码和测试文档。
 
+最新大版本说明见 [CHANGELOG.md](CHANGELOG.md)。2026-05-14 起，桌面版收敛为“AutoHotkey 客户端 + Python ASR bridge”的薄桥接架构，并新增 [UPSTREAM_DIFF_AUDIT.md](UPSTREAM_DIFF_AUDIT.md) 解释本仓库相对两个参考仓库的每一类差异。
+
 ## 免责声明
 
 本项目通过对安卓豆包输入法客户端通信协议分析并参考客户端代码实现，**非官方提供的 API**。
@@ -191,7 +193,16 @@ config = ASRConfig(credential_path="~/.config/doubaoime-asr/credentials.json")
 
 Windows 桌面版的正式目标是 Windows 10/11 x64。Win7、Win8、Win8.1 和 32 位 Windows 不作为支持目标，对外分发优先使用主发布包。
 
-当前桌面版改为薄桥接架构：`ahk_client` 直接使用 `xiaohu31/doubao-voice-helper` 的 AutoHotkey v2 客户端结构，保留设置页、热键、托盘、剪贴板保护和自动发送；`doubaoime_asr.asr_bridge` 复用 Python 豆包 ASR API，在本机提供 `start / stop / cancel / status`。AHK 只负责交互和粘贴，Python 只负责录音识别。
+当前桌面版改为薄桥接架构：`ahk_client` 直接使用 `xiaohu31/doubao-voice-helper` 的 AutoHotkey v2 客户端结构，保留设置页、热键、托盘、剪贴板保护和自动发送；`doubaoime_asr.asr_bridge` 复用 Python 豆包 ASR API，在本机提供 `health / start / stop / cancel / status`。AHK 只负责交互和粘贴，Python 只负责录音识别。两份参考仓库的差异解释见 [UPSTREAM_DIFF_AUDIT.md](UPSTREAM_DIFF_AUDIT.md)。
+
+运行时进程关系：
+
+| 组件 | 产物 | 职责 |
+|------|------|------|
+| AHK 主客户端 | `DoubaoASRHelper.exe` | 设置页、全局热键、托盘、悬浮窗、剪贴板保护、插入、自动发送 |
+| Python ASR bridge | `asr_bridge.exe` | 录音、调用豆包 ASR、实时文本合并、本地 HTTP API |
+
+免安装版或安装目录里必须同时保留这两个 EXE。只复制 `DoubaoASRHelper.exe` 会导致主界面能打开但无法识别语音。
 
 本地开发建议先在 PowerShell 中启用项目隔离环境：
 
@@ -218,8 +229,9 @@ doubaoime-asr-desktop
 | 剪贴板超时 | `100ms` |
 | 自动发送延迟 | `50ms` |
 
-工具会在后台监听全局热键，录音时显示悬浮窗，识别完成后把文本粘贴回开始录音前的窗口。
+工具会在后台监听全局热键，录音时显示悬浮窗，识别完成后把文本粘贴回开始录音前的窗口。按着说和按着说+自动发送结束时使用非阻塞 stop：松手后 AHK 不会卡住等待 ASR，而是继续轮询 bridge 的最终文本，拿到结果后自动插入。
 配置和凭据缓存默认保存在 `%APPDATA%\DoubaoASRHelper`，因此打包后不依赖项目目录。
+如果检测到旧参考客户端目录 `%APPDATA%\DouBaoVoiceHelper\config.ini`，会自动迁移到 `%APPDATA%\DoubaoASRHelper\config.ini`，并把旧默认热键迁移为当前更安全的默认值。
 设置界面按「按着说」「自由说」「按着说+自动发送」三种模式分块展示，下面统一放置豆包快捷键、插入延迟、剪贴板保护、开机自启动和高级延迟设置，和参考工具的操作路径保持一致。
 「剪贴板保护」默认开启，会在插入识别文本后恢复原剪贴板。文本剪贴板会完整恢复；常见图片 `CF_DIB` 和文件列表 `CF_HDROP` 也有原生格式烟测覆盖。Windows 自动派生的 `CF_BITMAP/CF_DIBV5` 不会被重新发布，避免冻结 EXE 读取不可搬运句柄。
 
@@ -266,6 +278,7 @@ python -m doubaoime_asr.desktop_app --hold-release-auto-insert-test --hold-relea
 完整测试项见 [TEST_PLAN.md](TEST_PLAN.md)。真实端到端闭环证据和未闭合项见 [E2E_TEST_EVIDENCE.md](E2E_TEST_EVIDENCE.md)；其中会明确区分 `PASS`、`PARTIAL`、`BLOCKED` 和 `NOT_RUN`，不要把计划项误当作已通过项。
 
 和 `xiaohu31/doubao-voice-helper` 的功能复刻对照见 [REFERENCE_PARITY.md](REFERENCE_PARITY.md)。
+和两个上游仓库的文件级差异审计见 [UPSTREAM_DIFF_AUDIT.md](UPSTREAM_DIFF_AUDIT.md)。如果后续发现某个 diff 解释不通，应优先当作 bug 修复，而不是继续堆新逻辑。
 
 如果要让另一个 AI 或开发者接手维护，请先阅读 [HANDOFF.md](HANDOFF.md) 和 [E2E_TEST_EVIDENCE.md](E2E_TEST_EVIDENCE.md)。它们记录了当前桌面版架构、构建测试流程、近期关键改动、常见坑，以及哪些闭环测试仍缺真实证据。
 

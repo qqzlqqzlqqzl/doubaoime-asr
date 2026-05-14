@@ -6,6 +6,19 @@
 当前主要分支：`main`
 远端仓库：`https://github.com/qqzlqqzlqqzl/doubaoime-asr.git`
 
+当前最新大变更：`185e2a7 Audit upstream diffs and fix drift`。这一版把“为什么不用纯自写桌面壳、为什么要接入两个参考仓库、哪些 diff 是必要胶水、哪些 diff 已修成 bug”写进了 [CHANGELOG.md](CHANGELOG.md) 和 [UPSTREAM_DIFF_AUDIT.md](UPSTREAM_DIFF_AUDIT.md)。接手者必须先读这两份文档，否则很容易把 AHK 主客户端、Python bridge、旧 Python Tk 自测入口三者的职责搞混。
+
+当前生产桌面链路：
+
+| 层 | 文件/产物 | 职责 |
+|---|---|---|
+| AHK 主客户端 | `ahk_client/src/*.ahk`，打包后为 `DoubaoASRHelper.exe` | 设置页、热键、托盘、悬浮窗、剪贴板保护、插入和自动发送 |
+| Python ASR bridge | `doubaoime_asr/asr_bridge.py`，打包后为 `asr_bridge.exe` | 录音、调用 ASR、合并实时文本、本地 HTTP API |
+| Python ASR API | `doubaoime_asr/asr.py`、`audio.py`、`transcript.py` | 豆包 ASR 协议、Opus 编码、实时 transcript 合并 |
+| Python Tk 桌面旧入口 | `doubaoime_asr/desktop_app.py` | 保留为自测、帮助、历史兼容和部分自动化测试入口，不再是主要用户交互面 |
+
+免安装包和安装目录必须同时带 `DoubaoASRHelper.exe` 与 `asr_bridge.exe`。只复制主程序会让 UI 能打开但语音识别不可用。
+
 ## 0. 多电脑协作同步备注
 
 当前项目正在两台 Windows 电脑之间协作开发。接手前不要直接覆盖本地文件或强推，请先：
@@ -46,6 +59,8 @@ git pull --rebase --autostash
 - `build-desktop-exe.ps1` 现在构建两个运行时文件：AHK 主程序 `dist\DoubaoASRHelper.exe` 和 Python 后端 `dist\asr_bridge.exe`。便携 zip 和安装器都必须包含两者。
 - `test-desktop-exe.ps1` 对新架构走快速烟测：bridge self-test、HTTP health/status、AHK 自动拉起 bridge、安装目录包含两个 EXE、zip 包包含 `asr_bridge.exe`。
 - 2026-05-14 追加修复：新增 `ahk_client/src/float.ahk`，录音时显示本地悬浮窗并轮询 bridge `/status` 展示实时文本；`POST /stop` 支持 `wait=false`，AHK 松手后不再同步阻塞等待 ASR 完成，而是用定时器轮询最终文本再自动粘贴，解决说话/识别期间界面像冻结的问题。
+- 2026-05-14 追加上游差异审计：新增 `UPSTREAM_DIFF_AUDIT.md`，以 `yangmoling/doubaoime-asr@267972f` 和 `xiaohu31/doubao-voice-helper@12fb747` 为基线，解释文件级 diff。审计中修复了三处解释不通的漂移：`DoubaoASR(config=None)` 默认配置、AHK 配置目录迁移到 `%APPDATA%\DoubaoASRHelper`、源码模式自动加载 `.devtools\opus\bin`。同时恢复 `ahk_client/.gitignore` 和 `ahk_client/tools/window-spy.ahk`，避免无理由裁剪参考客户端开发能力。
+- 这次审计后的验证结果：`python -m pytest -q` 为 `16 passed, 1 warning`，源码 `--self-test` 通过且报告 `ok=true`，`build-desktop-exe.ps1` 通过，`test-desktop-exe.ps1` 通过并新增 AHK 旧配置迁移断言。
 
 2026-05-13，本轮按用户参考截图继续收紧主设置 UI：
 
@@ -192,27 +207,56 @@ python -m doubaoime_asr.desktop_app --hold-release-auto-insert-test --hold-relea
 
 ## 5. 核心文件地图
 
-### 桌面主程序
+### AHK 桌面主客户端
+
+- `ahk_client/src/main.ahk`
+- `ahk_client/src/gui.ahk`
+- `ahk_client/src/hotkey.ahk`
+- `ahk_client/src/clipboard.ahk`
+- `ahk_client/src/bridge.ahk`
+- `ahk_client/src/float.ahk`
+- `ahk_client/src/config.ahk`
+
+这是当前用户实际看到和操作的主客户端，打包后是 `DoubaoASRHelper.exe`。它来自 `xiaohu31/doubao-voice-helper` 的 AutoHotkey v2 结构，职责包括：
+
+- 设置页和参考图式三模式布局。
+- 全局热键注册、注销、启用/禁用。
+- 热键配置读写、旧默认值迁移、旧目录配置迁移。
+- 系统托盘图标、右键菜单和后台保活。
+- 录音悬浮窗和实时文本轮询。
+- 剪贴板保护、文本插入和自动发送。
+- 自动拉起同目录 `asr_bridge.exe` 并调用本地 HTTP API。
+
+生产功能如果涉及用户交互，优先改这里，而不是先改 Python Tk 旧入口。
+
+### Python ASR bridge
+
+`doubaoime_asr/asr_bridge.py`
+
+这是 AHK 和 Python ASR 的薄胶水，打包后是 `asr_bridge.exe`。本地监听 `127.0.0.1:18765`，提供：
+
+- `GET /health`
+- `GET /status`
+- `POST /start`
+- `POST /stop`
+- `POST /cancel`
+
+bridge 负责打开麦克风、流式调用 `transcribe_realtime`、维护当前状态、返回中间/最终文本。AHK 不直接碰 Python 对象，只通过 HTTP 通信。
+
+### Python Tk 旧桌面入口
 
 `doubaoime_asr/desktop_app.py`
 
-这是当前最重要的文件，包含：
+这个文件仍然很重要，但现在主要用于自测、帮助、历史兼容和一部分自动化入口，不是生产桌面交互的首选修改点。保留的自测入口包括：
 
-- Tkinter 主 UI。
-- DPI 感知和响应式布局。
-- 热键解析、热键录制、热键冲突检测。
-- Windows 托盘图标和菜单。
-- 麦克风采集和 ASR 流式识别。
-- 悬浮窗显示和插入/复制/清空操作。
-- 激活窗口。
-- 自测入口：
-  - `--self-test`
-  - `--tray-self-test`
-  - `--float-layout-test`
-  - `--ui-layout-report`
-  - `--long-text-test`
+- `--self-test`
+- `--tray-self-test`
+- `--float-layout-test`
+- `--ui-layout-report`
+- `--hold-release-auto-insert-test`
+- `--long-text-test`
 
-改这个文件时要非常小心，因为它同时影响用户交互、自动化测试、打包 EXE 和后台行为。
+改这个文件时仍要非常小心，因为 `test-desktop-exe.ps1`、release 帮助和部分历史测试会调用它。但如果需求是 AHK 设置页、托盘菜单、悬浮窗、热键或剪贴板交互，应先看 `ahk_client/src/*.ahk`。
 
 ### 桌面帮助文档
 
@@ -250,7 +294,7 @@ python -m doubaoime_asr.desktop_app --hold-release-auto-insert-test --hold-relea
 
 `doubaoime_asr/audio.py`
 
-负责 PCM 到 Opus frame 的转换。桌面版和文件识别都会依赖。
+负责 PCM 到 Opus frame 的转换。桌面版和文件识别都会依赖。当前会在导入 `opuslib` 前优先把 PyInstaller `_MEIPASS` 或项目内 `.devtools\opus\bin` 加入 DLL 搜索路径，避免源码 self-test 依赖全局安装 Opus。
 
 ### 凭据和配置
 
@@ -304,9 +348,12 @@ python -m doubaoime_asr.desktop_app --hold-release-auto-insert-test --hold-relea
 重要细节：
 
 - 会运行 `. .\enter-dev.ps1`。
-- 会把 `doubaoime_asr/assets/app.ico` 作为 EXE 图标。
+- 会先用 Ahk2Exe 编译 AHK 主客户端 `dist\DoubaoASRHelper.exe`。
+- 会用 PyInstaller 编译 Python 后端 `dist\asr_bridge.exe`。
+- 会把 `doubaoime_asr/assets/app.ico` 作为 AHK 主程序、Python bridge 和安装器图标。
 - 会把 `app.ico` 加到 PyInstaller data。
 - 会把 `.devtools\opus\bin\opus.dll` 加为 binary。
+- 会把 `DoubaoASRHelper.exe` 和 `asr_bridge.exe` 同时放进安装器、免安装 zip 和完整 zip。缺任何一个都不是可分发包。
 - 会根据环境变量生成 `build\license-config\license-config.json` 并嵌入 EXE。
 
 授权分发环境变量：
