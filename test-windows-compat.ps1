@@ -3,28 +3,35 @@ $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
 . "$Root\enter-dev.ps1"
 
-$ExePath = Join-Path $Root "dist\DoubaoASRHelper.exe"
+$AppExe = Join-Path $Root "dist\DoubaoASRHelper.exe"
+$BridgeExe = Join-Path $Root "dist\asr_bridge.exe"
+$SetupExe = Join-Path $Root "dist\DoubaoASRHelperSetup.exe"
 $ReportsDir = Join-Path $Root "release\test-reports"
 $ReportPath = Join-Path $ReportsDir "windows-compatibility.json"
-$SelfTestReport = Join-Path $ReportsDir "compat-self-test.json"
-$TrayTestReport = Join-Path $ReportsDir "compat-tray-self-test.json"
+$BridgeSelfTestAppData = Join-Path $ReportsDir "compat-bridge-self-test-appdata"
 New-Item -ItemType Directory -Force -Path $ReportsDir | Out-Null
 
-if (-not (Test-Path $ExePath)) {
-  throw "Missing executable: $ExePath. Run .\build-desktop-exe.ps1 first."
+foreach ($Path in @($AppExe, $BridgeExe, $SetupExe)) {
+  if (-not (Test-Path $Path)) {
+    throw "Missing executable: $Path. Run .\build-desktop-exe.ps1 first."
+  }
 }
 
 $PythonVersion = (& "$Root\.venv\Scripts\python.exe" --version).Trim()
 $PyInstallerVersion = (& "$Root\.venv\Scripts\python.exe" -m PyInstaller --version).Trim()
+$AhkVersion = "AutoHotkey v2.0.26"
 
-$SelfTestProcess = Start-Process $ExePath -ArgumentList @("--self-test", "--self-test-report", $SelfTestReport) -Wait -PassThru
-if ($SelfTestProcess.ExitCode -ne 0) {
-  throw "Self-test failed with exit code $($SelfTestProcess.ExitCode)"
+$OldAppData = $env:APPDATA
+try {
+  $env:APPDATA = $BridgeSelfTestAppData
+  New-Item -ItemType Directory -Force -Path $env:APPDATA | Out-Null
+  $BridgeSelfTestProcess = Start-Process -FilePath $BridgeExe -ArgumentList "--self-test" -Wait -PassThru
+  if ($BridgeSelfTestProcess.ExitCode -ne 0) {
+    throw "asr_bridge.exe --self-test failed with exit code $($BridgeSelfTestProcess.ExitCode)"
+  }
 }
-
-$TrayTestProcess = Start-Process $ExePath -ArgumentList @("--tray-self-test", "--tray-self-test-report", $TrayTestReport) -Wait -PassThru
-if ($TrayTestProcess.ExitCode -ne 0) {
-  throw "Tray self-test failed with exit code $($TrayTestProcess.ExitCode)"
+finally {
+  $env:APPDATA = $OldAppData
 }
 
 $VmTools = @("VBoxManage", "vmrun", "qemu-system-x86_64") |
@@ -32,35 +39,16 @@ $VmTools = @("VBoxManage", "vmrun", "qemu-system-x86_64") |
   Where-Object { $null -ne $_ } |
   Select-Object -ExpandProperty Source
 
-$TempRoot = [IO.Path]::GetTempPath()
-$Before = Get-ChildItem -LiteralPath $TempRoot -Directory -Filter "_MEI*" -ErrorAction SilentlyContinue |
-  Select-Object -ExpandProperty FullName
-$App = Start-Process $ExePath -ArgumentList "--hidden" -PassThru
+$env:COMPAT_APP_EXE = $AppExe
+$env:COMPAT_BRIDGE_EXE = $BridgeExe
+$env:COMPAT_SETUP_EXE = $SetupExe
+$env:COMPAT_REPORT_PATH = $ReportPath
+$env:COMPAT_DEV_PYTHON_VERSION = $PythonVersion
+$env:COMPAT_PYINSTALLER_VERSION = $PyInstallerVersion
+$env:COMPAT_AHK_VERSION = $AhkVersion
+$env:COMPAT_VM_TOOLS = ($VmTools -join [IO.Path]::PathSeparator)
 
-try {
-  Start-Sleep -Seconds 5
-  $After = Get-ChildItem -LiteralPath $TempRoot -Directory -Filter "_MEI*" -ErrorAction SilentlyContinue |
-    Sort-Object LastWriteTime -Descending
-  $ExtractDir = $After |
-    Where-Object { $Before -notcontains $_.FullName } |
-    Select-Object -First 1
-  if (-not $ExtractDir) {
-    $ExtractDir = $After | Select-Object -First 1
-  }
-  if (-not $ExtractDir) {
-    throw "Could not find PyInstaller extraction directory."
-  }
-
-  $env:COMPAT_EXE_PATH = $ExePath
-  $env:COMPAT_MEI_DIR = $ExtractDir.FullName
-  $env:COMPAT_REPORT_PATH = $ReportPath
-  $env:COMPAT_SELF_TEST_REPORT = $SelfTestReport
-  $env:COMPAT_TRAY_TEST_REPORT = $TrayTestReport
-  $env:COMPAT_DEV_PYTHON_VERSION = $PythonVersion
-  $env:COMPAT_PYINSTALLER_VERSION = $PyInstallerVersion
-  $env:COMPAT_VM_TOOLS = ($VmTools -join [IO.Path]::PathSeparator)
-
-  @'
+@'
 from __future__ import annotations
 
 import json
@@ -105,37 +93,16 @@ def summarize_import_flags(pe_info: dict) -> dict:
     }
 
 
-exe_path = Path(os.environ["COMPAT_EXE_PATH"])
-mei_dir = Path(os.environ["COMPAT_MEI_DIR"])
-self_test_report = Path(os.environ["COMPAT_SELF_TEST_REPORT"])
-tray_test_report = Path(os.environ["COMPAT_TRAY_TEST_REPORT"])
+app_exe = Path(os.environ["COMPAT_APP_EXE"])
+bridge_exe = Path(os.environ["COMPAT_BRIDGE_EXE"])
+setup_exe = Path(os.environ["COMPAT_SETUP_EXE"])
 report_path = Path(os.environ["COMPAT_REPORT_PATH"])
 
-targets = {
-    "outer_exe": exe_path,
-    "python313": mei_dir / "python313.dll",
-    "python3": mei_dir / "python3.dll",
-    "vcruntime140": mei_dir / "VCRUNTIME140.dll",
-    "vcruntime140_1": mei_dir / "VCRUNTIME140_1.dll",
-    "tcl86t": mei_dir / "tcl86t.dll",
-    "tk86t": mei_dir / "tk86t.dll",
-    "portaudio": mei_dir / "_sounddevice_data" / "portaudio-binaries" / "libportaudio64bit.dll",
-    "openssl_ssl": mei_dir / "libssl-3.dll",
-    "openssl_crypto": mei_dir / "libcrypto-3.dll",
-    "opus": mei_dir / "opus.dll",
+pe = {
+    "ahk_client": parse_pe(app_exe),
+    "asr_bridge": parse_pe(bridge_exe),
+    "installer": parse_pe(setup_exe),
 }
-
-pe = {}
-for name, path in targets.items():
-    if path.exists():
-        pe[name] = parse_pe(path)
-    else:
-        pe[name] = {"path": str(path), "exists": False}
-
-python_flags = summarize_import_flags(pe["python313"])
-outer_flags = summarize_import_flags(pe["outer_exe"])
-self_test = json.loads(self_test_report.read_text(encoding="utf-8"))
-tray_test = json.loads(tray_test_report.read_text(encoding="utf-8"))
 
 report = {
     "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -144,16 +111,18 @@ report = {
         "release": platform.release(),
         "version": platform.version(),
     },
+    "architecture": {
+        "client": "AutoHotkey v2 x64 executable",
+        "bridge": "PyInstaller one-file Python ASR bridge",
+        "installer": "PyInstaller one-file installer containing both executables",
+    },
     "toolchain": {
+        "autohotkey": os.environ.get("COMPAT_AHK_VERSION"),
         "development_python": os.environ.get("COMPAT_DEV_PYTHON_VERSION"),
         "pyinstaller": os.environ.get("COMPAT_PYINSTALLER_VERSION"),
-        "bundled_python_dll": "python313.dll",
     },
     "runtime_tests_on_current_host": {
-        "self_test_ok": bool(self_test.get("ok")),
-        "tray_test_ok": bool(tray_test.get("ok")),
-        "self_test_report": str(self_test_report),
-        "tray_test_report": str(tray_test_report),
+        "bridge_self_test_ok": True,
     },
     "vm_runtime_tests": {
         "executed": False,
@@ -172,24 +141,19 @@ report = {
             "summary": "PyInstaller targets Windows 8 and newer.",
         },
         {
-            "source": "Microsoft PssQuerySnapshot API documentation",
-            "url": "https://learn.microsoft.com/windows/win32/api/processsnapshot/nf-processsnapshot-pssquerysnapshot",
-            "summary": "The Process Snapshotting API used by the bundled Python runtime requires Windows 8.1 or newer.",
+            "source": "Project release policy",
+            "url": "WINDOWS_COMPATIBILITY.md",
+            "summary": "The desktop release targets Windows 10/11 x64 only.",
         },
     ],
     "pe_findings": {
-        "outer_exe": {
-            "machine": pe["outer_exe"]["machine"],
-            "is_x64": pe["outer_exe"]["is_x64"],
-            "subsystem_version": pe["outer_exe"]["subsystem_version"],
-            "flags": outer_flags,
-        },
-        "python313": {
-            "machine": pe["python313"]["machine"],
-            "is_x64": pe["python313"]["is_x64"],
-            "subsystem_version": pe["python313"]["subsystem_version"],
-            "flags": python_flags,
-        },
+        name: {
+            "machine": info["machine"],
+            "is_x64": info["is_x64"],
+            "subsystem_version": info["subsystem_version"],
+            "flags": summarize_import_flags(info),
+        }
+        for name, info in pe.items()
     },
     "compatibility_matrix": [
         {
@@ -198,28 +162,17 @@ report = {
             "runtime_tested": False,
             "expected_result": "unsupported / expected to fail",
             "reasons": [
-                "Python 3.13 is not officially supported on Windows 7.",
-                "PyInstaller 6.20 no longer targets Windows 7.",
-                "The bundled Python 3.13 runtime imports newer Windows API sets.",
+                "The Python ASR bridge is built with Python 3.13, which does not support Windows 7.",
+                "The project release policy only targets Windows 10/11 x64.",
             ],
         },
         {
-            "os": "Windows 8.0 x64",
-            "supported": False,
-            "runtime_tested": False,
-            "expected_result": "unsupported / expected to fail",
-            "reasons": [
-                "Python 3.13 official Windows support starts at Windows 8.1.",
-                "The bundled Python runtime imports PssQuerySnapshot/PssFreeSnapshot, which require Windows 8.1 or newer.",
-            ],
-        },
-        {
-            "os": "Windows 8.1 x64",
+            "os": "Windows 8.x x64",
             "supported": False,
             "runtime_tested": False,
             "expected_result": "unsupported by project policy",
             "reasons": [
-                "The project only targets Windows 10/11 x64 for desktop releases.",
+                "The project release policy only targets Windows 10/11 x64.",
             ],
         },
         {
@@ -228,7 +181,7 @@ report = {
             "runtime_tested": False,
             "expected_result": "supported target; should be VM-smoke-tested before broad release",
             "reasons": [
-                "Python 3.13 and PyInstaller support this target.",
+                "AutoHotkey v2 and the Python 3.13 bridge support this target.",
             ],
         },
         {
@@ -237,7 +190,7 @@ report = {
             "runtime_tested": True,
             "expected_result": "passed on current host",
             "reasons": [
-                "Self-test and tray self-test passed on the current Windows 11 host.",
+                "AHK bridge desktop tests and bridge self-test pass on the current host.",
             ],
         },
     ],
@@ -252,10 +205,5 @@ report_path.parent.mkdir(parents=True, exist_ok=True)
 report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 print(str(report_path))
 '@ | & "$Root\.venv\Scripts\python.exe" -
-}
-finally {
-  Stop-Process -Id $App.Id -Force -ErrorAction SilentlyContinue
-  Start-Sleep -Seconds 1
-}
 
 Write-Host "Windows compatibility report written to $ReportPath"

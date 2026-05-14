@@ -4,12 +4,12 @@ $Root = $PSScriptRoot
 $SamplePath = Join-Path $Root ".devtools\samples\long-text-volume-stress.wav"
 $ReportPath = Join-Path $Root "release\test-reports\long-text-asr.json"
 $CredentialPath = Join-Path $Root "credentials.json"
-$ExePath = Join-Path $Root "dist\DoubaoASRHelper.exe"
+$ExePath = Join-Path $Root "dist\asr_bridge.exe"
 
 . "$Root\enter-dev.ps1"
 
 if (-not (Test-Path $ExePath)) {
-  throw "Missing packaged executable: $ExePath. Run .\build-desktop-exe.ps1 first."
+  throw "Missing packaged bridge executable: $ExePath. Run .\build-desktop-exe.ps1 first."
 }
 
 $Args = @(
@@ -26,7 +26,7 @@ if ($env:DOUBAO_LONG_TEXT_RUN_ASR -eq "0") {
   Write-Host "Generating long text audio sample only. Set DOUBAO_LONG_TEXT_RUN_ASR=1 or omit it to run ASR."
   $Args += @("--long-text-generate-only")
 } else {
-  Write-Host "Running packaged EXE long text ASR test."
+  Write-Host "Running packaged bridge long text ASR test."
 }
 
 $Process = Start-Process $ExePath -ArgumentList $Args -Wait -PassThru

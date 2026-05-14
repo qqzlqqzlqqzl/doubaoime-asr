@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -24,6 +24,7 @@ if getattr(sys, "frozen", False):
     os.environ["PATH"] = str(bundle_dir) + os.pathsep + os.environ.get("PATH", "")
 
 from doubaoime_asr.asr import ASRError, ResponseType, transcribe_realtime
+from doubaoime_asr.activation import load_license_config, verify_license
 from doubaoime_asr.config import ASRConfig
 from doubaoime_asr.transcript import TranscriptAccumulator
 
@@ -395,6 +396,70 @@ def run_self_test() -> int:
     return 0
 
 
+def run_long_text_test(
+    audio_path: str | None,
+    report_path: str | None,
+    credential_path: str | None,
+    run_asr_check: bool,
+    min_recognized_chars: int,
+    min_keywords: int,
+) -> int:
+    from doubaoime_asr.long_text_sample import (
+        default_credential_path,
+        default_output_path,
+        generate_long_text_sample,
+        run_asr,
+        sample_text,
+    )
+
+    output = Path(audio_path) if audio_path else default_output_path()
+    report = Path(report_path) if report_path else Path("release/test-reports/long-text-asr.json")
+    credential = Path(credential_path) if credential_path else default_credential_path()
+    license_config = load_license_config()
+
+    result: dict[str, Any] = {
+        "ok": False,
+        "runner": {
+            "executable": sys.executable,
+            "frozen": bool(getattr(sys, "frozen", False)),
+            "component": "asr_bridge",
+        },
+        "license_config": {
+            "require_activation": license_config.require_activation,
+            "server_url_configured": bool(license_config.server_url),
+        },
+    }
+    try:
+        license_result = verify_license(license_config)
+        result["license_state"] = {
+            "ok": license_result.ok,
+            "message": license_result.message,
+            "expires_at": license_result.expires_at,
+            "code": license_result.code,
+        }
+        if run_asr_check and not license_result.ok:
+            raise RuntimeError(f"授权校验未通过：{license_result.message}")
+
+        info = generate_long_text_sample(output)
+        result["sample"] = asdict(info)
+        result["source_text"] = sample_text()
+
+        if run_asr_check:
+            result["asr"] = asyncio.run(run_asr(output, credential, min_recognized_chars, min_keywords))
+            result["ok"] = bool(result["asr"]["passed"])
+        else:
+            result["ok"] = True
+    except Exception as exc:
+        LOGGER.exception("long_text_test_failed")
+        result["error"] = repr(exc)
+    finally:
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    LOGGER.info("long_text_test_done ok=%s report=%s", result.get("ok"), report)
+    return 0 if result["ok"] else 1
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run the local Doubao ASR bridge.")
     parser.add_argument("--host", default=DEFAULT_HOST)
@@ -402,9 +467,26 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--credential-path", default=str(DEFAULT_CREDENTIAL_PATH))
     parser.add_argument("--device", default=None)
     parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--long-text-test", action="store_true", help="Generate the long text stress sample and optionally run ASR.")
+    parser.add_argument("--long-text-audio", help="Path for the generated long text WAV sample.")
+    parser.add_argument("--long-text-report", help="Path for the long text JSON report.")
+    parser.add_argument("--long-text-generate-only", action="store_true", help="Skip ASR and only generate the WAV sample.")
+    parser.add_argument("--min-recognized-chars", type=int, default=220)
+    parser.add_argument("--min-keywords", type=int, default=3)
     args = parser.parse_args(argv)
     if args.self_test:
         raise SystemExit(run_self_test())
+    if args.long_text_test:
+        raise SystemExit(
+            run_long_text_test(
+                args.long_text_audio,
+                args.long_text_report,
+                args.credential_path,
+                not args.long_text_generate_only,
+                args.min_recognized_chars,
+                args.min_keywords,
+            )
+        )
 
     APP_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     LOGGER.info("server_start host=%s port=%s credential_path=%s device=%s", args.host, args.port, args.credential_path, args.device)
