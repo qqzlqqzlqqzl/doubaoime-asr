@@ -4,16 +4,16 @@
 #Requires AutoHotkey v2.0
 
 class Config {
-    static Version := 2
+    static Version := 3
 
     ; 默认配置
     static Default := Map(
         "HoldToTalkKey", "RCtrl",
-        "FreeToTalkKey", "XButton1",
-        "AutoSendKey", "F9",
-        "CancelKey", "F12",
+        "FreeToTalkKey", "^!Space",
+        "AutoSendKey", "^!Enter",
+        "CancelKey", "Escape",
         "AutoSendDelay", 50,
-        "DouBaoHotkey", "^!+d",
+        "DouBaoHotkey", "^!d",
         "InsertDelay", 300,
         "ClipboardProtect", 1,
         "AutoStart", 1,
@@ -108,6 +108,16 @@ class Config {
             if this.Current["CancelKey"] = "z"
                 this.Current["CancelKey"] := this.Default["CancelKey"]
             if this.Current["DouBaoHotkey"] = "^d"
+                this.Current["DouBaoHotkey"] := this.Default["DouBaoHotkey"]
+        }
+        if configVersion < 3 {
+            if this.Current["FreeToTalkKey"] = "XButton1"
+                this.Current["FreeToTalkKey"] := this.Default["FreeToTalkKey"]
+            if this.Current["AutoSendKey"] = "F9"
+                this.Current["AutoSendKey"] := this.Default["AutoSendKey"]
+            if this.Current["CancelKey"] = "F12"
+                this.Current["CancelKey"] := this.Default["CancelKey"]
+            if this.Current["DouBaoHotkey"] = "^!+d"
                 this.Current["DouBaoHotkey"] := this.Default["DouBaoHotkey"]
         }
     }

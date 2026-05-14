@@ -612,10 +612,10 @@ class WindowsTrayIcon:
 @dataclass
 class DesktopConfig:
     hold_key: str = "rctrl"
-    toggle_key: str = "xbutton1"
-    hold_send_key: str = "f9"
-    cancel_key: str = "f12"
-    doubao_hotkey: str = "ctrl+alt+shift+d"
+    toggle_key: str = "ctrl+alt+space"
+    hold_send_key: str = "ctrl+alt+enter"
+    cancel_key: str = "esc"
+    doubao_hotkey: str = "ctrl+alt+d"
     insert_delay_ms: int = 300
     clipboard_restore_delay_ms: int = 100
     auto_send_delay_ms: int = 50
@@ -637,10 +637,10 @@ RESETTABLE_CONFIG_FIELDS = (
     "startup",
 )
 OLD_DEFAULT_HOTKEYS = {
-    "toggle_key": "ctrl+q",
-    "hold_send_key": "lctrl+lwin",
-    "cancel_key": "z",
-    "doubao_hotkey": "ctrl+d",
+    "toggle_key": ("ctrl+q", "xbutton1"),
+    "hold_send_key": ("lctrl+lwin", "f9"),
+    "cancel_key": ("z", "f12"),
+    "doubao_hotkey": ("ctrl+d", "ctrl+alt+shift+d"),
 }
 
 
@@ -694,8 +694,8 @@ def load_config() -> DesktopConfig:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         defaults = DesktopConfig()
-        for field, old_value in OLD_DEFAULT_HOTKEYS.items():
-            if data.get(field) == old_value:
+        for field, old_values in OLD_DEFAULT_HOTKEYS.items():
+            if data.get(field) in old_values:
                 data[field] = getattr(defaults, field)
         return normalize_config(DesktopConfig(**{**asdict(DesktopConfig()), **data}))
     except Exception:
@@ -3572,15 +3572,15 @@ def run_self_test(report_path: str | None = None) -> int:
             raise ValueError("releasing an extra Alt key should not stop right-Ctrl hold recording")
         if idle_start_mode_for_active_keys("rctrl", {"rctrl", "lalt"}, default_config):
             raise ValueError("default hold key should require an exact active key set")
-        if idle_start_mode_for_active_keys("xbutton1", {"xbutton1"}, default_config) != "toggle":
-            raise ValueError("default mouse side button no longer starts toggle recording")
-        if idle_start_mode_for_active_keys("xbutton1", {"xbutton1", "lshift"}, default_config):
-            raise ValueError("mouse side button should not start while extra modifiers are held")
-        if idle_start_mode_for_active_keys("f9", {"f9"}, default_config) != "hold_send":
+        if idle_start_mode_for_active_keys("space", {"ctrl", "alt", "space"}, default_config) != "toggle":
+            raise ValueError("default Ctrl+Alt+Space no longer starts toggle recording")
+        if idle_start_mode_for_active_keys("space", {"ctrl", "alt", "space", "lshift"}, default_config):
+            raise ValueError("Ctrl+Alt+Space should not start while extra modifiers are held")
+        if idle_start_mode_for_active_keys("enter", {"ctrl", "alt", "enter"}, default_config) != "hold_send":
             raise ValueError("default hold-send combo no longer starts hold_send recording")
-        if not should_stop_hold_on_release("hold_send", "f9", {"f9"}, default_config):
-            raise ValueError("F9 release should stop hold-send recording")
-        if idle_start_mode_for_active_keys("f9", {"f9", "d"}, default_config):
+        if not should_stop_hold_on_release("hold_send", "enter", {"ctrl", "alt", "enter"}, default_config):
+            raise ValueError("Enter release should stop hold-send recording")
+        if idle_start_mode_for_active_keys("enter", {"ctrl", "alt", "enter", "d"}, default_config):
             raise ValueError("hold-send combo should not start when extra keys are already active")
         if not should_show_recognition_float("hold", None):
             raise ValueError("hold mode should show the floating transcript while the key is held")
@@ -3613,12 +3613,12 @@ def run_self_test(report_path: str | None = None) -> int:
             raise ValueError("common Alt typo alias is not normalized")
         if canonical_hotkey_value("右Ctrl") != "rctrl":
             raise ValueError("right Ctrl display label is not parsed")
-        if canonical_hotkey_value("F9") != "f9":
-            raise ValueError("F9 display label is not parsed")
+        if canonical_hotkey_value("Ctrl+Alt+Space") != "ctrl+alt+space":
+            raise ValueError("Ctrl+Alt+Space display label is not parsed")
         if display_hotkey_value("rctrl") != "右Ctrl":
             raise ValueError("right Ctrl is not shown as a user-facing label")
-        if display_hotkey_value("f9") != "F9":
-            raise ValueError("F9 is not shown as a user-facing label")
+        if display_hotkey_value("ctrl+alt+enter") != "Ctrl+Alt+Enter":
+            raise ValueError("Ctrl+Alt+Enter is not shown as user-facing labels")
         if generic_hotkey(parse_hotkey("lalt+m")) != frozenset({"alt", "m"}):
             raise ValueError("left/right modifier aliases are not normalized for conflict checks")
         if hotkey_vk(parse_hotkey("alt+m")) != ord("M"):

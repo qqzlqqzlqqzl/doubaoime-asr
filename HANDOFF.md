@@ -35,8 +35,8 @@ git pull --rebase --autostash
 
 - 主窗口标题改为 `豆包语音助手 - 设置`，默认 200% DPI 逻辑基准改为 `392x648`。本机隔离配置安装版布局报告为 `root=783x1294`、`content=767x1217`，横向和纵向均不溢出。
 - 主界面只保留截图中的文案和控件：三个模式块、豆包快捷键、插入延迟、剪贴板保护、开机自启动、高级设置、保存、取消、状态。主界面不再显示恢复默认、显示悬浮窗、使用说明、打开配置目录、凭据文件等额外入口。
-- 默认值已改为避开常用快捷键：`右Ctrl`、`鼠标侧键1`、`F9`、`F12`、`Ctrl+Alt+Shift+D`、插入延迟 `300ms`、剪贴板超时 `100ms`、发送延迟 `50ms`。避免 `Ctrl+Q`、`Ctrl+D`、裸字母、AltGr 和常用 Win 组合。
-- 本轮默认热键调整已跑：`python -m compileall doubaoime_asr\desktop_app.py doubaoime_asr\desktop_help.py doubaoime_asr\asr_bridge.py`、`python -m pytest -q`、源码 `--self-test`、`build-desktop-exe.ps1`。`test-desktop-exe.ps1` 在启动新生成的未签名 `dist\asr_bridge.exe` 时被本机 Windows 应用控制策略拦截，即使用 `Unblock-File` 后仍被拦，需代码签名或换无 SAC/企业策略机器复测。
+- 默认值已改为不依赖鼠标侧键：`右Ctrl`、`Ctrl+Alt+Space`、`Ctrl+Alt+Enter`、`Esc`、`Ctrl+Alt+D`、插入延迟 `300ms`、剪贴板超时 `100ms`、发送延迟 `50ms`。避免 `Ctrl+Q`、`Ctrl+D`、裸字母、鼠标侧键、AltGr 和 Windows 自带语音输入 `Win+H`。
+- 本轮默认热键调整已跑：`python -m compileall doubaoime_asr\desktop_app.py doubaoime_asr\desktop_help.py doubaoime_asr\asr_bridge.py`、`python -m pytest -q`、源码 `--self-test`、`build-desktop-exe.ps1`、`test-desktop-exe.ps1`。另用隔离 `%APPDATA%` 烟测旧默认迁移，`xbutton1/f9/f12/ctrl+alt+shift+d` 会迁到 `Ctrl+Alt+Space / Ctrl+Alt+Enter / Esc / Ctrl+Alt+D`。
 
 2026-05-14，架构改为“AHK 客户端 + Python ASR bridge”：
 
@@ -450,10 +450,10 @@ Python 层授权测试，调用 `tests/test_activation.py`。
 默认：
 
 - `hold_key = rctrl`
-- `toggle_key = xbutton1`
-- `hold_send_key = f9`
-- `cancel_key = f12`
-- `doubao_hotkey = ctrl+alt+shift+d`
+- `toggle_key = ctrl+alt+space`
+- `hold_send_key = ctrl+alt+enter`
+- `cancel_key = esc`
+- `doubao_hotkey = ctrl+alt+d`
 
 关键函数：
 

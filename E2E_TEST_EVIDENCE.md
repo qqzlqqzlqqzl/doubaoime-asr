@@ -24,7 +24,7 @@
 
 紧凑 UI 复测备注：2026-05-13 本轮将默认主窗口基准改为 `760x520`，热键行改成“标签 + 输入框 + 录制/选择按钮”的参考图顺序，并同步更新 200% 默认窗口断言。源码布局报告已重新生成并通过本地 JSON 断言：`source-ui-default-layout.json` 为 `root=1519x1039`、`content=1509x934`、`widgets=73`；`source-ui-compact-layout.json` 为 `root=760x567`、`content=754x557`、`widgets=50`；`source-ui-narrow-layout.json` 为 `root=760x567`、`content=754x470`；`source-ui-minimum-layout.json` 为 `root=756x567`、`content=750x557`。这些报告均为 `fits_horizontally=true` 且 `fits_vertically=true`。随后单独重跑 `test-desktop-exe.ps1` 已通过，并重新生成安装版 UI 截图和布局报告。
 
-参考图 UI 复刻备注：2026-05-14，本轮按用户截图将设置页收敛为 `【按着说】模式`、`【自由说】模式`、`【按着说+自动发送】模式`、豆包快捷键、插入延迟、剪贴板保护、开机自启动、高级设置、`保存`、`取消` 和底部状态文案，移除主界面多余按钮和说明。隔离配置安装版布局报告 `installed-reference-ui-default-layout.json`：默认 200% DPI 窗口 `root=783x1294`、`content.right=767`、`content.bottom=1217`，`fits_horizontally=true`、`fits_vertically=true`。2026-05-14 追加调整默认热键，避开 `Ctrl+Q`、`Ctrl+D`、裸字母、AltGr 和常用 Win 组合：`右Ctrl`、`鼠标侧键1`、`F9`、`F12`、`Ctrl+Alt+Shift+D`，延迟仍为 `300/100/50ms`。本轮源码编译、自测、pytest 和重打包通过；新生成的未签名 `asr_bridge.exe` 被本机 Windows 应用控制策略拦截，AHK bridge 桌面烟测本轮未能完成。
+参考图 UI 复刻备注：2026-05-14，本轮按用户截图将设置页收敛为 `【按着说】模式`、`【自由说】模式`、`【按着说+自动发送】模式`、豆包快捷键、插入延迟、剪贴板保护、开机自启动、高级设置、`保存`、`取消` 和底部状态文案，移除主界面多余按钮和说明。隔离配置安装版布局报告 `installed-reference-ui-default-layout.json`：默认 200% DPI 窗口 `root=783x1294`、`content.right=767`、`content.bottom=1217`，`fits_horizontally=true`、`fits_vertically=true`。2026-05-14 追加调整默认热键，避开 `Ctrl+Q`、`Ctrl+D`、裸字母、鼠标侧键、AltGr 和 Windows 自带语音输入 `Win+H`：`右Ctrl`、`Ctrl+Alt+Space`、`Ctrl+Alt+Enter`、`Esc`、`Ctrl+Alt+D`，延迟仍为 `300/100/50ms`。本轮源码编译、自测、pytest、重打包和 `test-desktop-exe.ps1` 均通过；旧默认迁移烟测输出 `Ctrl+Alt+Space / Ctrl+Alt+Enter / Esc / Ctrl+Alt+D`。
 
 AHK bridge 改造备注：2026-05-14，本轮将主客户端切换为 `xiaohu31/doubao-voice-helper` 风格的 AutoHotkey v2 客户端，Python 新增 `asr_bridge.exe` 只提供本地 HTTP `start/stop/cancel/status/health`。`build-desktop-exe.ps1` 已改为构建 AHK 主程序 `DoubaoASRHelper.exe` 和 Python 后端 `asr_bridge.exe`；便携包和安装包都包含两个 EXE。验证：源码和打包版 bridge self-test 通过，打包版 `/health` 和 `/status` 返回 `ok=true/state=idle`，AHK 主程序启动后能自动拉起 bridge，静默安装目录包含 `DoubaoASRHelper.exe`、`asr_bridge.exe` 和 `install.json`，`test-desktop-exe.ps1` 输出 `AHK bridge desktop tests passed.`。
 
@@ -39,9 +39,9 @@ AHK 悬浮窗和不卡 UI 修复：2026-05-14，新增 `ahk_client/src/float.ahk
 | T01 | 记事本按着说闭环 | PARTIAL | 核心链路 PASS 但不是完整 EXE 热键闭环：`release/test-reports/e2e-t01-notepad-direct-record.json`，源码 `DesktopApp` 直接录音，真实记事本 + 外部麦克风 + ASR + 插入，插入 70 字并命中 `清晨/早餐/城市/测试`。新增释放自动插入逻辑证据 `release/test-reports/hold-release-auto-insert.json` 和打包 EXE 证据 `dist-hold-release-auto-insert.json`、`portable-hold-release-auto-insert.json`、`installed-hold-release-auto-insert.json`：`hold` 松开后 `inserted[0].auto_send=false`，`hold_send` 松开后 `inserted[0].auto_send=true`，均不需要点击悬浮窗“插入”；快速开始下一段也不会吞掉上一句延迟插入。默认右 Ctrl 物理热键自动化 BLOCKED：`release/test-reports/e2e-t01-notepad-hold.json`，合成键盘事件未驱动打包 EXE 完成录音。 |
 | T02 | 浏览器输入框闭环 | NOT_RUN | 未跑。依赖物理热键或更底层输入设备自动化，以及真实浏览器输入窗口；当前合成按键不能作为证据。 |
 | T03 | 企业微信/微信聊天框闭环 | NOT_RUN | 未跑。需要登录状态和真实聊天窗口；当前环境没有可安全发送/验证的受控聊天目标。 |
-| T04 | 自动发送闭环 | NOT_RUN | 未跑。需要真实可控聊天窗口和物理 `F9` 触发，避免误发真实消息。 |
-| T05 | 自由说闭环 | NOT_RUN | 未跑。默认 `鼠标侧键1` 需要真实前台窗口输入闭环；当前合成按键不能作为证据。 |
-| T06 | 取消录音闭环 | NOT_RUN | 未跑。需要物理录音触发后按 `F12` 取消；当前无人值守热键触发层被合成按键限制阻塞。 |
+| T04 | 自动发送闭环 | NOT_RUN | 未跑。需要真实可控聊天窗口和物理 `Ctrl+Alt+Enter` 触发，避免误发真实消息。 |
+| T05 | 自由说闭环 | NOT_RUN | 未跑。默认 `Ctrl+Alt+Space` 需要真实前台窗口输入闭环；当前合成按键不能作为证据。 |
+| T06 | 取消录音闭环 | NOT_RUN | 未跑。需要物理录音触发后按 `Esc` 取消；当前无人值守热键触发层被合成按键限制阻塞。 |
 | T07 | 热键录制保存闭环 | PARTIAL | 逻辑规则 PASS：`release/test-reports/e2e-source-self-test.json` 覆盖热键解析、显示、冲突规则和默认恢复。真实 UI 点击“录制”、保存、重启后生效尚未跑。 |
 | T08 | 热键冲突弹窗闭环 | PARTIAL | 逻辑规则 PASS：`release/test-reports/e2e-source-self-test.json` 覆盖重复/危险/保留热键检查。真实弹窗交互尚未跑。 |
 | T09 | 剪贴板文本保护闭环 | PARTIAL | 新证据 `release/test-reports/installed-clipboard-insert-test.json`：`text_inserted=true`、`clipboard_restored=true`、`restore_delay_ms=500`，目标是临时 Tk 文本框，`paste_method=clipboard helper plus Tk <<Paste>> event`。旧证据 `release/test-reports/e2e-t09-clipboard-text.json` 仍记录真实前台自动化未闭合，`text_inserted=false`。所以该项证明了文本剪贴板保护逻辑，但还不能算“录音 + 外部应用 + 物理热键”完整闭环。 |

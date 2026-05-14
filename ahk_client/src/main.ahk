@@ -520,9 +520,9 @@ class VoiceController {
 
 【默认触发键】
 - 按着说：右Ctrl (RCtrl)
-- 自由说：鼠标侧键1 (XButton1)
-- 按着说+发送：F9
-- 取消键：F12
+- 自由说：Ctrl+Alt+Space
+- 按着说+发送：Ctrl+Alt+Enter
+- 取消键：Esc
 - 可在设置中自定义任意按键或组合键
 
 【配置说明】
@@ -533,7 +533,7 @@ class VoiceController {
 
 【注意事项】
 1. 需要先配置并运行本地 ASR 服务
-2. 豆包快捷键默认保留为 Ctrl+Alt+Shift+D，仅用于兼容设置项
+2. 豆包快捷键默认保留为 Ctrl+Alt+D，仅用于兼容设置项
 3. 识别结果会插入到当前焦点窗口的光标位置
 4. 说话过程中可以切换窗口，内容会插入到新窗口
 

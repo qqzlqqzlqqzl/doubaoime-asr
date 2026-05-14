@@ -277,6 +277,13 @@ class GuiManager {
         result := StrReplace(result, "左SHIFT", "左Shift")
         result := StrReplace(result, "右WIN", "右Win")
         result := StrReplace(result, "左WIN", "左Win")
+        result := StrReplace(result, "SPACE", "Space")
+        result := StrReplace(result, "ENTER", "Enter")
+        result := StrReplace(result, "ESCAPE", "Esc")
+        result := StrReplace(result, "BACKSPACE", "Backspace")
+        result := StrReplace(result, "DELETE", "Delete")
+        result := StrReplace(result, "INSERT", "Insert")
+        result := StrReplace(result, "CAPSLOCK", "CapsLock")
 
         ; 恢复 & 组合键的连接符
         result := StrReplace(result, "《AND》", "+")
@@ -317,6 +324,8 @@ class GuiManager {
         result := StrReplace(result, "左Shift", "《LSHIFT》")
         result := StrReplace(result, "右Win", "《RWIN》")
         result := StrReplace(result, "左Win", "《LWIN》")
+        result := StrReplace(result, "Escape", "《KEY_ESCAPE》")
+        result := StrReplace(result, "Esc", "《KEY_ESCAPE》")
 
         ; 保护功能键 F1-F12
         Loop 12 {
@@ -358,6 +367,7 @@ class GuiManager {
         }
 
         ; 恢复其他特殊键名
+        result := StrReplace(result, "《key_escape》", "Escape")
         for key in specialKeys {
             result := StrReplace(result, "《" . StrLower(key) . "》", key)
         }
