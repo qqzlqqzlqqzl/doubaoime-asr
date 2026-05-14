@@ -210,6 +210,7 @@ class VoiceController {
             return
 
         this.IsProcessing := true
+        VoiceFloat.Show("正在准备录音...", "正在启动")
 
         ; 1. 记录当前焦点窗口
         WindowManager.SaveCurrentWindow()
@@ -223,7 +224,7 @@ class VoiceController {
             VoiceFloat.Hide()
             return
         }
-        VoiceFloat.Show("开始说话...", "🎙 正在聆听")
+        VoiceFloat.Show("开始说话...", "正在聆听")
         this.StartStatusPolling()
     }
 
@@ -255,6 +256,7 @@ class VoiceController {
 
         this.IsProcessing := true
         this.IsAutoSendEnabled := true  ; 标记需要自动发送
+        VoiceFloat.Show("正在准备录音...", "正在启动")
 
         ; 1. 记录当前焦点窗口
         WindowManager.SaveCurrentWindow()
@@ -269,7 +271,7 @@ class VoiceController {
             VoiceFloat.Hide()
             return
         }
-        VoiceFloat.Show("开始说话...", "🎙 正在聆听")
+        VoiceFloat.Show("开始说话...", "正在聆听")
         this.StartStatusPolling()
     }
 
@@ -346,9 +348,9 @@ class VoiceController {
             return
         }
         if status.text != ""
-            VoiceFloat.Update(status.text, "🎙 正在聆听")
+            VoiceFloat.Update(status.text, "正在聆听")
         else
-            VoiceFloat.Update("", "🎙 正在聆听")
+            VoiceFloat.Update("", "正在聆听")
     }
 
     static StartFinishPolling() {
@@ -556,6 +558,13 @@ A: 可能是识别延迟设置过短，请适当增加延迟时间。
 ; ============================================
 ; 程序启动
 ; ============================================
+if A_Args.Length > 0 && A_Args[1] = "--float-self-test" {
+    VoiceFloat.Show("悬浮窗测试", "正在聆听")
+    Sleep(5000)
+    VoiceFloat.Hide()
+    ExitApp(0)
+}
+
 VoiceController.Init()
 
 ; 保持脚本运行

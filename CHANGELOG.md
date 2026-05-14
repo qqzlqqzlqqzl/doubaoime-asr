@@ -78,3 +78,8 @@
 - 改 AHK 配置路径或默认热键后，必须重跑 `test-desktop-exe.ps1`，它现在会验证旧配置迁移。
 - 正式分发仍需要代码签名；未签名 EXE 在 SmartScreen、Smart App Control 或企业 Code Integrity 环境可能被拦截。
 
+### 2026-05-14 补充：悬浮窗可见性修复
+
+用户反馈录音时仍没有悬浮框。本次修复把 AHK 悬浮窗显示提前到 bridge 启动之前，热键触发后先显示“正在准备录音”，再启动录音后端，避免后端启动或麦克风初始化期间没有任何视觉反馈。
+
+同时新增 `DoubaoASRHelper.exe --float-self-test`，`test-desktop-exe.ps1` 会启动打包后的 AHK EXE 并通过 Win32 枚举窗口确认 `DoubaoASRHelperFloat` 可见且尺寸不小于阈值。当前报告 `release\test-reports\ahk-float-self-test.json` 为 `ok=true`，窗口尺寸 `521x113`。

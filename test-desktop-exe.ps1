@@ -6,6 +6,42 @@ if ((Test-Path $BridgeExe) -and (Test-Path $AhkClientExe)) {
   $ReportsDir = Join-Path $PSScriptRoot "release\test-reports"
   New-Item -ItemType Directory -Force -Path $ReportsDir | Out-Null
 
+  Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public struct AhkSmokeRect { public int Left; public int Top; public int Right; public int Bottom; }
+public class AhkSmokeWin32 {
+  public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out AhkSmokeRect rect);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+  public static string GetWindowTitle(IntPtr hWnd) {
+    StringBuilder text = new StringBuilder(256);
+    GetWindowText(hWnd, text, text.Capacity);
+    return text.ToString();
+  }
+  public static int[] FindVisibleWindow(int expectedProcessId, string titleContains) {
+    int[] result = null;
+    EnumWindows(delegate(IntPtr hWnd, IntPtr lParam) {
+      if (!IsWindowVisible(hWnd)) return true;
+      uint pid;
+      GetWindowThreadProcessId(hWnd, out pid);
+      if (pid != expectedProcessId) return true;
+      string title = GetWindowTitle(hWnd);
+      if (title == null || !title.Contains(titleContains)) return true;
+      AhkSmokeRect rect;
+      if (!GetWindowRect(hWnd, out rect)) return true;
+      result = new int[] { rect.Left, rect.Top, rect.Right, rect.Bottom };
+      return false;
+    }, IntPtr.Zero);
+    return result;
+  }
+}
+"@
+
   Get-Process DoubaoASRHelper,asr_bridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
   $BridgeSelfTest = Start-Process -FilePath $BridgeExe -ArgumentList "--self-test" -PassThru -Wait
@@ -36,6 +72,36 @@ if ((Test-Path $BridgeExe) -and (Test-Path $AhkClientExe)) {
   }
   finally {
     Stop-Process -Id $BridgeProcess.Id -Force -ErrorAction SilentlyContinue
+  }
+
+  $FloatProcess = Start-Process -FilePath $AhkClientExe -ArgumentList "--float-self-test" -PassThru
+  try {
+    $FloatRect = $null
+    $Deadline = (Get-Date).AddSeconds(4)
+    while ((Get-Date) -lt $Deadline) {
+      $FloatRect = [AhkSmokeWin32]::FindVisibleWindow($FloatProcess.Id, "DoubaoASRHelperFloat")
+      if ($null -ne $FloatRect) {
+        break
+      }
+      Start-Sleep -Milliseconds 100
+    }
+    if ($null -eq $FloatRect) {
+      throw "AHK float self-test did not create a visible floating window"
+    }
+    $FloatWidth = $FloatRect[2] - $FloatRect[0]
+    $FloatHeight = $FloatRect[3] - $FloatRect[1]
+    if ($FloatWidth -lt 400 -or $FloatHeight -lt 80) {
+      throw "AHK float self-test window is too small: ${FloatWidth}x${FloatHeight}"
+    }
+    [ordered]@{
+      ok = $true
+      rect = @($FloatRect)
+      width = $FloatWidth
+      height = $FloatHeight
+    } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $ReportsDir "ahk-float-self-test.json")
+  }
+  finally {
+    Stop-Process -Id $FloatProcess.Id -Force -ErrorAction SilentlyContinue
   }
 
   $OldAppData = $env:APPDATA
