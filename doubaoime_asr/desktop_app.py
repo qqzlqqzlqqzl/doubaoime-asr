@@ -254,6 +254,7 @@ if sys.platform == "win32" and wintypes is not None:
 
 
 class WindowsTrayIcon:
+    ACTION_TOGGLE_ENABLED = "toggle_enabled"
     ACTION_SHOW = "show"
     ACTION_HIDE = "hide"
     ACTION_OPEN_CONFIG = "open_config"
@@ -280,22 +281,29 @@ class WindowsTrayIcon:
     _IDI_APPLICATION = 32512
     _MF_STRING = 0x00000000
     _MF_SEPARATOR = 0x00000800
+    _MF_GRAYED = 0x00000001
     _TPM_RIGHTBUTTON = 0x0002
 
+    _MENU_TOGGLE_ENABLED = 1000
     _MENU_SHOW = 1001
     _MENU_HIDE = 1002
     _MENU_OPEN_CONFIG = 1003
     _MENU_QUIT = 1004
+    _MENU_INFO_START = 1100
 
     def __init__(
         self,
         tooltip: str,
         action_callback: Callable[[str], None],
         icon_path: str | Path | None = None,
+        menu_info_provider: Callable[[], list[str]] | None = None,
+        enabled_provider: Callable[[], bool] | None = None,
     ) -> None:
         self.tooltip = tooltip[:127]
         self.action_callback = action_callback
         self.icon_path = Path(icon_path) if icon_path else None
+        self.menu_info_provider = menu_info_provider
+        self.enabled_provider = enabled_provider
         self.last_error: str | None = None
         self._thread: threading.Thread | None = None
         self._ready = threading.Event()
@@ -480,6 +488,7 @@ class WindowsTrayIcon:
             if msg == self._WM_COMMAND:
                 command = int(wparam) & 0xFFFF
                 action = {
+                    self._MENU_TOGGLE_ENABLED: self.ACTION_TOGGLE_ENABLED,
                     self._MENU_SHOW: self.ACTION_SHOW,
                     self._MENU_HIDE: self.ACTION_HIDE,
                     self._MENU_OPEN_CONFIG: self.ACTION_OPEN_CONFIG,
@@ -506,6 +515,11 @@ class WindowsTrayIcon:
         if not menu:
             raise ctypes.WinError()
         try:
+            enabled = self.enabled_provider() if self.enabled_provider else True
+            enabled_text = "✓ 已启用语音监听" if enabled else "○ 已禁用语音监听"
+            if not user32.AppendMenuW(menu, self._MF_STRING, self._MENU_TOGGLE_ENABLED, enabled_text):
+                raise ctypes.WinError()
+            user32.AppendMenuW(menu, self._MF_SEPARATOR, 0, None)
             for item_id, text in (
                 (self._MENU_SHOW, "显示主窗口"),
                 (self._MENU_HIDE, "隐藏窗口"),
@@ -514,6 +528,11 @@ class WindowsTrayIcon:
                 if not user32.AppendMenuW(menu, self._MF_STRING, item_id, text):
                     raise ctypes.WinError()
             user32.AppendMenuW(menu, self._MF_SEPARATOR, 0, None)
+            if self.menu_info_provider:
+                for offset, text in enumerate(self.menu_info_provider()):
+                    if not user32.AppendMenuW(menu, self._MF_STRING | self._MF_GRAYED, self._MENU_INFO_START + offset, text):
+                        raise ctypes.WinError()
+                user32.AppendMenuW(menu, self._MF_SEPARATOR, 0, None)
             if not user32.AppendMenuW(menu, self._MF_STRING, self._MENU_QUIT, "退出"):
                 raise ctypes.WinError()
             point = wintypes.POINT()
@@ -1372,6 +1391,7 @@ class DesktopApp:
         self.root.protocol("WM_DELETE_WINDOW", self.hide_main_window)
         self._configure_ttk_styles()
         self.config = load_config()
+        self.voice_enabled = True
         self.license_config = load_license_config()
         self.license_result: LicenseResult | None = None
         self.license_checked_at = 0.0
@@ -1447,7 +1467,13 @@ class DesktopApp:
     def _start_tray_icon(self) -> None:
         if not WindowsTrayIcon.is_supported():
             return
-        self.tray_icon = WindowsTrayIcon("豆包 ASR 助手 - 后台运行", self._enqueue_tray_action, icon_path=app_icon_path())
+        self.tray_icon = WindowsTrayIcon(
+            "豆包 ASR 助手 - 后台运行",
+            self._enqueue_tray_action,
+            icon_path=app_icon_path(),
+            menu_info_provider=self.tray_menu_info,
+            enabled_provider=lambda: self.voice_enabled,
+        )
         self.tray_icon.start()
         self.root.after(1200, self._report_tray_startup_error)
 
@@ -1474,7 +1500,9 @@ class DesktopApp:
                 pass
 
     def _handle_tray_action(self, action: str) -> None:
-        if action == WindowsTrayIcon.ACTION_SHOW:
+        if action == WindowsTrayIcon.ACTION_TOGGLE_ENABLED:
+            self.toggle_voice_enabled()
+        elif action == WindowsTrayIcon.ACTION_SHOW:
             self.show_main_window()
         elif action == WindowsTrayIcon.ACTION_HIDE:
             self.hide_main_window()
@@ -1489,6 +1517,25 @@ class DesktopApp:
             self.status_var.set("已隐藏到系统托盘，右键托盘图标可退出")
         except tk.TclError:
             pass
+
+    def tray_menu_info(self) -> list[str]:
+        return [
+            f"按着说: {display_hotkey_value(self.config.hold_key)}",
+            f"自由说: {display_hotkey_value(self.config.toggle_key)}",
+            f"按着说+发送: {display_hotkey_value(self.config.hold_send_key)}",
+            f"取消键: {display_hotkey_value(self.config.cancel_key)}",
+        ]
+
+    def toggle_voice_enabled(self) -> None:
+        self.voice_enabled = not self.voice_enabled
+        if not self.voice_enabled:
+            if self.recording_mode:
+                self.cancelled = True
+                self.stop_recording()
+            self.status_var.set("语音监听已禁用，可从托盘重新启用")
+            self.hide_float()
+            return
+        self.status_var.set("语音监听已启用")
 
     def quit_app(self) -> None:
         if self._quitting:
@@ -2920,6 +2967,8 @@ class DesktopApp:
             self.status_var.set(f"已录制：{display_value}，点击保存配置生效")
 
     def _handle_active_press(self, name: str) -> None:
+        if not self.voice_enabled:
+            return
         cancel_key = parse_hotkey(self.config.cancel_key)
         toggle_key = parse_hotkey(self.config.toggle_key)
         if self.recording_mode and active_matches(self.active_keys, cancel_key):

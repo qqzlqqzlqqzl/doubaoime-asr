@@ -224,6 +224,7 @@ doubaoime-asr-desktop
 保存配置和录制快捷键时会检查重复配置、危险裸字母键、Windows 保留组合键，以及可通过系统接口探测到的已占用全局组合键，并在发现冲突时弹窗提示。
 空闲状态启动录音时会要求按下的键和设置项精确匹配，`Ctrl + D` 不会被 `Ctrl + Alt + D` 误触发；单独的左 Ctrl、Alt、Win、Shift 不会作为启动热键保存，默认右 Ctrl 会保留。
 如果快捷键或发送时序设置错了，可以点击「恢复默认」一键回到初始热键和延迟；凭据文件路径会保留，不会删除设备注册缓存。
+托盘右键菜单可临时启用/禁用语音监听，并灰显展示当前按着说、自由说、按着说+发送和取消键配置。
 EXE 内置「使用说明」窗口，安装后开始菜单也会生成 Help 快捷方式；分发包中还会包含离线 `HELP.md`。
 
 打包桌面版和 Windows 分发包：
@@ -259,6 +260,8 @@ python -m doubaoime_asr.desktop_app --hold-release-auto-insert-test --hold-relea
 ```
 
 完整测试项见 [TEST_PLAN.md](TEST_PLAN.md)。真实端到端闭环证据和未闭合项见 [E2E_TEST_EVIDENCE.md](E2E_TEST_EVIDENCE.md)；其中会明确区分 `PASS`、`PARTIAL`、`BLOCKED` 和 `NOT_RUN`，不要把计划项误当作已通过项。
+
+和 `xiaohu31/doubao-voice-helper` 的功能复刻对照见 [REFERENCE_PARITY.md](REFERENCE_PARITY.md)。
 
 如果要让另一个 AI 或开发者接手维护，请先阅读 [HANDOFF.md](HANDOFF.md) 和 [E2E_TEST_EVIDENCE.md](E2E_TEST_EVIDENCE.md)。它们记录了当前桌面版架构、构建测试流程、近期关键改动、常见坑，以及哪些闭环测试仍缺真实证据。
 

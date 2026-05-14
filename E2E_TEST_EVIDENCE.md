@@ -16,6 +16,7 @@
 - `T13` 新增了安装版 `--startup-script-test`，能证明 Startup bat 写入当前 EXE 路径和 `--hidden` 后可删除；它没有重启 Windows，因此不算完整开机自启动闭环。
 - `T20` 新增了安装版 `--license-network-test`，能证明普通版授权断网不阻塞、受控版服务器不可达时保留本地 token 并给出错误；它没有覆盖系统级断网、弱网和真实 ASR 服务异常。
 - 2026-05-14 新增 `--hold-release-auto-insert-test`：证明 `hold` 和 `hold_send` 在释放触发键后会自动调度插入，不需要点击悬浮窗“插入”；取消、空文本以及“松手后很快开始下一段”的延迟插入场景均不会丢上一句。源码证据 `release/test-reports/hold-release-auto-insert.json` 和 `source-self-test-auto-insert.json` 均为 `ok=true`；打包测试 `test-desktop-exe.ps1` 也已覆盖 `dist-hold-release-auto-insert.json`、`portable-hold-release-auto-insert.json`、`installed-hold-release-auto-insert.json`。该项证明释放后的插入逻辑，不替代物理右 Ctrl 热键 + 真实记事本完整验收。
+- 2026-05-14 按参考仓库新增托盘启用/禁用和托盘热键展示。源码 `--self-test` 和 `--tray-self-test` 通过，`test-desktop-exe.ps1` 通过 dist/portable 自测、自动插入烟测和托盘烟测；进入安装器隔离测试时被当前 Windows 应用控制策略拦截未签名安装器，安装版后续项本轮不按通过计算。
 
 音频约束：所有音频测试禁止使用电脑扬声器。已使用的输出端点是 `耳机 (2- Realtek(R) Audio)`，输入端点是 `外部麦克风 (2- Realtek(R) Audio)`。测试后确认 `扬声器 (2- Realtek(R) Audio)` 仍为 `volume=0.0, mute=true`。
 

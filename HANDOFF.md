@@ -50,6 +50,12 @@ git pull --rebase --autostash
 - 评审指出 `--startup-script-test` 和 `--license-network-test` 直接运行时可能碰真实配置；已改为执行前保存、结束后恢复原配置和授权状态。
 - 最后一次重新打包后，当前开发机的 Windows 11 Smart App Control / Code Integrity 拦截了未签名主 EXE，事件日志提示 `did not meet Enterprise signing level requirements`。这是分发风险，不是业务自测失败；正式外部分发需要可信代码签名。
 
+2026-05-14，本轮开始按 `xiaohu31/doubao-voice-helper` 做功能复刻矩阵：
+
+- 新增 `REFERENCE_PARITY.md`，逐项列出参考工具的三种输入模式、剪贴板保护、智能无内容处理、防抖、失焦修复、热键冲突、托盘启用/禁用、托盘热键展示等功能在本项目里的状态。
+- 托盘右键菜单新增“已启用/已禁用语音监听”切换项，禁用后全局录音热键不再启动录音；菜单同时灰显展示当前按着说、自由说、按着说+发送和取消键配置。
+- 已跑：`python -m compileall doubaoime_asr`、`python -m pytest -q`、源码 `--self-test`、源码 `--tray-self-test`、`build-desktop-exe.ps1`。`test-desktop-exe.ps1` 已通过 dist/portable 自测、自动插入烟测、托盘烟测，但在安装器隔离测试阶段被当前机器的 Windows 应用控制策略拦截未签名 `DoubaoASRHelperSetup.exe`，没有完成安装版后续项。
+
 ## 1. 当前项目定位
 
 这个仓库最初是 `doubaoime-asr` Python 客户端，现在已经扩展成一个 Windows 桌面语音输入助手。
