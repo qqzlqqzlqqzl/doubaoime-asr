@@ -42,6 +42,17 @@ if ((Test-Path $BridgeExe) -and (Test-Path $AhkClientExe)) {
   $env:APPDATA = Join-Path $ReportsDir "ahk-client-smoke-appdata"
   Remove-Item -LiteralPath $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
   New-Item -ItemType Directory -Force -Path $env:APPDATA | Out-Null
+  $LegacyConfigDir = Join-Path $env:APPDATA "DouBaoVoiceHelper"
+  New-Item -ItemType Directory -Force -Path $LegacyConfigDir | Out-Null
+  @"
+[General]
+HoldToTalkKey=RCtrl
+FreeToTalkKey=XButton1
+AutoSendKey=F9
+CancelKey=F12
+DouBaoHotkey=^!+d
+ConfigVersion=2
+"@ | Set-Content -LiteralPath (Join-Path $LegacyConfigDir "config.ini") -Encoding UTF8
   $ClientProcess = Start-Process -FilePath $AhkClientExe -PassThru
   try {
     $Deadline = (Get-Date).AddSeconds(15)
@@ -61,7 +72,21 @@ if ((Test-Path $BridgeExe) -and (Test-Path $AhkClientExe)) {
   }
   finally {
     Get-Process DoubaoASRHelper,asr_bridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-    $env:APPDATA = $OldAppData
+    try {
+      $MigratedConfig = Join-Path $env:APPDATA "DoubaoASRHelper\config.ini"
+      if (-not (Test-Path $MigratedConfig)) {
+        throw "AHK client did not migrate legacy config into DoubaoASRHelper appdata"
+      }
+      $MigratedText = Get-Content -LiteralPath $MigratedConfig -Raw
+      foreach ($ExpectedLine in @("FreeToTalkKey=^!Space", "AutoSendKey=^!Enter", "CancelKey=Escape", "DouBaoHotkey=^!d", "ConfigVersion=3")) {
+        if ($MigratedText -notmatch [regex]::Escape($ExpectedLine)) {
+          throw "AHK migrated config missing $ExpectedLine"
+        }
+      }
+    }
+    finally {
+      $env:APPDATA = $OldAppData
+    }
   }
 
   $SetupExe = Join-Path $PSScriptRoot "dist\DoubaoASRHelperSetup.exe"

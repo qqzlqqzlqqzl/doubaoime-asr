@@ -41,14 +41,27 @@ class Config {
         }
 
         ; 如果不存在，使用用户目录（支持单文件运行）
-        userConfig := A_AppData . "\DouBaoVoiceHelper\config.ini"
-        this.FilePath := userConfig
+        appDataDir := EnvGet("APPDATA")
+        if appDataDir = ""
+            appDataDir := A_AppData
 
-        ; 确保目录存在
-        userDir := A_AppData . "\DouBaoVoiceHelper"
+        userDir := appDataDir . "\DoubaoASRHelper"
         if !FileExist(userDir)
             DirCreate(userDir)
 
+        userConfig := userDir . "\config.ini"
+        legacyConfig := appDataDir . "\DouBaoVoiceHelper\config.ini"
+        if !FileExist(userConfig) && FileExist(legacyConfig) {
+            try {
+                FileCopy(legacyConfig, userConfig, 1)
+            } catch {
+                try {
+                    FileAppend(FileRead(legacyConfig, "UTF-8"), userConfig, "UTF-8")
+                }
+            }
+        }
+
+        this.FilePath := userConfig
         return this.FilePath
     }
 

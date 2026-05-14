@@ -1,5 +1,30 @@
+import os
+import sys
 from typing import Optional, List, Union
 from pathlib import Path
+
+
+_DLL_DIRECTORY_HANDLES = []
+
+
+def _prepare_opus_runtime() -> None:
+    candidates = []
+    if getattr(sys, "_MEIPASS", None):
+        candidates.append(Path(sys._MEIPASS))
+
+    project_root = Path(__file__).resolve().parents[1]
+    candidates.append(project_root / ".devtools" / "opus" / "bin")
+
+    for candidate in candidates:
+        if not (candidate / "opus.dll").exists() and not (candidate / "libopus.dll").exists():
+            continue
+        os.environ["PATH"] = str(candidate) + os.pathsep + os.environ.get("PATH", "")
+        if hasattr(os, "add_dll_directory"):
+            _DLL_DIRECTORY_HANDLES.append(os.add_dll_directory(str(candidate)))
+        return
+
+
+_prepare_opus_runtime()
 
 import opuslib
 import miniaudio

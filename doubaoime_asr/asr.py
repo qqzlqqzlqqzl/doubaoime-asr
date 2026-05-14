@@ -142,7 +142,7 @@ class DoubaoASR:
     豆包输入法 ASR 客户端
     """
     def __init__(self, config: Optional[ASRConfig] = None):
-        self.config = config
+        self.config = config or ASRConfig()
         self._encoder = AudioEncoder(self.config)
     
     async def __aenter__(self) -> DoubaoASR:
