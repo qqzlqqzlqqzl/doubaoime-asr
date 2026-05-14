@@ -83,7 +83,7 @@
 | E21 | 授权断网打包版烟测 | 安装版运行 `--license-network-test`，写出 `installed-license-network-test.json`，验证普通版不受授权断网影响，受控版服务器不可达时阻止使用但保留本地 token |
 | E22 | AHK 旧配置迁移烟测 | `test-desktop-exe.ps1` 在隔离 `APPDATA` 下预置旧目录 `%APPDATA%\DouBaoVoiceHelper\config.ini` | AHK 主客户端启动后创建 `%APPDATA%\DoubaoASRHelper\config.ini`，并把旧默认 `XButton1/F9/F12/Ctrl+Alt+Shift+D` 迁移为 `Ctrl+Alt+Space/Ctrl+Alt+Enter/Esc/Ctrl+Alt+D`，`ConfigVersion=3` |
 | E23 | 上游差异审计复核 | 阅读 [UPSTREAM_DIFF_AUDIT.md](UPSTREAM_DIFF_AUDIT.md)，并用两个参考仓库当前 HEAD 对照源码 | 每个新增/修改/保留差异都有 why；解释不成立的差异必须修复或补测试，不能只写文档掩盖 |
-| E24 | AHK 悬浮窗可见性烟测 | `test-desktop-exe.ps1` 启动 `DoubaoASRHelper.exe --float-self-test` 并枚举 Win32 窗口 | 能找到可见的 `DoubaoASRHelperFloat`，窗口宽高达到阈值，报告写入 `release\test-reports\ahk-float-self-test.json` |
+| E24 | AHK 悬浮窗可见性烟测 | `test-desktop-exe.ps1` 启动 `DoubaoASRHelper.exe --float-self-test` 并枚举 Win32 窗口及子控件 | 能找到可见的 `DoubaoASRHelperFloat`，窗口宽高达到阈值，识别结果框内出现测试文本，并且能枚举到 `清空`、`复制`、`插入` 三个操作，报告写入 `release\test-reports\ahk-float-self-test.json` |
 | E25 | 崩溃排查日志烟测 | `test-desktop-exe.ps1` 在隔离 `APPDATA` 中运行 bridge self-test 和 AHK float self-test | 生成 `client-YYYYMMDD.log` 和 `asr_bridge-YYYYMMDD.log`，并包含关键事件如 `float_self_test_start`、`self_test_ok` |
 
 ### 上游差异审计测试

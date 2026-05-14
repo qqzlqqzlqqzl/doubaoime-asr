@@ -14,6 +14,7 @@ public struct AhkSmokeRect { public int Left; public int Top; public int Right; 
 public class AhkSmokeWin32 {
   public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+  [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out AhkSmokeRect rect);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
@@ -38,6 +39,27 @@ public class AhkSmokeWin32 {
       return false;
     }, IntPtr.Zero);
     return result;
+  }
+  public static string[] GetChildTexts(int expectedProcessId, string titleContains) {
+    System.Collections.Generic.List<string> texts = new System.Collections.Generic.List<string>();
+    IntPtr target = IntPtr.Zero;
+    EnumWindows(delegate(IntPtr hWnd, IntPtr lParam) {
+      if (!IsWindowVisible(hWnd)) return true;
+      uint pid;
+      GetWindowThreadProcessId(hWnd, out pid);
+      if (pid != expectedProcessId) return true;
+      string title = GetWindowTitle(hWnd);
+      if (title == null || !title.Contains(titleContains)) return true;
+      target = hWnd;
+      return false;
+    }, IntPtr.Zero);
+    if (target == IntPtr.Zero) return texts.ToArray();
+    EnumChildWindows(target, delegate(IntPtr child, IntPtr lParam) {
+      string text = GetWindowTitle(child);
+      if (!String.IsNullOrWhiteSpace(text)) texts.Add(text);
+      return true;
+    }, IntPtr.Zero);
+    return texts.ToArray();
   }
 }
 "@
@@ -101,7 +123,8 @@ public class AhkSmokeWin32 {
     $Deadline = (Get-Date).AddSeconds(4)
     while ((Get-Date) -lt $Deadline) {
       $FloatRect = [AhkSmokeWin32]::FindVisibleWindow($FloatProcess.Id, "DoubaoASRHelperFloat")
-      if ($null -ne $FloatRect) {
+      $ChildTexts = @([AhkSmokeWin32]::GetChildTexts($FloatProcess.Id, "DoubaoASRHelperFloat"))
+      if ($null -ne $FloatRect -and (($ChildTexts -join "`n").Contains("这是我用豆包语音输入的内容"))) {
         break
       }
       Start-Sleep -Milliseconds 100
@@ -114,11 +137,21 @@ public class AhkSmokeWin32 {
     if ($FloatWidth -lt 400 -or $FloatHeight -lt 80) {
       throw "AHK float self-test window is too small: ${FloatWidth}x${FloatHeight}"
     }
+    $ChildTexts = @([AhkSmokeWin32]::GetChildTexts($FloatProcess.Id, "DoubaoASRHelperFloat"))
+    foreach ($ExpectedText in @("清空", "复制", "插入")) {
+      if ($ChildTexts -notcontains $ExpectedText) {
+        throw "AHK float self-test missing result action: $ExpectedText"
+      }
+    }
+    if (-not ($ChildTexts -join "`n").Contains("这是我用豆包语音输入的内容")) {
+      throw "AHK float self-test missing transcript result box text"
+    }
     [ordered]@{
       ok = $true
       rect = @($FloatRect)
       width = $FloatWidth
       height = $FloatHeight
+      child_texts = $ChildTexts
     } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $ReportsDir "ahk-float-self-test.json")
     $ClientLog = Join-Path $env:APPDATA ("DoubaoASRHelper\logs\client-" + (Get-Date -Format "yyyyMMdd") + ".log")
     if (-not (Test-Path $ClientLog)) {

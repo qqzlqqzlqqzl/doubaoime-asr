@@ -87,3 +87,5 @@
 后续按用户参考图继续增强悬浮窗：待说话时显示蓝色麦克风图和“点击/长按说话”，录音中显示蓝色声波条和“点击结束语音输入”。这两个状态由 AHK 控件绘制，不依赖外部图片文件，避免打包遗漏资源。
 
 同时新增日志体系：AHK 客户端写 `%APPDATA%\DoubaoASRHelper\logs\client-YYYYMMDD.log`，Python bridge 写 `%APPDATA%\DoubaoASRHelper\logs\asr_bridge-YYYYMMDD.log`。日志覆盖客户端启动、热键、bridge 调用、插入、未处理异常、bridge 服务启动、录音会话、ASR 错误和线程异常。`test-desktop-exe.ps1` 已断言两类日志都能生成。
+
+再补充修复结果输入框：悬浮窗中间新增识别结果框，实时/最终文本显示在框内，底部提供 `清空`、`复制`、`插入` 三个操作。`test-desktop-exe.ps1` 现在会枚举打包 EXE 的子控件，确认识别文本、清空、复制、插入都真实出现在 `DoubaoASRHelperFloat` 中。

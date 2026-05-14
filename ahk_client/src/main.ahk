@@ -40,6 +40,7 @@ class VoiceController {
     ; 初始化
     static Init() {
         Logger.Info("voice_controller_init")
+        VoiceFloat.InsertCallback := ObjBindMethod(this, "ManualInsertFromFloat")
         ; 加载配置并检查是否是首次运行（配置文件不存在）
         isFirstRun := !Config.Init()
 
@@ -432,6 +433,17 @@ class VoiceController {
         this.ResetAfterFinish(false)
     }
 
+    static ManualInsertFromFloat(text) {
+        if text = ""
+            return
+        Logger.Info("manual_float_insert chars=" . StrLen(text))
+        inserted := ClipboardManager.InsertText(text, Config.Get("ClipboardProtect"))
+        if !inserted
+            this.ShowTrayTip("错误", "识别文本写入剪贴板失败")
+        else
+            VoiceFloat.Update(text, "已插入")
+    }
+
     static ResetAfterFinish(hideFloat := true) {
         this.StopStatusPolling()
         this.StopFinishPolling()
@@ -584,7 +596,7 @@ if A_Args.Length > 0 && A_Args[1] = "--float-self-test" {
     Logger.Info("float_self_test_start")
     VoiceFloat.Show("", "", "ready")
     Sleep(900)
-    VoiceFloat.Show("", "", "recording")
+    VoiceFloat.Show("这是我用豆包语音输入的内容，效果 very nice，可以实时看到...", "正在聆听", "recording")
     Sleep(5000)
     VoiceFloat.Hide()
     Logger.Info("float_self_test_end")
