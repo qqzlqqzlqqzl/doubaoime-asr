@@ -1,5 +1,21 @@
 # 变更记录
 
+## 2026-05-14：参考图紧凑设置页与小尺寸悬浮窗
+
+- 设置页继续沿用 `xiaohu31/doubao-voice-helper` 的控件文案和分组顺序；在高 DPI 环境下改用 `-DPIScale` 并收敛窗口宽度，避免之前 200% 缩放下控件被挤出窗口或右侧出现大块空白。
+- 高 DPI 下设置页当前验证尺寸为 `513x666`，分组、录制按钮、复选框、高级设置、保存/取消均在单页内显示。
+- 识别悬浮窗从 `560x178` 压缩为 `457x133`，保留顶部蓝色声波、结果文本、关闭符号以及 `清空 / 复制 / 插入` 三个操作，去掉大面积空白。
+- 已把新版 AHK 主程序覆盖到 `%LOCALAPPDATA%\DoubaoASRHelper\DoubaoASRHelper.exe`；桌面快捷方式仍指向该安装目录。由于本轮新打包的 `dist\asr_bridge.exe` 被 Windows 应用控制策略拦截，安装目录中的 bridge 未被覆盖。
+
+### 本轮验证
+
+- 源码 AHK 设置页截图：`release\test-reports\source-ahk-settings-panel-fit.png`，窗口 `513x666`。
+- 已安装 AHK 设置页截图：`release\test-reports\installed-final-settings-panel-fit.png`，窗口 `513x666`。
+- 已安装 AHK 悬浮窗：`release\test-reports\installed-final-compact-float-test.json`，窗口 `457x133`，控件文本包含测试识别文本和 `清空 / 复制 / 插入`。
+- `build-desktop-exe.ps1`：通过，重新生成 `dist` 和 `release` 产物。
+- `.venv\Scripts\python.exe -m pytest`：`16 passed, 1 warning`。
+- `test-desktop-exe.ps1`：本轮被 Windows 应用控制策略拦截在 `dist\asr_bridge.exe --self-test`；`Unblock-File` 后仍被拦截，需代码签名或放行策略后才能完整重跑。
+
 ## 2026-05-14：AHK 客户端桥接版与上游差异审计
 
 这一版是一次大的架构收敛，不是普通 UI 微调。目标从“自己写一个桌面壳”改为“尽量复用两个参考仓库，只写必要胶水”：

@@ -40,12 +40,14 @@ class GuiManager {
 
     ; 创建主窗口
     static CreateMainWindow() {
-        this.MainGui := Gui("+Resize -MaximizeBox", "豆包语音助手 - 设置")
+        this.MainGui := Gui("+Resize -MaximizeBox -DPIScale", "豆包语音助手 - 设置")
         this.MainGui.SetFont("s10", "Microsoft YaHei")
         this.MainGui.OnEvent("Close", (*) => this.OnClose())
+        dpiScale := A_ScreenDPI > 0 ? A_ScreenDPI / 96 : 1
+        contentWidth := dpiScale > 1.25 ? 480 : 380
 
         ; ===== 按着说模式 =====
-        this.MainGui.AddGroupBox("x10 y10 w380 h80", "【按着说】模式")
+        this.MainGui.AddGroupBox("x10 y10 w" . contentWidth . " h80", "【按着说】模式")
         this.MainGui.AddText("x20 y35", "触发按键：")
         this.HoldKeyEdit := this.MainGui.AddEdit("x90 y32 w180 ReadOnly", "")
         this.HoldRecordBtn := this.MainGui.AddButton("x280 y30 w80 h25", "录制")
@@ -53,7 +55,7 @@ class GuiManager {
         this.MainGui.AddText("x20 y60 cGray", "按住说话，松开自动插入")
 
         ; ===== 自由说模式 =====
-        this.MainGui.AddGroupBox("x10 y100 w380 h80", "【自由说】模式")
+        this.MainGui.AddGroupBox("x10 y100 w" . contentWidth . " h80", "【自由说】模式")
         this.MainGui.AddText("x20 y125", "触发按键：")
         this.FreeKeyEdit := this.MainGui.AddEdit("x90 y122 w180 ReadOnly", "")
         this.FreeRecordBtn := this.MainGui.AddButton("x280 y120 w80 h25", "录制")
@@ -61,7 +63,7 @@ class GuiManager {
         this.MainGui.AddText("x20 y150 cGray", "点击开始，再次点击结束并插入")
 
         ; ===== 按着说+自动发送模式 =====
-        this.MainGui.AddGroupBox("x10 y190 w380 h105", "【按着说+自动发送】模式")
+        this.MainGui.AddGroupBox("x10 y190 w" . contentWidth . " h105", "【按着说+自动发送】模式")
         this.MainGui.AddText("x20 y215", "触发按键：")
         this.AutoSendKeyEdit := this.MainGui.AddEdit("x90 y212 w180 ReadOnly", "")
         this.AutoSendRecordBtn := this.MainGui.AddButton("x280 y210 w80 h25", "录制")
@@ -73,7 +75,7 @@ class GuiManager {
         this.MainGui.AddText("x20 y267 cGray", "按住说话松开发送，说话中按取消键可取消")
 
         ; ===== 分隔线 =====
-        this.MainGui.AddText("x10 y305 w380 h1 0x10")  ; 水平线
+        this.MainGui.AddText("x10 y305 w" . contentWidth . " h1 0x10")  ; 水平线
 
         ; ===== 豆包快捷键 =====
         this.MainGui.AddText("x20 y315", "豆包快捷键：")
@@ -94,7 +96,7 @@ class GuiManager {
         this.AutoStartCheck := this.MainGui.AddCheckbox("x20 y410", "开机自启动")
 
         ; ===== 高级设置 =====
-        this.MainGui.AddGroupBox("x10 y440 w380 h95", "高级设置")
+        this.MainGui.AddGroupBox("x10 y440 w" . contentWidth . " h95", "高级设置")
 
         this.MainGui.AddText("x20 y465", "剪贴板超时：")
         this.ClipboardTimeoutEdit := this.MainGui.AddEdit("x110 y462 w80 Number", "100")
@@ -111,7 +113,7 @@ class GuiManager {
         this.MainGui.AddButton("x200 y550 w80 h30", "取消").OnEvent("Click", (*) => this.OnCancel())
 
         ; ===== 状态栏 =====
-        this.StatusText := this.MainGui.AddText("x20 y595 w360 cGreen", "状态: ● 已就绪")
+        this.StatusText := this.MainGui.AddText("x20 y595 w" . (contentWidth - 20) . " cGreen", "状态: ● 已就绪")
     }
 
     ; 显示主窗口
@@ -122,7 +124,11 @@ class GuiManager {
         ; 加载当前配置到界面
         this.LoadConfigToGui()
 
-        this.MainGui.Show("w400 h630")
+        dpiScale := A_ScreenDPI > 0 ? A_ScreenDPI / 96 : 1
+        baseWidth := dpiScale > 1.25 ? 500 : 400
+        windowWidth := Round(baseWidth * dpiScale)
+        windowHeight := Round(630 * dpiScale)
+        this.MainGui.Show("w" . windowWidth . " h" . windowHeight)
     }
 
     ; 隐藏主窗口

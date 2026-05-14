@@ -12,6 +12,7 @@ class VoiceFloat {
     static MinCtrl := ""
     static MicCircleCtrl := ""
     static MicIconCtrl := ""
+    static CloseCtrl := ""
     static WaveBars := []
     static ResultBgCtrl := ""
     static ResultMicCtrl := ""
@@ -24,8 +25,8 @@ class VoiceFloat {
     static LastText := ""
     static Mode := ""
     static InsertCallback := ""
-    static Width := 476
-    static Height := 286
+    static Width := 456
+    static Height := 132
     static WaveTick := 0
     static WaveTimer := 0
 
@@ -37,43 +38,42 @@ class VoiceFloat {
         this.FloatGui.BackColor := "FFFFFF"
         this.FloatGui.MarginX := 0
         this.FloatGui.MarginY := 0
-        this.FloatGui.SetFont("s18 c28385F", "Microsoft YaHei")
-        this.TitleCtrl := this.FloatGui.AddText("x28 y18 w86 h34 BackgroundTrans", "普通话")
-        this.FloatGui.SetFont("s15 c7C8498", "Segoe MDL2 Assets")
-        this.FloatGui.AddText("x120 y24 w22 h22 BackgroundTrans", Chr(0xE768))
-        this.GearCtrl := this.FloatGui.AddText("x365 y20 w28 h28 BackgroundTrans", Chr(0xE713))
-        this.FloatGui.SetFont("s18 c7C8498", "Microsoft YaHei")
-        this.MinCtrl := this.FloatGui.AddText("x425 y14 w34 h26 Center BackgroundTrans", "-")
+        this.FloatGui.SetFont("s1 cFFFFFF", "Microsoft YaHei")
+        this.TitleCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
+        this.GearCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
+        this.MinCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
 
-        this.FloatGui.SetFont("s88 c5578FF", "Microsoft YaHei")
-        this.MicCircleCtrl := this.FloatGui.AddText("x171 y20 w135 h135 Center BackgroundTrans", "●")
-        this.FloatGui.SetFont("s56 cFFFFFF", "Segoe MDL2 Assets")
-        this.MicIconCtrl := this.FloatGui.AddText("x194 y67 w88 h76 Center BackgroundTrans", Chr(0xE720))
+        this.FloatGui.SetFont("s1 cFFFFFF", "Microsoft YaHei")
+        this.MicCircleCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
+        this.MicIconCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
 
-        for index, height in [6, 7, 6, 8, 7, 6, 8, 9, 7, 8, 10, 14, 20, 26, 31, 35, 30, 25, 18, 12, 9, 8, 7, 8, 6, 7] {
-            x := 86 + ((index - 1) * 12)
-            y := 104 - Round(height / 2)
-            this.WaveBars.Push(this.FloatGui.AddProgress("x" . x . " y" . y . " w4 h" . height . " c5578FF BackgroundFFFFFF Range0-100 -Smooth", 100))
+        for index, height in [4, 5, 4, 6, 5, 4, 6, 7, 5, 6, 8, 10, 13, 18, 24, 28, 24, 18, 13, 10, 8, 7, 6, 6, 5, 4, 5, 4] {
+            x := 60 + ((index - 1) * 12)
+            y := 18 - Round(height / 2)
+            this.WaveBars.Push(this.FloatGui.AddProgress("x" . x . " y" . y . " w4 h" . height . " c5A79FF BackgroundFFFFFF Range0-100 -Smooth", 100))
         }
 
-        this.FloatGui.SetFont("s20 c65708E", "Microsoft YaHei")
-        this.HintCtrl := this.FloatGui.AddText("x70 y171 w336 h34 Center BackgroundTrans", "点击/长按说话")
+        this.FloatGui.SetFont("s1 cFFFFFF", "Microsoft YaHei")
+        this.HintCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
         this.FloatGui.SetFont("s10 c65708E", "Microsoft YaHei")
-        this.StateCtrl := this.FloatGui.AddText("x24 y146 w428 h22 Center BackgroundTrans", "")
-        this.TextCtrl := this.FloatGui.AddText("x24 y146 w428 h26 Center BackgroundTrans", "")
+        this.StateCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
+        this.TextCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
 
-        this.ResultBgCtrl := this.FloatGui.AddText("x58 y118 w360 h138 +Border BackgroundFFFFFF", "")
-        this.FloatGui.SetFont("s18 c5F9D68", "Segoe MDL2 Assets")
-        this.ResultMicCtrl := this.FloatGui.AddText("x76 y137 w30 h34 Center BackgroundTrans", Chr(0xE720))
-        this.FloatGui.SetFont("s13 c3B4258", "Microsoft YaHei")
-        this.ResultTextCtrl := this.FloatGui.AddText("x112 y134 w282 h58 BackgroundTrans +Wrap", "识别内容会显示在这里")
-        this.FloatGui.SetFont("s10 c555B6E", "Microsoft YaHei")
-        this.ClearBtn := this.FloatGui.AddButton("x164 y212 w58 h30", "清空")
-        this.CopyBtn := this.FloatGui.AddButton("x234 y212 w58 h30", "复制")
-        this.InsertBtn := this.FloatGui.AddButton("x304 y210 w82 h34 Default", "插入")
+        this.ResultBgCtrl := this.FloatGui.AddText("x12 y34 w432 h86 +Border BackgroundFFFFFF", "")
+        this.FloatGui.SetFont("s19 c5F9D68", "Segoe MDL2 Assets")
+        this.ResultMicCtrl := this.FloatGui.AddText("x28 y54 w30 h34 Center BackgroundTrans", Chr(0xE720))
+        this.FloatGui.SetFont("s12 c3B4258", "Microsoft YaHei")
+        this.ResultTextCtrl := this.FloatGui.AddText("x68 y50 w252 h34 BackgroundTrans +Wrap", "识别内容会显示在这里")
+        this.FloatGui.SetFont("s11 c9AA0AD", "Microsoft YaHei")
+        this.CloseCtrl := this.FloatGui.AddText("x416 y42 w20 h22 Center BackgroundTrans", "×")
+        this.FloatGui.SetFont("s9 c555B6E", "Microsoft YaHei")
+        this.ClearBtn := this.FloatGui.AddButton("x220 y86 w56 h26", "清空")
+        this.CopyBtn := this.FloatGui.AddButton("x284 y86 w56 h26", "复制")
+        this.InsertBtn := this.FloatGui.AddButton("x348 y86 w72 h26 Default", "插入")
         this.ClearBtn.OnEvent("Click", (*) => this.ClearText())
         this.CopyBtn.OnEvent("Click", (*) => this.CopyText())
         this.InsertBtn.OnEvent("Click", (*) => this.InsertText())
+        this.CloseCtrl.OnEvent("Click", (*) => this.Hide())
     }
 
     static Show(text := "开始说话...", state := "正在聆听", mode := "ready") {
@@ -96,18 +96,16 @@ class VoiceFloat {
             return
         this.Mode := mode
         showMic := mode = "ready" || mode = "starting"
-        this.MicCircleCtrl.Visible := showMic
-        this.MicIconCtrl.Visible := showMic
+        this.MicCircleCtrl.Visible := false
+        this.MicIconCtrl.Visible := false
         for bar in this.WaveBars
-            bar.Visible := !showMic
+            bar.Visible := true
         if showMic {
-            this.HintCtrl.Value := "点击/长按说话"
             this.StopWave()
         } else {
-            this.HintCtrl.Value := "点击结束语音输入"
             this.StartWave()
         }
-        this.ShowResultBox(!showMic || this.LastText != "")
+        this.ShowResultBox(true)
     }
 
     static Update(text := "", state := "") {
@@ -127,14 +125,14 @@ class VoiceFloat {
     }
 
     static ShowResultBox(visible := true) {
-        for ctrl in [this.ResultBgCtrl, this.ResultMicCtrl, this.ResultTextCtrl, this.ClearBtn, this.CopyBtn, this.InsertBtn]
+        for ctrl in [this.ResultBgCtrl, this.ResultMicCtrl, this.ResultTextCtrl, this.CloseCtrl, this.ClearBtn, this.CopyBtn, this.InsertBtn]
             ctrl.Visible := visible
     }
 
     static FormatResultText(text) {
         if text = ""
             return "识别内容会显示在这里"
-        return StrLen(text) > 70 ? SubStr(text, 1, 70) . "..." : text
+        return StrLen(text) > 48 ? SubStr(text, 1, 48) . "..." : text
     }
 
     static ClearText() {
