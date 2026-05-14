@@ -193,7 +193,7 @@ config = ASRConfig(credential_path="~/.config/doubaoime-asr/credentials.json")
 
 Windows 桌面版的正式目标是 Windows 10/11 x64。Win7、Win8、Win8.1 和 32 位 Windows 不作为支持目标，对外分发优先使用主发布包。
 
-当前桌面版改为薄桥接架构：`ahk_client` 直接使用 `xiaohu31/doubao-voice-helper` 的 AutoHotkey v2 客户端结构，保留设置页、热键、托盘、剪贴板保护和自动发送；`doubaoime_asr.asr_bridge` 复用 Python 豆包 ASR API，在本机提供 `health / start / stop / cancel / status`。AHK 只负责交互和粘贴，Python 只负责录音识别。两份参考仓库的差异解释见 [UPSTREAM_DIFF_AUDIT.md](UPSTREAM_DIFF_AUDIT.md)。
+当前桌面版改为薄桥接架构：`ahk_client` 直接使用 `xiaohu31/doubao-voice-helper` 的 AutoHotkey v2 客户端结构，保留设置页、热键、托盘、剪贴板保护和自动发送；设置页布局按该参考客户端的 `src/gui.ahk` 恢复，不再使用自写 Python/Tk 主界面。`doubaoime_asr.asr_bridge` 复用 Python 豆包 ASR API，在本机提供 `health / start / stop / cancel / status`。AHK 只负责交互和粘贴，Python 只负责录音识别。两份参考仓库的差异解释见 [UPSTREAM_DIFF_AUDIT.md](UPSTREAM_DIFF_AUDIT.md)。
 
 运行时进程关系：
 

@@ -1,5 +1,21 @@
 # 变更记录
 
+## 2026-05-14：恢复上游 AHK 设置页布局
+
+- 设置页视觉布局恢复为 `xiaohu31/doubao-voice-helper/src/gui.ahk` 的上游实现：`Gui("+Resize -MaximizeBox")`、`SetFont("s10", "Microsoft YaHei")`、固定 `w400 h630`，各分组、输入框、录制按钮、分隔线、高级设置、保存/取消和状态栏坐标均与参考客户端一致。
+- 移除上一轮为截图/DPI 临时加入的 `-DPIScale`、`s6` 字体和按 DPI 手动放大窗口逻辑，避免继续偏离参考 repo。
+- 保留唯一必要的非视觉差异：`Space/Enter/Esc/Backspace/Delete/Insert/CapsLock` 等热键显示和反向转换兼容。当前默认键位会用到 `Ctrl+Alt+Space`、`Ctrl+Alt+Enter` 和 `Esc`，不保留会影响配置显示和保存。
+- 已覆盖 `%LOCALAPPDATA%\DoubaoASRHelper` 下的 `DoubaoASRHelper.exe` 和 `asr_bridge.exe`，桌面快捷方式指向的安装目录会打开本轮版本。
+
+### 本轮验证
+
+- 对照参考 repo：`git diff --no-index .devtools\reference\doubao-voice-helper\src\gui.ahk ahk_client\src\gui.ahk` 只剩热键名称兼容差异，设置页视觉布局段无 diff。
+- `.venv\Scripts\python.exe -m pytest`：`16 passed, 1 warning`。
+- `build-desktop-exe.ps1`：通过，重新生成 `dist` 和 `release` 产物。
+- `test-desktop-exe.ps1`：bridge self-test、HTTP health/status、悬浮窗 self-test、AHK 客户端启动与配置迁移均已执行到安装器阶段；随后被 Windows 应用控制策略拦截未签名 `dist\DoubaoASRHelperSetup.exe`，因此完整安装器烟测不按通过计算。
+- 源码设置页截图：`release\test-reports\source-ahk-settings-reference-restored.png`，窗口 `400x630`。
+- 安装版 DPI-aware 设置页截图：`release\test-reports\installed-ahk-settings-reference-restored-dpiaware.png`，窗口 `826x1331` 物理像素，对应参考客户端 `400x630` 逻辑窗口，控件完整显示。
+
 ## 2026-05-14：悬浮窗音量指示与长文本显示修复
 
 - 顶部蓝色波形不再使用假动画；`asr_bridge.exe` 在录音回调中计算 `audio_level/audio_peak`，`/status` 返回真实音量，AHK 浮窗按音量重画柱高。静音或底噪时保持低柱，不会无故大幅波动。
@@ -19,15 +35,14 @@
 
 ## 2026-05-14：参考图紧凑设置页与小尺寸悬浮窗
 
-- 设置页继续沿用 `xiaohu31/doubao-voice-helper` 的控件文案和分组顺序；在高 DPI 环境下改用 `-DPIScale` 并收敛窗口宽度，避免之前 200% 缩放下控件被挤出窗口或右侧出现大块空白。
-- 高 DPI 下设置页当前验证尺寸为 `413x666`，分组、录制按钮、复选框、高级设置、保存/取消均在单页内显示。
+- 历史记录：这一轮曾为高 DPI 截图临时加入 `-DPIScale` 和更小字体；后续已在“恢复上游 AHK 设置页布局”中撤销，设置页以 `xiaohu31/doubao-voice-helper` 原始 AHK 布局为准。
+- 保留的有效结论是：设置页继续沿用 `xiaohu31/doubao-voice-helper` 的控件文案和分组顺序，后续不要再改回旧 Python/Tk 大界面。
 - 识别悬浮窗从 `560x178` 压缩为 `457x133`，保留顶部蓝色声波、结果文本、关闭符号以及 `清空 / 复制 / 插入` 三个操作，去掉大面积空白。
 - 已把新版 AHK 主程序覆盖到 `%LOCALAPPDATA%\DoubaoASRHelper\DoubaoASRHelper.exe`；桌面快捷方式仍指向该安装目录。由于本轮新打包的 `dist\asr_bridge.exe` 被 Windows 应用控制策略拦截，安装目录中的 bridge 未被覆盖。
 
 ### 本轮验证
 
-- 源码 AHK 设置页截图：`release\test-reports\source-ahk-settings-panel-fit.png`，窗口 `413x666`。
-- 已安装 AHK 设置页截图：`release\test-reports\installed-final-settings-panel-fit.png`，窗口 `413x666`。
+- 历史截图：`release\test-reports\source-ahk-settings-panel-fit.png` 和 `installed-final-settings-panel-fit.png` 曾用于验证这一轮临时紧凑方案；该证据已被上方“恢复上游 AHK 设置页布局”的新截图取代。
 - 已安装 AHK 悬浮窗：`release\test-reports\installed-final-compact-float-test.json`，窗口 `457x133`，控件文本包含测试识别文本和 `清空 / 复制 / 插入`。
 - `build-desktop-exe.ps1`：通过，重新生成 `dist` 和 `release` 产物。
 - `.venv\Scripts\python.exe -m pytest`：`16 passed, 1 warning`。

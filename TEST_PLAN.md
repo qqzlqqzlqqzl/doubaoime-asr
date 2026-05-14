@@ -65,7 +65,7 @@
 | E04 | 分发 zip 完整性 | 完整包包含安装器、便携版、README 和 HELP；免安装包包含便携版、README 和 HELP |
 | E05 | 安装器静默安装 | 安装到临时目录成功 |
 | E06 | 安装后 EXE 自测 | 安装目录同时包含 `DoubaoASRHelper.exe` 和 `asr_bridge.exe`，bridge 自测通过 |
-| E07 | 安装后可见 UI 截图和布局报告 | 启动可见窗口并写出 `release\test-reports\installed-ui-smoke.png`、`installed-ui-smoke-narrow.png`、`installed-ui-smoke-minimum.png`、`installed-ui-smoke-scale200-default.png` 及对应 `*-layout.json`，自动断言参考图式三模式块、豆包快捷键、插入延迟滑块、剪贴板保护/开机自启动开关和 2 个底部按钮都在单页可见区域内；正常/窄/最小窗口下主界面不需要滚动、控件不溢出，设置区 entry、录制按钮、delay 控件和 hotkey 显示值都有语义化布局项；同时用 `--ui-scale-factor` 模拟 150% 和 200% 缩放并断言布局仍不溢出、200% 控件物理尺寸不偏小，200% 默认窗口会按参考图 `392x648` 逻辑基准随 DPI 放大，而不是停留在固定小窗 |
+| E07 | 安装后 AHK 设置页截图 | 启动安装目录里的 `DoubaoASRHelper.exe`，确认首次运行设置页使用 `xiaohu31/doubao-voice-helper` 上游 AHK 布局：`Gui("+Resize -MaximizeBox")`、`SetFont("s10", "Microsoft YaHei")`、`Show("w400 h630")`；保存 DPI-aware 截图到 `release\test-reports\installed-ahk-settings-reference-restored-dpiaware.png`，并确认三种模式、豆包快捷键、插入延迟、剪贴板保护/开机自启动、高级设置、保存/取消和状态栏完整可见 |
 | E08 | 托盘图标烟测 | `--tray-self-test` 能创建并删除 Windows 系统托盘图标，报告 `started=true`、`stopped=true` |
 | E09 | 关闭窗口后台保活 | 对安装后主窗口发送关闭消息后，进程保持运行且主窗口不可见 |
 | E10 | 安装后后台保活烟测 | `--hidden` 启动后进程保持运行，主窗口隐藏时可通过系统托盘继续后台监听 |
@@ -133,7 +133,7 @@
 | U09 | 悬浮窗操作 | 录音后在悬浮窗点击清空、复制、插入 | 三个操作都生效，窗口不遮挡主流程 |
 | U10 | 帮助文档 | 打开“使用说明”和 release `HELP.md` | 能看到首次运行、默认快捷键、系统托盘、长文本测试和卸载说明 |
 | U11 | 延迟设置 | 调整插入延迟、剪贴板超时、发送延迟并保存后重启 | 数值保持在允许范围内，插入延迟滑块按 50ms 吸附并显示秒数，两个高级延迟输入框按 50ms 吸附 |
-| U12 | UI 截图复核 | 打开 `release\test-reports\installed-ui-smoke.png`、`installed-ui-smoke-narrow.png`、`installed-ui-smoke-minimum.png` 和对应 `*-layout.json`，再查看 `installed-ui-smoke-scale150-minimum-layout.json`、`installed-ui-smoke-scale200-narrow-layout.json`、`installed-ui-smoke-scale200-minimum-layout.json`、`installed-ui-smoke-scale200-default-layout.json`；如果本机 Smart App Control 阻止新 EXE，则先查看源码布局报告 `source-ui-default-layout.json`、`source-ui-compact-layout.json`、`source-ui-narrow-layout.json`、`source-ui-minimum-layout.json` | 主界面按参考图交互骨架显示三种模式块、通用设置和高级设置；默认窗口应是 `760x520` 基准的紧凑设置窗，热键行是“标签 + 输入框 + 录制按钮”；没有滚动条，字号层级统一，文字、输入框、录制按钮和底部操作按钮不被截断，窄窗口、最小窗口、150% 和 200% 缩放下控件自动压缩和重排，布局报告显示 `fits_horizontally=true` 且 `fits_vertically=true` |
+| U12 | UI 截图复核 | 打开 `release\test-reports\installed-ahk-settings-reference-restored-dpiaware.png` 和 `source-ahk-settings-reference-restored.png`；再用 `git diff --no-index .devtools\reference\doubao-voice-helper\src\gui.ahk ahk_client\src\gui.ahk` 复核当前差异 | 设置页应按 `xiaohu31/doubao-voice-helper` 的 AHK 上游布局显示三种模式块、豆包快捷键、插入延迟、剪贴板保护、开机自启动、高级设置、保存/取消和状态；视觉布局 diff 应为零，允许保留 `Space/Enter/Esc/...` 热键显示与反向转换兼容 |
 | U13 | 系统托盘后台运行 | 点击主窗口 X 或“取消”，再点击/右键托盘图标 | 主窗口隐藏后进程继续运行；左键托盘图标恢复窗口；右键菜单可显示、隐藏、打开配置目录和退出 |
 | U14 | 重复启动保护 | 已经运行后再次双击安装版、免安装版或开机自启动脚本 | 不出现第二个主窗口和第二个托盘图标；已有窗口被唤醒或保持后台运行 |
 

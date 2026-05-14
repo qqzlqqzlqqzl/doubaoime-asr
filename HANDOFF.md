@@ -8,7 +8,7 @@
 
 当前最新大变更：`185e2a7 Audit upstream diffs and fix drift`。这一版把“为什么不用纯自写桌面壳、为什么要接入两个参考仓库、哪些 diff 是必要胶水、哪些 diff 已修成 bug”写进了 [CHANGELOG.md](CHANGELOG.md) 和 [UPSTREAM_DIFF_AUDIT.md](UPSTREAM_DIFF_AUDIT.md)。接手者必须先读这两份文档，否则很容易把 AHK 主客户端、Python bridge、旧 Python Tk 自测入口三者的职责搞混。
 
-最新未发布前置：2026-05-14 本机又做了一轮参考图 UI 收敛。AHK 设置页现在在高 DPI 下使用 `-DPIScale` 加紧凑窗口宽度，安装版截图证据为 `release/test-reports/installed-final-settings-panel-fit.png`，窗口 `413x666`；本地识别悬浮窗压缩为 `457x133`，证据为 `release/test-reports/installed-final-compact-float-test.json`。本轮新打包的 `dist/asr_bridge.exe` 被 Windows 应用控制策略拦截，`Unblock-File` 无效，所以只把新版 `DoubaoASRHelper.exe` 覆盖到 `%LOCALAPPDATA%\DoubaoASRHelper`，没有覆盖当前可用的已安装 `asr_bridge.exe`。
+最新未发布前置：2026-05-14 用户明确要求不要继续自创 UI，AHK 设置页已恢复为 `xiaohu31/doubao-voice-helper/src/gui.ahk` 的上游布局：`Gui("+Resize -MaximizeBox")`、`SetFont("s10", "Microsoft YaHei")`、`Show("w400 h630")`，各分组和控件坐标与参考客户端一致。不要再恢复上一轮的 `-DPIScale`、`s6` 字体或手动 DPI 窗口缩放。安装版 DPI-aware 截图证据为 `release/test-reports/installed-ahk-settings-reference-restored-dpiaware.png`，窗口 `826x1331` 物理像素，对应上游 `400x630` 逻辑窗口；源码截图为 `release/test-reports/source-ahk-settings-reference-restored.png`。本轮已覆盖 `%LOCALAPPDATA%\DoubaoASRHelper` 下的 `DoubaoASRHelper.exe` 和 `asr_bridge.exe`。
 
 最新补丁：2026-05-14 悬浮窗波形已改为真实音量指示。`doubaoime_asr/asr_bridge.py` 在 sounddevice callback 中计算 `audio_level/audio_peak`，`ahk_client/src/bridge.ahk` 解析该字段，`ahk_client/src/float.ahk` 用 `UpdateVolume()` 按音量重画柱高。未说话时应保持低柱，不再做假波动。长文本浮窗高度为 `457x167`，`--float-self-test` 已换成长文本样本。
 
@@ -54,7 +54,7 @@ git pull --rebase --autostash
 - 主界面只保留截图中的文案和控件：三个模式块、豆包快捷键、插入延迟、剪贴板保护、开机自启动、高级设置、保存、取消、状态。主界面不再显示恢复默认、显示悬浮窗、使用说明、打开配置目录、凭据文件等额外入口。
 - 默认值已改为不依赖鼠标侧键：`右Ctrl`、`Ctrl+Alt+Space`、`Ctrl+Alt+Enter`、`Esc`、`Ctrl+Alt+D`、插入延迟 `300ms`、剪贴板超时 `100ms`、发送延迟 `50ms`。避免 `Ctrl+Q`、`Ctrl+D`、裸字母、鼠标侧键、AltGr 和 Windows 自带语音输入 `Win+H`。
 - 本轮默认热键调整已跑：`python -m compileall doubaoime_asr\desktop_app.py doubaoime_asr\desktop_help.py doubaoime_asr\asr_bridge.py`、`python -m pytest -q`、源码 `--self-test`、`build-desktop-exe.ps1`、`test-desktop-exe.ps1`。另用隔离 `%APPDATA%` 烟测旧默认迁移，`xbutton1/f9/f12/ctrl+alt+shift+d` 会迁到 `Ctrl+Alt+Space / Ctrl+Alt+Enter / Esc / Ctrl+Alt+D`。
-- 最新 AHK 设置页复测：`source-ahk-settings-panel-fit.png` 和 `installed-final-settings-panel-fit.png` 均为 `413x666`；如果继续调 UI，优先保持参考图文案和单页无滚动，不要重新引入 Python/Tk 大界面。完整 EXE 测试当前被未签名 `asr_bridge.exe` 的系统策略拦截，需代码签名或策略放行后再重跑 `test-desktop-exe.ps1`。
+- 最新 AHK 设置页复测：设置页视觉布局已回到 `xiaohu31/doubao-voice-helper` 原始 AHK 坐标；当前和参考 `src/gui.ahk` 的 diff 只剩 `Space/Enter/Esc/...` 热键名称兼容，原因是本项目默认键位会用到这些键。证据：`source-ahk-settings-reference-restored.png`、`installed-ahk-settings-reference-restored-dpiaware.png`。完整 `test-desktop-exe.ps1` 当前被未签名 `DoubaoASRHelperSetup.exe` 的 Windows 应用控制策略拦截在安装器阶段，需代码签名或策略放行后再重跑。
 - 最新悬浮窗复测：`installed-bridge-audio-level-status.json` 显示录音态返回 `audio_level`，当前未说话底噪为 `3`；`installed-long-float-final.json/png` 显示长文本子控件存在。`build-desktop-exe.ps1`、`test-desktop-exe.ps1`、`.venv\Scripts\python.exe -m pytest` 均通过，且 `%LOCALAPPDATA%\DoubaoASRHelper` 里的两个 EXE 已覆盖到最新版。
 
 2026-05-14，架构改为“AHK 客户端 + Python ASR bridge”：

@@ -77,7 +77,7 @@ Exact source inventory against `yangmoling/doubaoime-asr`:
 | `ahk_client/src/main.ahk` | Replaces Doubao hotkey/send-enter clipboard workflow with bridge `/start`, `/stop`, `/cancel`, `/status`; adds async finish polling | Required because we no longer depend on Doubao desktop UI. Async polling prevents UI freeze during ASR finalization |
 | `ahk_client/src/config.ahk` | Product defaults, config versioning, migration, and app config directory changed | Defaults must avoid common shortcuts and mouse-only hardware; versioning migrates old defaults; app directory now matches `DoubaoASRHelper` |
 | `ahk_client/src/hotkey.ahk` | Re-register now calls `UnregisterAll`; ampersand prefix dummy hotkeys are also disabled | Upstream assumed AHK replacement was enough; in practice old hotkeys can remain active after settings save, and prefix dummy keys can keep swallowing input |
-| `ahk_client/src/gui.ahk` | Adds nicer display/roundtrip for `Space`, `Enter`, `Esc`, etc. | New keyboard-friendly defaults should display as user-facing keys, not uppercase internal tokens |
+| `ahk_client/src/gui.ahk` | Settings layout is intentionally aligned with upstream; only adds nicer display/roundtrip for `Space`, `Enter`, `Esc`, etc. | User explicitly requested the reference UI with minimal invention. The remaining diff is functional only: new keyboard-friendly defaults should display as user-facing keys, not uppercase internal tokens |
 | `ahk_client/src/clipboard.ahk` | Adds `InsertText(text, protect)` | Upstream waits for Doubao to write recognition text into clipboard. Our bridge receives text over HTTP, so AHK must insert it directly while preserving clipboard |
 
 Exact source inventory against `xiaohu31/doubao-voice-helper`:
@@ -106,3 +106,20 @@ Exact source inventory against `xiaohu31/doubao-voice-helper`:
 - `build-desktop-exe.ps1`: rebuilt `dist\DoubaoASRHelper.exe`, `dist\asr_bridge.exe`, installer, and release zips
 - `test-desktop-exe.ps1`: passed; includes isolated AHK legacy config migration and old-default hotkey migration
 - `git diff --check`: passed with CRLF normalization warnings only
+
+## 2026-05-14 UI Restoration Follow-up
+
+The settings window had temporarily drifted from the reference client while trying to compensate for high-DPI screenshots (`-DPIScale`, `s6`, and manual DPI window sizing). That drift has been removed.
+
+Current `ahk_client/src/gui.ahk` vs `.devtools/reference/doubao-voice-helper/src/gui.ahk`:
+
+- Visual settings layout: no intentional diff. Window flags, font, `Show("w400 h630")`, group boxes, edit controls, record buttons, separator, advanced section, save/cancel, and status bar coordinates match the reference client.
+- Remaining diff: only `Space/Enter/Esc/Backspace/Delete/Insert/CapsLock` display and roundtrip support, because this project's defaults use `Ctrl+Alt+Space`, `Ctrl+Alt+Enter`, and `Esc`.
+
+Verification:
+
+- `git diff --no-index .devtools\reference\doubao-voice-helper\src\gui.ahk ahk_client\src\gui.ahk`: only hotkey display/roundtrip compatibility remains.
+- `.venv\Scripts\python.exe -m pytest`: `16 passed, 1 warning`.
+- `build-desktop-exe.ps1`: passed.
+- `test-desktop-exe.ps1`: reached installer smoke after bridge, float, client launch, and config migration checks, then Windows Application Control blocked unsigned `dist\DoubaoASRHelperSetup.exe`; installer smoke is not counted as passed in this run.
+- UI evidence: `release\test-reports\source-ahk-settings-reference-restored.png` and `release\test-reports\installed-ahk-settings-reference-restored-dpiaware.png`.
