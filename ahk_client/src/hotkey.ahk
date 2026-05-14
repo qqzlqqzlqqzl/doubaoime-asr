@@ -30,8 +30,8 @@ class HotkeyManager {
 
     ; 初始化热键
     static Init(holdKey, freeKey, autoSendKey := "", cancelKey := "") {
-        ; 不需要调用 UnregisterAll()
-        ; AutoHotkey v2 允许直接覆盖注册，新的回调会自动替换旧的
+        ; 保存配置后重新注册时先清理旧热键，避免旧触发键继续生效
+        this.UnregisterAll()
 
         holdSuccess := true
         freeSuccess := true
@@ -348,6 +348,12 @@ class HotkeyManager {
                     Hotkey(prefixKey . " & " . suffixKey . " Up", "Off")
                 } catch {
                 }
+                if prefixKey != "" {
+                    try {
+                        Hotkey(prefixKey, "Off")
+                    } catch {
+                    }
+                }
             } else {
                 ; 普通热键或修饰键热键的注销
                 try {
@@ -373,9 +379,16 @@ class HotkeyManager {
             keyType := this.RegisteredHotkeys.Has("free_type") ? this.RegisteredHotkeys["free_type"] : "normal"
 
             if keyType = "ampersand" {
+                prefixKey := this.RegisteredHotkeys.Has("free_prefixKey") ? this.RegisteredHotkeys["free_prefixKey"] : ""
                 try {
                     Hotkey(key, "Off")
                 } catch {
+                }
+                if prefixKey != "" {
+                    try {
+                        Hotkey(prefixKey, "Off")
+                    } catch {
+                    }
                 }
             } else if keyType = "modifier" {
                 try {
@@ -409,6 +422,12 @@ class HotkeyManager {
                 try {
                     Hotkey(prefixKey . " & " . suffixKey . " Up", "Off")
                 } catch {
+                }
+                if prefixKey != "" {
+                    try {
+                        Hotkey(prefixKey, "Off")
+                    } catch {
+                    }
                 }
             } else {
                 try {

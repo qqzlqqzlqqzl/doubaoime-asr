@@ -4,14 +4,16 @@
 #Requires AutoHotkey v2.0
 
 class Config {
+    static Version := 2
+
     ; 默认配置
     static Default := Map(
         "HoldToTalkKey", "RCtrl",
         "FreeToTalkKey", "XButton1",
-        "AutoSendKey", "LCtrl & LWin",
-        "CancelKey", "z",
+        "AutoSendKey", "F9",
+        "CancelKey", "F12",
         "AutoSendDelay", 50,
-        "DouBaoHotkey", "^d",
+        "DouBaoHotkey", "^!+d",
         "InsertDelay", 300,
         "ClipboardProtect", 1,
         "AutoStart", 1,
@@ -80,15 +82,33 @@ class Config {
             this.Current["InsertDelay"] := Integer(IniRead(filePath, "General", "InsertDelay", this.Default["InsertDelay"]))
             this.Current["ClipboardProtect"] := Integer(IniRead(filePath, "General", "ClipboardProtect", this.Default["ClipboardProtect"]))
             this.Current["AutoStart"] := Integer(IniRead(filePath, "General", "AutoStart", this.Default["AutoStart"]))
+            configVersion := Integer(IniRead(filePath, "General", "ConfigVersion", 0))
 
             ; Advanced 部分
             this.Current["FocusRecovery"] := Integer(IniRead(filePath, "Advanced", "FocusRecovery", this.Default["FocusRecovery"]))
             this.Current["ShowTrayTip"] := Integer(IniRead(filePath, "Advanced", "ShowTrayTip", this.Default["ShowTrayTip"]))
             this.Current["ClipboardTimeout"] := Integer(IniRead(filePath, "Advanced", "ClipboardTimeout", this.Default["ClipboardTimeout"]))
 
+            if configVersion < this.Version {
+                this.MigrateDefaults(configVersion)
+                this.Save()
+            }
+
             return true
         } catch as e {
             return false
+        }
+    }
+
+    ; 只迁移旧版默认值，保留用户自定义热键
+    static MigrateDefaults(configVersion) {
+        if configVersion < 2 {
+            if this.Current["AutoSendKey"] = "LCtrl & LWin"
+                this.Current["AutoSendKey"] := this.Default["AutoSendKey"]
+            if this.Current["CancelKey"] = "z"
+                this.Current["CancelKey"] := this.Default["CancelKey"]
+            if this.Current["DouBaoHotkey"] = "^d"
+                this.Current["DouBaoHotkey"] := this.Default["DouBaoHotkey"]
         }
     }
 
@@ -106,6 +126,7 @@ class Config {
             IniWrite(this.Current["InsertDelay"], filePath, "General", "InsertDelay")
             IniWrite(this.Current["ClipboardProtect"], filePath, "General", "ClipboardProtect")
             IniWrite(this.Current["AutoStart"], filePath, "General", "AutoStart")
+            IniWrite(this.Version, filePath, "General", "ConfigVersion")
 
             ; Advanced 部分
             IniWrite(this.Current["FocusRecovery"], filePath, "Advanced", "FocusRecovery")

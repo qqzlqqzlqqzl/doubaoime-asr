@@ -612,10 +612,10 @@ class WindowsTrayIcon:
 @dataclass
 class DesktopConfig:
     hold_key: str = "rctrl"
-    toggle_key: str = "ctrl+q"
-    hold_send_key: str = "lctrl+lwin"
-    cancel_key: str = "z"
-    doubao_hotkey: str = "ctrl+d"
+    toggle_key: str = "xbutton1"
+    hold_send_key: str = "f9"
+    cancel_key: str = "f12"
+    doubao_hotkey: str = "ctrl+alt+shift+d"
     insert_delay_ms: int = 300
     clipboard_restore_delay_ms: int = 100
     auto_send_delay_ms: int = 50
@@ -636,6 +636,12 @@ RESETTABLE_CONFIG_FIELDS = (
     "protect_clipboard",
     "startup",
 )
+OLD_DEFAULT_HOTKEYS = {
+    "toggle_key": "ctrl+q",
+    "hold_send_key": "lctrl+lwin",
+    "cancel_key": "z",
+    "doubao_hotkey": "ctrl+d",
+}
 
 
 def resolve_user_path(value: str | Path) -> Path:
@@ -687,6 +693,10 @@ def load_config() -> DesktopConfig:
         return normalize_config(DesktopConfig())
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+        defaults = DesktopConfig()
+        for field, old_value in OLD_DEFAULT_HOTKEYS.items():
+            if data.get(field) == old_value:
+                data[field] = getattr(defaults, field)
         return normalize_config(DesktopConfig(**{**asdict(DesktopConfig()), **data}))
     except Exception:
         return normalize_config(DesktopConfig())
@@ -934,7 +944,14 @@ def display_hotkey_value(value: str | Iterable[str]) -> str:
     canonical = format_hotkey(keys)
     if not canonical:
         return ""
-    return "+".join(HOTKEY_DISPLAY_NAMES.get(part, part.upper() if len(part) == 1 else part) for part in canonical.split("+"))
+    def display_part(part: str) -> str:
+        if part in HOTKEY_DISPLAY_NAMES:
+            return HOTKEY_DISPLAY_NAMES[part]
+        if len(part) == 1 or (part.startswith("f") and part[1:].isdigit()):
+            return part.upper()
+        return part
+
+    return "+".join(display_part(part) for part in canonical.split("+"))
 
 
 def default_hotkey_summary() -> str:
@@ -3555,15 +3572,15 @@ def run_self_test(report_path: str | None = None) -> int:
             raise ValueError("releasing an extra Alt key should not stop right-Ctrl hold recording")
         if idle_start_mode_for_active_keys("rctrl", {"rctrl", "lalt"}, default_config):
             raise ValueError("default hold key should require an exact active key set")
-        if idle_start_mode_for_active_keys("q", {"lctrl", "q"}, default_config) != "toggle":
-            raise ValueError("default Ctrl+Q no longer starts toggle recording")
-        if idle_start_mode_for_active_keys("q", {"lctrl", "lshift", "q"}, default_config):
-            raise ValueError("Ctrl+Q should not start while extra modifiers are held")
-        if idle_start_mode_for_active_keys("lwin", {"lctrl", "lwin"}, default_config) != "hold_send":
+        if idle_start_mode_for_active_keys("xbutton1", {"xbutton1"}, default_config) != "toggle":
+            raise ValueError("default mouse side button no longer starts toggle recording")
+        if idle_start_mode_for_active_keys("xbutton1", {"xbutton1", "lshift"}, default_config):
+            raise ValueError("mouse side button should not start while extra modifiers are held")
+        if idle_start_mode_for_active_keys("f9", {"f9"}, default_config) != "hold_send":
             raise ValueError("default hold-send combo no longer starts hold_send recording")
-        if not should_stop_hold_on_release("hold_send", "win", {"lctrl", "lwin"}, default_config):
-            raise ValueError("generic Win release should stop hold-send recording")
-        if idle_start_mode_for_active_keys("lwin", {"lctrl", "lwin", "d"}, default_config):
+        if not should_stop_hold_on_release("hold_send", "f9", {"f9"}, default_config):
+            raise ValueError("F9 release should stop hold-send recording")
+        if idle_start_mode_for_active_keys("f9", {"f9", "d"}, default_config):
             raise ValueError("hold-send combo should not start when extra keys are already active")
         if not should_show_recognition_float("hold", None):
             raise ValueError("hold mode should show the floating transcript while the key is held")
@@ -3596,12 +3613,12 @@ def run_self_test(report_path: str | None = None) -> int:
             raise ValueError("common Alt typo alias is not normalized")
         if canonical_hotkey_value("右Ctrl") != "rctrl":
             raise ValueError("right Ctrl display label is not parsed")
-        if canonical_hotkey_value("左Ctrl+左Win") != "lctrl+lwin":
-            raise ValueError("left Ctrl + left Win display label is not parsed")
+        if canonical_hotkey_value("F9") != "f9":
+            raise ValueError("F9 display label is not parsed")
         if display_hotkey_value("rctrl") != "右Ctrl":
             raise ValueError("right Ctrl is not shown as a user-facing label")
-        if display_hotkey_value("lctrl+lwin") != "左Ctrl+左Win":
-            raise ValueError("left Ctrl + left Win is not shown as user-facing labels")
+        if display_hotkey_value("f9") != "F9":
+            raise ValueError("F9 is not shown as a user-facing label")
         if generic_hotkey(parse_hotkey("lalt+m")) != frozenset({"alt", "m"}):
             raise ValueError("left/right modifier aliases are not normalized for conflict checks")
         if hotkey_vk(parse_hotkey("alt+m")) != ord("M"):
