@@ -1,5 +1,19 @@
 # 变更记录
 
+## 2026-05-14：悬浮窗长句滚动与蓝色音量条
+
+- 悬浮窗识别结果区从静态 `Text` 改为只读多行 `Edit`，不再把长句截断到 96 字；每次实时文本更新后会通过 Win32 消息把光标和滚动位置追到最新内容。
+- 结果区视觉从白底边框改为浅蓝底，麦克风图标和关闭符号统一蓝色系，避免浮窗中间出现突兀白框。
+- 顶部音量条改为蓝色分层色板，并按音量、中心峰值和轻微波形相位动态调整高度/宽度，静音时保持低蓝色柱，说话时中心柱会更明显。
+- `test-desktop-exe.ps1` 的浮窗枚举改为 `WM_GETTEXT` 读取控件当前内容，能正确验证只读 Edit 中的完整长文本。
+
+### 本轮验证
+
+- AHK 源码 `--float-self-test`：通过。
+- `build-desktop-exe.ps1`：通过，重新生成 `dist` 和 `release` 产物。
+- `test-desktop-exe.ps1`：通过，输出 `AHK bridge desktop tests passed.`。
+- `.venv\Scripts\python.exe -m pytest -q`：`16 passed, 1 warning`。
+
 ## 2026-05-14：恢复上游 AHK 设置页布局
 
 - 设置页视觉布局恢复为 `xiaohu31/doubao-voice-helper/src/gui.ahk` 的上游实现：`Gui("+Resize -MaximizeBox")`、`SetFont("s10", "Microsoft YaHei")`、固定 `w400 h630`，各分组、输入框、录制按钮、分隔线、高级设置、保存/取消和状态栏坐标均与参考客户端一致。

@@ -36,7 +36,7 @@ class VoiceFloat {
             return
 
         this.FloatGui := Gui("+AlwaysOnTop -Caption +ToolWindow +Border +E0x08000000", "DoubaoASRHelperFloat")
-        this.FloatGui.BackColor := "FFFFFF"
+        this.FloatGui.BackColor := "DDEBFF"
         this.FloatGui.MarginX := 0
         this.FloatGui.MarginY := 0
         this.FloatGui.SetFont("s1 cFFFFFF", "Microsoft YaHei")
@@ -52,7 +52,7 @@ class VoiceFloat {
             this.WaveMaxHeights.Push(height)
             x := 60 + ((index - 1) * 12)
             y := 18 - Round(height / 2)
-            this.WaveBars.Push(this.FloatGui.AddProgress("x" . x . " y" . y . " w4 h" . height . " c5A79FF BackgroundFFFFFF Range0-100 -Smooth", 100))
+            this.WaveBars.Push(this.FloatGui.AddProgress("x" . x . " y" . y . " w4 h" . height . " c93C5FD BackgroundD7E8FF Range0-100 -Smooth", 100))
         }
 
         this.FloatGui.SetFont("s1 cFFFFFF", "Microsoft YaHei")
@@ -61,12 +61,12 @@ class VoiceFloat {
         this.StateCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
         this.TextCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
 
-        this.ResultBgCtrl := this.FloatGui.AddText("x12 y34 w432 h120 +Border BackgroundFFFFFF", "")
-        this.FloatGui.SetFont("s19 c5F9D68", "Segoe MDL2 Assets")
+        this.ResultBgCtrl := this.FloatGui.AddText("x12 y34 w432 h120 BackgroundEAF3FF", "")
+        this.FloatGui.SetFont("s19 c2563EB", "Segoe MDL2 Assets")
         this.ResultMicCtrl := this.FloatGui.AddText("x28 y54 w30 h34 Center BackgroundTrans", Chr(0xE720))
-        this.FloatGui.SetFont("s11 c3B4258", "Microsoft YaHei")
-        this.ResultTextCtrl := this.FloatGui.AddText("x68 y48 w328 h58 BackgroundTrans +Wrap", "识别内容会显示在这里")
-        this.FloatGui.SetFont("s11 c9AA0AD", "Microsoft YaHei")
+        this.FloatGui.SetFont("s11 c243B63", "Microsoft YaHei")
+        this.ResultTextCtrl := this.FloatGui.AddEdit("x68 y46 w334 h66 ReadOnly +Multi +VScroll -E0x200 -Border c243B63 BackgroundEAF3FF", "识别内容会显示在这里")
+        this.FloatGui.SetFont("s11 c5B75B7", "Microsoft YaHei")
         this.CloseCtrl := this.FloatGui.AddText("x416 y42 w20 h22 Center BackgroundTrans", "×")
         this.FloatGui.SetFont("s9 c555B6E", "Microsoft YaHei")
         this.ClearBtn := this.FloatGui.AddButton("x220 y120 w56 h26", "清空")
@@ -119,10 +119,12 @@ class VoiceFloat {
             this.LastText := text
             this.TextCtrl.Value := ""
             this.ResultTextCtrl.Value := this.FormatResultText(text)
+            this.ScrollResultToLatest()
             this.ShowResultBox(true)
         } else if this.LastText = "" {
             this.TextCtrl.Value := ""
             this.ResultTextCtrl.Value := "识别内容会显示在这里"
+            this.ScrollResultToLatest()
         }
     }
 
@@ -134,7 +136,18 @@ class VoiceFloat {
     static FormatResultText(text) {
         if text = ""
             return "识别内容会显示在这里"
-        return StrLen(text) > 96 ? SubStr(text, 1, 96) . "..." : text
+        return text
+    }
+
+    static ScrollResultToLatest() {
+        if this.ResultTextCtrl = ""
+            return
+        try {
+            textLength := StrLen(this.ResultTextCtrl.Value)
+            DllCall("User32\SendMessageW", "ptr", this.ResultTextCtrl.Hwnd, "uint", 0xB1, "ptr", textLength, "ptr", textLength)
+            DllCall("User32\SendMessageW", "ptr", this.ResultTextCtrl.Hwnd, "uint", 0xB7, "ptr", 0, "ptr", 0)
+            DllCall("User32\SendMessageW", "ptr", this.ResultTextCtrl.Hwnd, "uint", 0x115, "ptr", 7, "ptr", 0)
+        }
     }
 
     static UpdateVolume(level := 0) {
@@ -142,12 +155,21 @@ class VoiceFloat {
         if level = ""
             level := 0
         level := Max(0, Min(100, Integer(level)))
+        this.WaveTick += 1
+        colors := ["BFDBFE", "93C5FD", "60A5FA", "3B82F6", "2563EB", "1D4ED8"]
         for index, bar in this.WaveBars {
             maxHeight := this.WaveMaxHeights[index]
-            height := level < 3 ? 2 : Max(2, Round(maxHeight * level / 100))
+            wave := 0.78 + (0.22 * Sin((this.WaveTick + index * 5) / 3.6))
+            centerBoost := index >= 12 && index <= 18 ? 1.14 : 0.92
+            height := level < 3 ? 3 : Max(3, Round(maxHeight * level / 100 * wave * centerBoost))
+            width := level >= 35 && index >= 12 && index <= 18 ? 5 : 4
             y := 18 - Round(height / 2)
+            colorIndex := level < 8 ? 1 : Min(colors.Length, 2 + Floor(level / 22))
+            if level >= 55 && index >= 12 && index <= 18
+                colorIndex := Min(colors.Length, colorIndex + 1)
             try {
-                bar.Move(, y, , height)
+                bar.Move(, y, width, height)
+                bar.Opt("c" . colors[colorIndex] . " BackgroundD7E8FF")
                 bar.Value := 100
             }
         }
@@ -157,6 +179,7 @@ class VoiceFloat {
         this.LastText := ""
         this.TextCtrl.Value := ""
         this.ResultTextCtrl.Value := "识别内容会显示在这里"
+        this.ScrollResultToLatest()
         Logger.Info("float_clear")
     }
 
@@ -200,6 +223,7 @@ class VoiceFloat {
         this.LastText := ""
         if this.ResultTextCtrl != ""
             this.ResultTextCtrl.Value := "识别内容会显示在这里"
+        this.ScrollResultToLatest()
         this.Mode := ""
     }
 }

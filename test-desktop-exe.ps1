@@ -19,9 +19,17 @@ public class AhkSmokeWin32 {
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, StringBuilder lParam);
+  [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
   public static string GetWindowTitle(IntPtr hWnd) {
     StringBuilder text = new StringBuilder(256);
     GetWindowText(hWnd, text, text.Capacity);
+    return text.ToString();
+  }
+  public static string GetControlText(IntPtr hWnd) {
+    int length = (int)SendMessage(hWnd, 0x000E, IntPtr.Zero, IntPtr.Zero);
+    StringBuilder text = new StringBuilder(Math.Max(256, length + 1));
+    SendMessage(hWnd, 0x000D, (IntPtr)text.Capacity, text);
     return text.ToString();
   }
   public static int[] FindVisibleWindow(int expectedProcessId, string titleContains) {
@@ -55,7 +63,7 @@ public class AhkSmokeWin32 {
     }, IntPtr.Zero);
     if (target == IntPtr.Zero) return texts.ToArray();
     EnumChildWindows(target, delegate(IntPtr child, IntPtr lParam) {
-      string text = GetWindowTitle(child);
+      string text = GetControlText(child);
       if (!String.IsNullOrWhiteSpace(text)) texts.Add(text);
       return true;
     }, IntPtr.Zero);
