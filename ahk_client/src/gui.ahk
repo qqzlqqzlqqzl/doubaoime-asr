@@ -37,6 +37,8 @@ class GuiManager {
     static AutoSendRecordBtn := ""
     static CancelRecordBtn := ""
     static DouBaoRecordBtn := ""
+    static SaveBtn := ""
+    static CancelBtn := ""
 
     ; 创建主窗口
     static CreateMainWindow() {
@@ -48,7 +50,7 @@ class GuiManager {
         this.MainGui.AddGroupBox("x10 y10 w380 h80", "【按着说】模式")
         this.MainGui.AddText("x20 y35", "触发按键：")
         this.HoldKeyEdit := this.MainGui.AddEdit("x90 y32 w180 ReadOnly", "")
-        this.HoldRecordBtn := this.MainGui.AddButton("x280 y30 w80 h25", "录制")
+        this.HoldRecordBtn := this.MainGui.AddText("x280 y30 w80 h25 Center Border BackgroundF7F8FA c30343B 0x200", "录制")
         this.HoldRecordBtn.OnEvent("Click", (*) => this.StartRecording("hold"))
         this.MainGui.AddText("x20 y60 cGray", "按住说话，松开自动插入")
 
@@ -56,7 +58,7 @@ class GuiManager {
         this.MainGui.AddGroupBox("x10 y100 w380 h80", "【自由说】模式")
         this.MainGui.AddText("x20 y125", "触发按键：")
         this.FreeKeyEdit := this.MainGui.AddEdit("x90 y122 w180 ReadOnly", "")
-        this.FreeRecordBtn := this.MainGui.AddButton("x280 y120 w80 h25", "录制")
+        this.FreeRecordBtn := this.MainGui.AddText("x280 y120 w80 h25 Center Border BackgroundF7F8FA c30343B 0x200", "录制")
         this.FreeRecordBtn.OnEvent("Click", (*) => this.StartRecording("free"))
         this.MainGui.AddText("x20 y150 cGray", "点击开始，再次点击结束并插入")
 
@@ -64,11 +66,11 @@ class GuiManager {
         this.MainGui.AddGroupBox("x10 y190 w380 h105", "【按着说+自动发送】模式")
         this.MainGui.AddText("x20 y215", "触发按键：")
         this.AutoSendKeyEdit := this.MainGui.AddEdit("x90 y212 w180 ReadOnly", "")
-        this.AutoSendRecordBtn := this.MainGui.AddButton("x280 y210 w80 h25", "录制")
+        this.AutoSendRecordBtn := this.MainGui.AddText("x280 y210 w80 h25 Center Border BackgroundF7F8FA c30343B 0x200", "录制")
         this.AutoSendRecordBtn.OnEvent("Click", (*) => this.StartRecording("autoSend"))
         this.MainGui.AddText("x20 y242", "取消按键：")
         this.CancelKeyEdit := this.MainGui.AddEdit("x90 y239 w180 ReadOnly", "")
-        this.CancelRecordBtn := this.MainGui.AddButton("x280 y237 w80 h25", "录制")
+        this.CancelRecordBtn := this.MainGui.AddText("x280 y237 w80 h25 Center Border BackgroundF7F8FA c30343B 0x200", "录制")
         this.CancelRecordBtn.OnEvent("Click", (*) => this.StartRecording("cancel"))
         this.MainGui.AddText("x20 y267 cGray", "按住说话松开发送，说话中按取消键可取消")
 
@@ -78,7 +80,7 @@ class GuiManager {
         ; ===== 豆包快捷键 =====
         this.MainGui.AddText("x20 y315", "豆包快捷键：")
         this.DouBaoHotkeyEdit := this.MainGui.AddEdit("x110 y312 w160 ReadOnly", "")
-        this.DouBaoRecordBtn := this.MainGui.AddButton("x280 y310 w80 h25", "录制")
+        this.DouBaoRecordBtn := this.MainGui.AddText("x280 y310 w80 h25 Center Border BackgroundF7F8FA c30343B 0x200", "录制")
         this.DouBaoRecordBtn.OnEvent("Click", (*) => this.StartRecording("doubao"))
 
         ; ===== 插入延迟 =====
@@ -107,11 +109,14 @@ class GuiManager {
         this.MainGui.AddText("x230 y495 cGray", "(推荐 0~100)")
 
         ; ===== 按钮 =====
-        this.MainGui.AddButton("x100 y550 w80 h30", "保存").OnEvent("Click", (*) => this.OnSave())
-        this.MainGui.AddButton("x200 y550 w80 h30", "取消").OnEvent("Click", (*) => this.OnCancel())
+        this.SaveBtn := this.MainGui.AddText("x100 y550 w80 h30 Center Border BackgroundF7F8FA c30343B 0x200", "保存")
+        this.SaveBtn.OnEvent("Click", (*) => this.OnSave())
+        this.CancelBtn := this.MainGui.AddText("x200 y550 w80 h30 Center Border BackgroundF7F8FA c30343B 0x200", "取消")
+        this.CancelBtn.OnEvent("Click", (*) => this.OnCancel())
 
         ; ===== 状态栏 =====
         this.StatusText := this.MainGui.AddText("x20 y595 w360 cGreen", "状态: ● 已就绪")
+
     }
 
     ; 显示主窗口
@@ -123,6 +128,19 @@ class GuiManager {
         this.LoadConfigToGui()
 
         this.MainGui.Show("w400 h630")
+        this.ApplyStyles()
+    }
+
+    static ApplyStyles() {
+        UiStyle.RoundButtons([
+            this.HoldRecordBtn,
+            this.FreeRecordBtn,
+            this.AutoSendRecordBtn,
+            this.CancelRecordBtn,
+            this.DouBaoRecordBtn,
+            this.SaveBtn,
+            this.CancelBtn
+        ], 4)
     }
 
     ; 隐藏主窗口
@@ -453,15 +471,15 @@ class GuiManager {
 
         ; 更新按钮文字
         if mode = "hold"
-            this.HoldRecordBtn.Text := "按下..."
+            UiStyle.SetControlText(this.HoldRecordBtn, "按下...")
         else if mode = "free"
-            this.FreeRecordBtn.Text := "按下..."
+            UiStyle.SetControlText(this.FreeRecordBtn, "按下...")
         else if mode = "autoSend"
-            this.AutoSendRecordBtn.Text := "按下..."
+            UiStyle.SetControlText(this.AutoSendRecordBtn, "按下...")
         else if mode = "cancel"
-            this.CancelRecordBtn.Text := "按下..."
+            UiStyle.SetControlText(this.CancelRecordBtn, "按下...")
         else if mode = "doubao"
-            this.DouBaoRecordBtn.Text := "按下..."
+            UiStyle.SetControlText(this.DouBaoRecordBtn, "按下...")
 
         this.UpdateStatus("请按下要设置的按键（支持组合键如 Ctrl+D）...")
 
@@ -626,15 +644,15 @@ class GuiManager {
 
         ; 恢复按钮文字
         if this.RecordingFor = "hold"
-            this.HoldRecordBtn.Text := "录制"
+            UiStyle.SetControlText(this.HoldRecordBtn, "录制")
         else if this.RecordingFor = "free"
-            this.FreeRecordBtn.Text := "录制"
+            UiStyle.SetControlText(this.FreeRecordBtn, "录制")
         else if this.RecordingFor = "autoSend"
-            this.AutoSendRecordBtn.Text := "录制"
+            UiStyle.SetControlText(this.AutoSendRecordBtn, "录制")
         else if this.RecordingFor = "cancel"
-            this.CancelRecordBtn.Text := "录制"
+            UiStyle.SetControlText(this.CancelRecordBtn, "录制")
         else if this.RecordingFor = "doubao"
-            this.DouBaoRecordBtn.Text := "录制"
+            UiStyle.SetControlText(this.DouBaoRecordBtn, "录制")
 
         ; 检测是否是纯修饰键组合（无法注册为热键）
         if this.IsPureModifierCombo(ahkKey) {

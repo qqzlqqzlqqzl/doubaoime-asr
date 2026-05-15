@@ -13,6 +13,7 @@ SetWorkingDir(A_ScriptDir)
 #Include clipboard.ahk
 #Include window.ahk
 #Include hotkey.ahk
+#Include ui_style.ahk
 #Include gui.ahk
 #Include doubao.ahk
 #Include bridge.ahk

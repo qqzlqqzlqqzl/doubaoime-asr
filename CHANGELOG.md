@@ -1,5 +1,20 @@
 # 变更记录
 
+## 2026-05-15：设置页和悬浮窗动作按钮小圆角
+
+- 新增轻量 `UiStyle` 辅助，对设置页 `录制 / 保存 / 取消` 和悬浮窗 `清空 / 复制 / 插入` 动作按钮应用 DPI 感知的小圆角，保持参考客户端的紧凑布局。
+- 按钮文字更新改为兼容文本式按钮和原生按钮的统一写法，避免热键录制时 `录制 / 按下...` 状态不刷新。
+
+### 本轮验证
+
+- `build-desktop-exe.ps1`：通过，重新生成 `dist` 和 `release` 产物。
+- `.venv\Scripts\python.exe -m pytest -q`：`16 passed, 1 warning`。
+- AHK 源码 `--float-self-test`：通过。
+- 安装版设置页真实点击第一枚 `录制` 按钮：通过，按钮进入 `按下...` 录制态，证据 `release\test-reports\installed-rounded-small-buttons-click-record-final.json`。
+- 安装目录已覆盖新版 `DoubaoASRHelper.exe`；`test-startup-performance.ps1` 安装版重复复测 5 次完整 UI ready 为 `479 / 375 / 493 / 485 / 433ms`。
+- DPI-aware 截图证据：`release\test-reports\installed-rounded-small-buttons-settings.png`、`release\test-reports\source-rounded-small-buttons-record-crop.png`、`release\test-reports\source-rounded-small-buttons-save-crop.png`、`release\test-reports\source-rounded-small-buttons-float.png`。
+- `test-desktop-exe.ps1`：通过，输出 `AHK bridge desktop tests passed.`。
+
 ## 2026-05-15：首屏启动 500ms 内完整可用
 
 - 根因修复：AHK 主程序启动时不再同步等待 PyInstaller one-file 的 `asr_bridge.exe` 解包和 `/health` 检查。旧逻辑在首屏前调用 `BridgeClient.EnsureRunning()`，冷启动会把设置页显示直接拖到约 5 秒。

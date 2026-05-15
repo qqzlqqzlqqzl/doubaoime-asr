@@ -69,9 +69,9 @@ class VoiceFloat {
         this.FloatGui.SetFont("s11 c5B75B7", "Microsoft YaHei")
         this.CloseCtrl := this.FloatGui.AddText("x424 y69 w20 h22 Center BackgroundTrans", "×")
         this.FloatGui.SetFont("s9 c555B6E", "Microsoft YaHei")
-        this.ClearBtn := this.FloatGui.AddButton("x220 y132 w56 h24", "清空")
-        this.CopyBtn := this.FloatGui.AddButton("x284 y132 w56 h24", "复制")
-        this.InsertBtn := this.FloatGui.AddButton("x348 y132 w72 h24 Default", "插入")
+        this.ClearBtn := this.FloatGui.AddText("x220 y132 w56 h24 Center Border BackgroundF7F8FA c30343B 0x200", "清空")
+        this.CopyBtn := this.FloatGui.AddText("x284 y132 w56 h24 Center Border BackgroundF7F8FA c30343B 0x200", "复制")
+        this.InsertBtn := this.FloatGui.AddText("x348 y132 w72 h24 Center Border BackgroundEFF6FF c2563EB 0x200", "插入")
         this.ClearBtn.OnEvent("Click", (*) => this.ClearText())
         this.CopyBtn.OnEvent("Click", (*) => this.CopyText())
         this.InsertBtn.OnEvent("Click", (*) => this.InsertText())
@@ -87,10 +87,15 @@ class VoiceFloat {
         x := Round((A_ScreenWidth - this.Width) / 2)
         y := Round(A_ScreenHeight * 0.62)
         this.FloatGui.Show("NA x" . x . " y" . y . " w" . this.Width . " h" . this.Height)
+        this.ApplyStyles()
         try {
             WinSetAlwaysOnTop(1, this.FloatGui.Hwnd)
             WinSetTransparent(245, this.FloatGui.Hwnd)
         }
+    }
+
+    static ApplyStyles() {
+        UiStyle.RoundButtons([this.ClearBtn, this.CopyBtn, this.InsertBtn], 4)
     }
 
     static SetMode(mode) {
