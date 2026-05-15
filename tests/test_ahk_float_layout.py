@@ -45,3 +45,9 @@ def test_float_result_mode_hides_wave_canvas() -> None:
     source = FLOAT_AHK.read_text(encoding="utf-8")
 
     assert "this.WaveCanvasCtrl.Visible := !visible" in source
+
+
+def test_float_window_is_opaque_to_avoid_background_bleed() -> None:
+    source = FLOAT_AHK.read_text(encoding="utf-8")
+
+    assert "WinSetTransparent(255, this.FloatGui.Hwnd)" in source

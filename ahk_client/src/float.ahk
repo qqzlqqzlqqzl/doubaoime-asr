@@ -88,7 +88,7 @@ class VoiceFloat {
         this.ApplyStyles()
         try {
             WinSetAlwaysOnTop(1, this.FloatGui.Hwnd)
-            WinSetTransparent(245, this.FloatGui.Hwnd)
+            WinSetTransparent(255, this.FloatGui.Hwnd)
         }
     }
 
