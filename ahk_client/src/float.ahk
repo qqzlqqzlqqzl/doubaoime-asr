@@ -13,7 +13,8 @@ class VoiceFloat {
     static MicCircleCtrl := ""
     static MicIconCtrl := ""
     static CloseCtrl := ""
-    static WaveBars := []
+    static WaveCanvasCtrl := ""
+    static WaveBitmap := 0
     static ResultBgCtrl := ""
     static ResultMicCtrl := ""
     static ResultTextCtrl := ""
@@ -29,53 +30,54 @@ class VoiceFloat {
     static Height := 166
     static WaveTick := 0
     static WaveTimer := 0
-    static WaveMaxHeights := []
+    static WaveSlotHeights := [4, 4, 4, 5, 4, 5, 5, 6, 5, 6, 7, 9, 12, 18, 24, 28, 24, 18, 12, 9, 7, 6, 5, 6, 5, 5, 4, 5, 4, 4]
 
     static Ensure() {
         if this.FloatGui != ""
             return
 
         this.FloatGui := Gui("+AlwaysOnTop -Caption +ToolWindow +Border +E0x08000000", "DoubaoASRHelperFloat")
-        this.FloatGui.BackColor := "DDEBFF"
+        this.FloatGui.BackColor := "FFFFFF"
         this.FloatGui.MarginX := 0
         this.FloatGui.MarginY := 0
-        this.FloatGui.SetFont("s1 cFFFFFF", "Microsoft YaHei")
-        this.TitleCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
-        this.GearCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
-        this.MinCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
+        this.FloatGui.SetFont("s11 c233A63", "Microsoft YaHei")
+        this.TitleCtrl := this.FloatGui.AddText("x28 y16 w105 h28 BackgroundTrans", "普通话  ▸")
+        this.FloatGui.SetFont("s18 c6F7896", "Segoe MDL2 Assets")
+        this.GearCtrl := this.FloatGui.AddText("x365 y14 w28 h28 Center BackgroundTrans", Chr(0xE713))
+        this.FloatGui.SetFont("s15 c6F7896", "Microsoft YaHei")
+        this.MinCtrl := this.FloatGui.AddText("x424 y13 w24 h28 Center BackgroundTrans", "−")
 
         this.FloatGui.SetFont("s1 cFFFFFF", "Microsoft YaHei")
         this.MicCircleCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
         this.MicIconCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
 
-        for index, height in [4, 5, 4, 6, 5, 4, 6, 7, 5, 6, 8, 10, 13, 18, 24, 28, 24, 18, 13, 10, 8, 7, 6, 6, 5, 4, 5, 4] {
-            this.WaveMaxHeights.Push(height)
-            x := 60 + ((index - 1) * 12)
-            y := 18 - Round(height / 2)
-            this.WaveBars.Push(this.FloatGui.AddProgress("x" . x . " y" . y . " w4 h" . height . " c93C5FD BackgroundD7E8FF Range0-100 -Smooth", 100))
-        }
+        this.WaveCanvasCtrl := this.FloatGui.AddPicture("x84 y70 w308 h44 0xE", "")
 
         this.FloatGui.SetFont("s1 cFFFFFF", "Microsoft YaHei")
         this.HintCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
         this.FloatGui.SetFont("s10 c65708E", "Microsoft YaHei")
         this.StateCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
         this.TextCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
+        this.FloatGui.SetFont("s14 c5A6688", "Microsoft YaHei")
+        this.HintCtrl := this.FloatGui.AddText("x118 y124 w240 h34 Center BackgroundTrans", "点击结束语音输入")
 
-        this.ResultBgCtrl := this.FloatGui.AddText("x12 y34 w432 h120 BackgroundEAF3FF", "")
+        this.ResultBgCtrl := this.FloatGui.AddText("x24 y62 w428 h104 BackgroundFFFFFF", "")
         this.FloatGui.SetFont("s19 c2563EB", "Segoe MDL2 Assets")
-        this.ResultMicCtrl := this.FloatGui.AddText("x28 y54 w30 h34 Center BackgroundTrans", Chr(0xE720))
+        this.ResultMicCtrl := this.FloatGui.AddText("x64 y78 w34 h38 Center BackgroundTrans", Chr(0xE720))
         this.FloatGui.SetFont("s11 c243B63", "Microsoft YaHei")
-        this.ResultTextCtrl := this.FloatGui.AddEdit("x68 y46 w334 h66 ReadOnly +Multi +VScroll -E0x200 -Border c243B63 BackgroundEAF3FF", "识别内容会显示在这里")
+        this.ResultTextCtrl := this.FloatGui.AddEdit("x132 y68 w258 h72 ReadOnly +Multi +VScroll -E0x200 -Border c243B63 BackgroundFFFFFF", "识别内容会显示在这里")
         this.FloatGui.SetFont("s11 c5B75B7", "Microsoft YaHei")
-        this.CloseCtrl := this.FloatGui.AddText("x416 y42 w20 h22 Center BackgroundTrans", "×")
+        this.CloseCtrl := this.FloatGui.AddText("x424 y69 w20 h22 Center BackgroundTrans", "×")
         this.FloatGui.SetFont("s9 c555B6E", "Microsoft YaHei")
-        this.ClearBtn := this.FloatGui.AddButton("x220 y120 w56 h26", "清空")
-        this.CopyBtn := this.FloatGui.AddButton("x284 y120 w56 h26", "复制")
-        this.InsertBtn := this.FloatGui.AddButton("x348 y120 w72 h26 Default", "插入")
+        this.ClearBtn := this.FloatGui.AddButton("x220 y132 w56 h24", "清空")
+        this.CopyBtn := this.FloatGui.AddButton("x284 y132 w56 h24", "复制")
+        this.InsertBtn := this.FloatGui.AddButton("x348 y132 w72 h24 Default", "插入")
         this.ClearBtn.OnEvent("Click", (*) => this.ClearText())
         this.CopyBtn.OnEvent("Click", (*) => this.CopyText())
         this.InsertBtn.OnEvent("Click", (*) => this.InsertText())
         this.CloseCtrl.OnEvent("Click", (*) => this.Hide())
+        this.ShowResultBox(false)
+        this.UpdateVolume(0)
     }
 
     static Show(text := "开始说话...", state := "正在聆听", mode := "ready") {
@@ -100,8 +102,7 @@ class VoiceFloat {
         showMic := mode = "ready" || mode = "starting"
         this.MicCircleCtrl.Visible := false
         this.MicIconCtrl.Visible := false
-        for bar in this.WaveBars
-            bar.Visible := true
+        this.WaveCanvasCtrl.Visible := true
         if showMic {
             this.StopWave()
         } else {
@@ -118,6 +119,7 @@ class VoiceFloat {
         if text != "" {
             this.LastText := text
             this.TextCtrl.Value := ""
+            this.HintCtrl.Visible := false
             this.ResultTextCtrl.Value := this.FormatResultText(text)
             this.ScrollResultToLatest()
             this.ShowResultBox(true)
@@ -125,6 +127,8 @@ class VoiceFloat {
             this.TextCtrl.Value := ""
             this.ResultTextCtrl.Value := "识别内容会显示在这里"
             this.ScrollResultToLatest()
+            this.HintCtrl.Visible := true
+            this.ShowResultBox(false)
         }
     }
 
@@ -156,23 +160,72 @@ class VoiceFloat {
             level := 0
         level := Max(0, Min(100, Integer(level)))
         this.WaveTick += 1
-        colors := ["BFDBFE", "93C5FD", "60A5FA", "3B82F6", "2563EB", "1D4ED8"]
-        for index, bar in this.WaveBars {
-            maxHeight := this.WaveMaxHeights[index]
-            wave := 0.78 + (0.22 * Sin((this.WaveTick + index * 5) / 3.6))
-            centerBoost := index >= 12 && index <= 18 ? 1.14 : 0.92
-            height := level < 3 ? 3 : Max(3, Round(maxHeight * level / 100 * wave * centerBoost))
-            width := level >= 35 && index >= 12 && index <= 18 ? 5 : 4
-            y := 18 - Round(height / 2)
-            colorIndex := level < 8 ? 1 : Min(colors.Length, 2 + Floor(level / 22))
-            if level >= 55 && index >= 12 && index <= 18
-                colorIndex := Min(colors.Length, colorIndex + 1)
-            try {
-                bar.Move(, y, width, height)
-                bar.Opt("c" . colors[colorIndex] . " BackgroundD7E8FF")
-                bar.Value := 100
-            }
+        this.RenderWaveSlots(level)
+    }
+
+    static RenderWaveSlots(level := 0) {
+        if this.WaveCanvasCtrl = ""
+            return
+        width := 308
+        height := 44
+        screenDc := DllCall("User32\GetDC", "ptr", 0, "ptr")
+        memDc := DllCall("Gdi32\CreateCompatibleDC", "ptr", screenDc, "ptr")
+        hBitmap := DllCall("Gdi32\CreateCompatibleBitmap", "ptr", screenDc, "int", width, "int", height, "ptr")
+        oldBitmap := DllCall("Gdi32\SelectObject", "ptr", memDc, "ptr", hBitmap, "ptr")
+
+        bgBrush := DllCall("Gdi32\CreateSolidBrush", "uint", this.ColorRef("FFFFFF"), "ptr")
+        rc := Buffer(16, 0)
+        NumPut("int", 0, "int", 0, "int", width, "int", height, rc)
+        DllCall("User32\FillRect", "ptr", memDc, "ptr", rc, "ptr", bgBrush)
+        DllCall("Gdi32\DeleteObject", "ptr", bgBrush)
+
+        slotWidth := 4
+        slotGap := 8
+        totalWidth := (this.WaveSlotHeights.Length * slotWidth) + ((this.WaveSlotHeights.Length - 1) * slotGap)
+        startX := Round((width - totalWidth) / 2)
+        centerY := Round(height / 2)
+        activeColor := this.ColorRef("5B7CFA")
+        quietColor := this.ColorRef("4F75FF")
+
+        for index, baseHeight in this.WaveSlotHeights {
+            wave := 0.86 + (0.14 * Sin((this.WaveTick + index * 3) / 4.2))
+            centerBoost := index >= 13 && index <= 18 ? 1.2 : 0.92
+            slotHeight := level < 3 ? baseHeight : Max(4, Round(baseHeight * Max(level, 18) / 72 * wave * centerBoost))
+            slotHeight := Min(32, slotHeight)
+            x := startX + ((index - 1) * (slotWidth + slotGap))
+            y := centerY - Round(slotHeight / 2)
+            color := level < 3 ? quietColor : activeColor
+            this.DrawRoundedSlot(memDc, x, y, slotWidth, slotHeight, color)
         }
+
+        DllCall("Gdi32\SelectObject", "ptr", memDc, "ptr", oldBitmap)
+        DllCall("Gdi32\DeleteDC", "ptr", memDc)
+        DllCall("User32\ReleaseDC", "ptr", 0, "ptr", screenDc)
+        oldImage := DllCall("User32\SendMessageW", "ptr", this.WaveCanvasCtrl.Hwnd, "uint", 0x0172, "ptr", 0, "ptr", hBitmap, "ptr")
+        if oldImage
+            DllCall("Gdi32\DeleteObject", "ptr", oldImage)
+        if this.WaveBitmap && this.WaveBitmap != oldImage
+            DllCall("Gdi32\DeleteObject", "ptr", this.WaveBitmap)
+        this.WaveBitmap := hBitmap
+        DllCall("User32\InvalidateRect", "ptr", this.WaveCanvasCtrl.Hwnd, "ptr", 0, "int", true)
+    }
+
+    static DrawRoundedSlot(hdc, x, y, width, height, colorRef) {
+        brush := DllCall("Gdi32\CreateSolidBrush", "uint", colorRef, "ptr")
+        pen := DllCall("Gdi32\CreatePen", "int", 0, "int", 1, "uint", colorRef, "ptr")
+        oldBrush := DllCall("Gdi32\SelectObject", "ptr", hdc, "ptr", brush, "ptr")
+        oldPen := DllCall("Gdi32\SelectObject", "ptr", hdc, "ptr", pen, "ptr")
+        radius := Max(width, Min(height, width * 2))
+        DllCall("Gdi32\RoundRect", "ptr", hdc, "int", x, "int", y, "int", x + width, "int", y + height, "int", radius, "int", radius)
+        DllCall("Gdi32\SelectObject", "ptr", hdc, "ptr", oldBrush)
+        DllCall("Gdi32\SelectObject", "ptr", hdc, "ptr", oldPen)
+        DllCall("Gdi32\DeleteObject", "ptr", brush)
+        DllCall("Gdi32\DeleteObject", "ptr", pen)
+    }
+
+    static ColorRef(hex) {
+        value := Integer("0x" . hex)
+        return ((value & 0xFF) << 16) | (value & 0xFF00) | ((value >> 16) & 0xFF)
     }
 
     static ClearText() {
@@ -180,6 +233,8 @@ class VoiceFloat {
         this.TextCtrl.Value := ""
         this.ResultTextCtrl.Value := "识别内容会显示在这里"
         this.ScrollResultToLatest()
+        this.HintCtrl.Visible := true
+        this.ShowResultBox(false)
         Logger.Info("float_clear")
     }
 
@@ -224,6 +279,9 @@ class VoiceFloat {
         if this.ResultTextCtrl != ""
             this.ResultTextCtrl.Value := "识别内容会显示在这里"
         this.ScrollResultToLatest()
+        if this.HintCtrl != ""
+            this.HintCtrl.Visible := true
+        this.ShowResultBox(false)
         this.Mode := ""
     }
 }

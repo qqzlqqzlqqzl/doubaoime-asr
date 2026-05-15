@@ -1,5 +1,20 @@
 # 变更记录
 
+## 2026-05-15：悬浮窗圆头槽形波形
+
+- 悬浮窗波形从多个 Windows `Progress` 控件改为单个 `Picture` 画布，使用 GDI `RoundRect` 自绘圆头细竖槽，避免出现硬边长方形控件感。
+- 说话提示态恢复为参考图式白底布局：左上 `普通话`，右上设置/最小化，中部槽形波形，底部 `点击结束语音输入`。
+- 识别结果态仍保留长文本只读框和 `清空 / 复制 / 插入` 操作，修复本次布局调整后按钮被底部裁切的问题。
+- 静态防回退检查：`ahk_client/src/float.ahk` 不再包含 `AddProgress`、`WaveBars` 或旧 `WaveMaxHeights`。
+
+### 本轮验证
+
+- AHK 源码 `--float-self-test`：通过。
+- `build-desktop-exe.ps1`：通过。
+- `.venv\Scripts\python.exe -m pytest -q`：`16 passed, 1 warning`。
+- `test-desktop-exe.ps1`：前置 bridge/浮窗/客户端 smoke 通过，安装器阶段被 Windows 应用控制策略拦截未签名 `DoubaoASRHelperSetup.exe`，因此完整安装器烟测不按通过计算。
+- 安装版截图：`release\test-reports\installed-float-slot-prompt.png` 和 `release\test-reports\installed-float-slot-result.png`。
+
 ## 2026-05-14：悬浮窗长句滚动与蓝色音量条
 
 - 悬浮窗识别结果区从静态 `Text` 改为只读多行 `Edit`，不再把长句截断到 96 字；每次实时文本更新后会通过 Win32 消息把光标和滚动位置追到最新内容。
