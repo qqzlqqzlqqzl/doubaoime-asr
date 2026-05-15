@@ -40,6 +40,8 @@
 
 悬浮窗结果文字空白修复备注：2026-05-15，用户截图显示结果态框内文字和图标全部空白，只剩边框与底部按钮。排查确认系统控件 `child_texts` 仍能读到识别文本，问题是装饰背景框遮挡而非 ASR 或赋值失败。修复后安装版 DWM 截图 `release/test-reports/installed-float-result-text-visible-dwm.png` 可见结果文字、麦克风图标、关闭按钮和底部按钮；JSON `installed-float-result-text-visible-dwm.json` 仍包含完整长文本。验证 `.venv\Scripts\python.exe -m pytest -q` 与 `-W error` 均为 `33 passed`，`test-desktop-exe.ps1` 通过，安装版首屏 1 秒口径 `startup-performance-float-text-visible-1s.json` 通过。
 
+悬浮窗结果态空白区域收紧备注：2026-05-15，用户红框指出结果态顶部、左侧、底部和右侧空白过多。本轮安装版截图 `release/test-reports/installed-float-result-compact-no-empty-dwm.png` 显示结果态物理尺寸 `842x238`，文字框贴近左上，隐藏结果态大麦克风、齿轮和最小化入口，底部按钮上移；旧结果态截图 `installed-float-result-text-visible-dwm.png` 为约 `914x306`。验证 `.venv\Scripts\python.exe -m pytest -q` 与 `-W error` 均为 `33 passed`，`test-desktop-exe.ps1` 通过，安装版首屏 `startup-performance-float-compact-no-empty-1s.json` 为 `372 / 427 / 402 / 437 / 448ms`。
+
 AHK bridge 改造备注：2026-05-14，本轮将主客户端切换为 `xiaohu31/doubao-voice-helper` 风格的 AutoHotkey v2 客户端，Python 新增 `asr_bridge.exe` 只提供本地 HTTP `start/stop/cancel/status/health`。`build-desktop-exe.ps1` 已改为构建 AHK 主程序 `DoubaoASRHelper.exe` 和 Python 后端 `asr_bridge.exe`；便携包和安装包都包含两个 EXE。验证：源码和打包版 bridge self-test 通过，打包版 `/health` 和 `/status` 返回 `ok=true/state=idle`，AHK 主程序启动后能自动拉起 bridge，静默安装目录包含 `DoubaoASRHelper.exe`、`asr_bridge.exe` 和 `install.json`，`test-desktop-exe.ps1` 输出 `AHK bridge desktop tests passed.`。
 
 AHK 悬浮窗和不卡 UI 修复：2026-05-14，新增 `ahk_client/src/float.ahk`，录音期间显示本地悬浮窗并通过 `/status` 轮询实时转写；松手后改用非阻塞 `/stop`，由 AHK 定时器轮询完成状态，避免同步等待 ASR 时冻结主界面。验证：AHK 编译通过，`build-desktop-exe.ps1` 成功，`test-desktop-exe.ps1` 输出 `AHK bridge desktop tests passed.`，`python -m pytest -q` 为 `16 passed`，正式 `dist\DoubaoASRHelper.exe` 启动后仍能自动拉起 `asr_bridge.exe` 且 `/health` 为 `ok=true`。

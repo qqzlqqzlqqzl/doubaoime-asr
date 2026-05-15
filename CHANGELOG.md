@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-05-15：收紧悬浮窗结果态空白区域
+
+- 按用户红框标注继续压缩结果态浮窗空白：结果态窗口宽度从 `456` 收到 `420`，结果态高度单独压到 `118`，不再沿用录音态 `152` 高度。
+- 结果文字框从 `x104 y48 w292 h66` 改为 `x18 y14 w354 h68`，直接贴近左上并占用主要可用空间。
+- 结果态隐藏大麦克风占位、齿轮和最小化入口，只保留关闭 `×`、结果文字和 `清空 / 复制 / 插入`，避免顶部、左侧和右侧大块空白。
+- 底部按钮上移到 `y88`，整体物理截图高度从约 `306px` 降到 `238px`。
+- 更新 `tests/test_ahk_float_layout.py`，断言结果态独立高度、紧凑宽度、文字框左上扩展、隐藏结果态图标占位。
+- 验证：`.venv\Scripts\python.exe -m pytest -q` 和 `-W error` 均为 `33 passed`；源码和安装版 `--float-self-test` 通过；安装版截图 `release\test-reports\installed-float-result-compact-no-empty-dwm.png` 为 `842x238` 物理像素；`build-desktop-exe.ps1` 与 `test-desktop-exe.ps1` 通过；安装版首屏 `startup-performance-float-compact-no-empty-1s.json` 为 `372 / 427 / 402 / 437 / 448ms`。
+- 本地安装目录 `%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖新版，哈希与 `dist` 一致。
+
 ## 2026-05-15：修复悬浮窗结果态文字空白
 
 - 修复用户截图中悬浮窗结果态只剩边框和按钮、结果文字/麦克风/关闭/右上图标不可见的问题。

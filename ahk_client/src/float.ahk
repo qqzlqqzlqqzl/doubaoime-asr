@@ -27,8 +27,9 @@ class VoiceFloat {
     static LastText := ""
     static Mode := ""
     static InsertCallback := ""
-    static Width := 456
+    static Width := 420
     static Height := 152
+    static ResultHeight := 118
     static WaveTick := 0
     static WaveTimer := 0
     static WaveSlotHeights := [4, 4, 4, 5, 4, 5, 5, 6, 5, 6, 7, 9, 12, 18, 24, 28, 24, 18, 12, 9, 7, 6, 5, 6, 5, 5, 4, 5, 4, 4]
@@ -43,35 +44,35 @@ class VoiceFloat {
         this.FloatGui.MarginY := 0
         this.FloatGui.SetFont("s11 c233A63", "Microsoft YaHei")
         this.TitleCtrl := this.FloatGui.AddText("x28 y16 w105 h28 BackgroundTrans", "")
-        this.TopPanelCtrl := this.FloatGui.AddText("x354 y10 w86 h36 Border BackgroundFFFFFF", "")
+        this.TopPanelCtrl := this.FloatGui.AddText("x330 y8 w78 h34 Border BackgroundFFFFFF", "")
         this.FloatGui.SetFont("s17 c6F7896", "Segoe MDL2 Assets")
-        this.GearCtrl := this.FloatGui.AddText("x368 y14 w28 h28 Center BackgroundTrans", Chr(0xE713))
+        this.GearCtrl := this.FloatGui.AddText("x342 y12 w28 h28 Center BackgroundTrans", Chr(0xE713))
         this.FloatGui.SetFont("s13 c6F7896", "Microsoft YaHei")
-        this.MinCtrl := this.FloatGui.AddText("x414 y14 w18 h26 Center BackgroundTrans", "−")
+        this.MinCtrl := this.FloatGui.AddText("x386 y12 w18 h26 Center BackgroundTrans", "−")
 
         this.FloatGui.SetFont("s1 cFFFFFF", "Microsoft YaHei")
         this.MicCircleCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
         this.MicIconCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
 
-        this.WaveCanvasCtrl := this.FloatGui.AddPicture("x52 y70 w352 h44 0xE", "")
+        this.WaveCanvasCtrl := this.FloatGui.AddPicture("x34 y70 w352 h44 0xE", "")
 
         this.FloatGui.SetFont("s10 c65708E", "Microsoft YaHei")
         this.StateCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
         this.TextCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
         this.FloatGui.SetFont("s14 c5A6688", "Microsoft YaHei")
-        this.HintCtrl := this.FloatGui.AddText("x118 y124 w240 h34 Center BackgroundTrans", "点击结束语音输入")
+        this.HintCtrl := this.FloatGui.AddText("x90 y124 w240 h34 Center BackgroundTrans", "点击结束语音输入")
 
         this.ResultBgCtrl := this.FloatGui.AddText("x18 y42 w420 h78 Border BackgroundFFFFFF", "")
         this.FloatGui.SetFont("s19 c2563EB", "Segoe MDL2 Assets")
-        this.ResultMicCtrl := this.FloatGui.AddText("x54 y62 w36 h36 Center BackgroundTrans", Chr(0xE720))
+        this.ResultMicCtrl := this.FloatGui.AddText("x0 y0 w1 h1 Center BackgroundTrans", Chr(0xE720))
         this.FloatGui.SetFont("s11 c243B63", "Microsoft YaHei")
-        this.ResultTextCtrl := this.FloatGui.AddText("x104 y48 w292 h66 Border BackgroundFFFFFF c243B63", "识别内容会显示在这里")
+        this.ResultTextCtrl := this.FloatGui.AddText("x18 y14 w354 h68 Border BackgroundFFFFFF c243B63", "识别内容会显示在这里")
         this.FloatGui.SetFont("s11 c5B75B7", "Microsoft YaHei")
-        this.CloseCtrl := this.FloatGui.AddText("x410 y54 w20 h22 Center BackgroundTrans", "×")
+        this.CloseCtrl := this.FloatGui.AddText("x386 y38 w20 h22 Center BackgroundTrans", "×")
         this.FloatGui.SetFont("s9 c555B6E", "Microsoft YaHei")
-        this.ClearBtn := this.FloatGui.AddText("x188 y122 w58 h26 Center Border BackgroundF7F8FA c30343B 0x200", "清空")
-        this.CopyBtn := this.FloatGui.AddText("x252 y122 w58 h26 Center Border BackgroundF7F8FA c30343B 0x200", "复制")
-        this.InsertBtn := this.FloatGui.AddText("x316 y122 w72 h26 Center Border BackgroundEFF6FF c2563EB 0x200", "插入")
+        this.ClearBtn := this.FloatGui.AddText("x170 y88 w58 h26 Center Border BackgroundF7F8FA c30343B 0x200", "清空")
+        this.CopyBtn := this.FloatGui.AddText("x234 y88 w58 h26 Center Border BackgroundF7F8FA c30343B 0x200", "复制")
+        this.InsertBtn := this.FloatGui.AddText("x298 y88 w72 h26 Center Border BackgroundEFF6FF c2563EB 0x200", "插入")
         this.ClearBtn.OnEvent("Click", (*) => this.ClearText())
         this.CopyBtn.OnEvent("Click", (*) => this.CopyText())
         this.InsertBtn.OnEvent("Click", (*) => this.InsertText())
@@ -86,7 +87,7 @@ class VoiceFloat {
         this.Update(text, state)
         x := Round((A_ScreenWidth - this.Width) / 2)
         y := Round(A_ScreenHeight * 0.62)
-        this.FloatGui.Show("NA x" . x . " y" . y . " w" . this.Width . " h" . this.Height)
+        this.FloatGui.Show("NA x" . x . " y" . y . " w" . this.Width . " h" . this.CurrentHeight())
         this.ApplyStyles()
         try {
             WinSetAlwaysOnTop(1, this.FloatGui.Hwnd)
@@ -131,17 +132,22 @@ class VoiceFloat {
             this.ResultTextCtrl.Value := this.FormatResultText(text)
             this.ScrollResultToLatest()
             this.ShowResultBox(true)
+            this.ResizeForContent()
         } else if this.LastText = "" {
             this.TextCtrl.Value := ""
             this.ResultTextCtrl.Value := "识别内容会显示在这里"
             this.ScrollResultToLatest()
             this.HintCtrl.Visible := true
             this.ShowResultBox(false)
+            this.ResizeForContent()
         }
     }
 
     static ShowResultBox(visible := true) {
-        for ctrl in [this.ResultMicCtrl, this.ResultTextCtrl, this.CloseCtrl, this.ClearBtn, this.CopyBtn, this.InsertBtn]
+        this.ResultMicCtrl.Visible := false
+        this.GearCtrl.Visible := !visible
+        this.MinCtrl.Visible := !visible
+        for ctrl in [this.ResultTextCtrl, this.CloseCtrl, this.ClearBtn, this.CopyBtn, this.InsertBtn]
             ctrl.Visible := visible
         this.HideDecorationControls()
         if this.WaveCanvasCtrl != ""
@@ -155,6 +161,19 @@ class VoiceFloat {
             this.TopPanelCtrl.Visible := false
         if this.ResultBgCtrl != ""
             this.ResultBgCtrl.Visible := false
+    }
+
+    static CurrentHeight() {
+        return this.LastText != "" ? this.ResultHeight : this.Height
+    }
+
+    static ResizeForContent() {
+        if this.FloatGui = ""
+            return
+        try {
+            if WinExist("ahk_id " . this.FloatGui.Hwnd)
+                this.FloatGui.Show("NA w" . this.Width . " h" . this.CurrentHeight())
+        }
     }
 
     static FormatResultText(text) {

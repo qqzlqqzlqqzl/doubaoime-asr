@@ -28,27 +28,30 @@ def test_float_result_text_does_not_overlap_action_buttons() -> None:
 
     for button in ("this.ClearBtn", "this.CopyBtn", "this.InsertBtn"):
         button_rect = _control_rect(source, button)
-        assert _bottom(result_text) <= button_rect[1] - 6, button
+        assert _bottom(result_text) <= button_rect[1] - 4, button
 
 
 def test_float_result_box_does_not_touch_window_bottom() -> None:
     source = FLOAT_AHK.read_text(encoding="utf-8")
-    height_match = re.search(r"static Height := (\d+)", source)
-    assert height_match, "VoiceFloat.Height not found"
+    height_match = re.search(r"static ResultHeight := (\d+)", source)
+    assert height_match, "VoiceFloat.ResultHeight not found"
     window_height = int(height_match.group(1))
-    result_bg = _control_rect(source, "this.ResultBgCtrl")
+    insert_btn = _control_rect(source, "this.InsertBtn")
 
-    assert _bottom(result_bg) <= window_height - 6
+    assert _bottom(insert_btn) <= window_height - 4
 
 
 def test_float_result_box_is_compact_but_taller() -> None:
     source = FLOAT_AHK.read_text(encoding="utf-8")
     result_text = _control_rect(source, "this.ResultTextCtrl")
-    result_bg = _control_rect(source, "this.ResultBgCtrl")
 
-    assert result_bg[1] <= 44
-    assert result_text[3] >= 64
+    assert result_text[0] <= 20
+    assert result_text[1] <= 20
+    assert result_text[2] >= 320
+    assert result_text[3] >= 68
     assert 'static Height := 152' in source
+    assert 'static ResultHeight := 118' in source
+    assert 'static Width := 420' in source
 
 
 def test_float_controls_keep_rounded_closed_outlines() -> None:
@@ -71,7 +74,11 @@ def test_float_result_text_keeps_visible_start_of_long_text() -> None:
 
     assert "this.ResultTextCtrl := this.FloatGui.AddText" in source
     assert "this.ResultTextCtrl := this.FloatGui.AddEdit" not in source
-    assert "this.ResultTextCtrl := this.FloatGui.AddText(\"x104 y48 w292 h66 Border" in source
+    assert "this.ResultTextCtrl := this.FloatGui.AddText(\"x18 y14 w354 h68 Border" in source
+    assert "this.ResultMicCtrl.Visible := false" in source
+    assert "this.GearCtrl.Visible := !visible" in source
+    assert "this.MinCtrl.Visible := !visible" in source
+    assert "this.FloatGui.Show(\"NA w\" . this.Width . \" h\" . this.CurrentHeight())" in source
     assert '"uint", 0x115, "ptr", 7' not in source
 
 
