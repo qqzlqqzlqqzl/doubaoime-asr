@@ -41,6 +41,25 @@ def test_float_result_box_does_not_touch_window_bottom() -> None:
     assert _bottom(result_bg) <= window_height - 6
 
 
+def test_float_result_box_is_compact_but_taller() -> None:
+    source = FLOAT_AHK.read_text(encoding="utf-8")
+    result_text = _control_rect(source, "this.ResultTextCtrl")
+    result_bg = _control_rect(source, "this.ResultBgCtrl")
+
+    assert result_bg[1] <= 44
+    assert result_text[3] >= 64
+    assert 'static Height := 152' in source
+
+
+def test_float_controls_keep_rounded_closed_outlines() -> None:
+    source = FLOAT_AHK.read_text(encoding="utf-8")
+
+    assert "this.TopPanelCtrl" in source
+    assert "this.ResultBgCtrl := this.FloatGui.AddText(\"x18 y42 w420 h78 Border" in source
+    assert "UiStyle.RoundControls([this.TopPanelCtrl, this.ResultBgCtrl], 7)" in source
+    assert "UiStyle.RoundButtons([this.ClearBtn, this.CopyBtn, this.InsertBtn], 5)" in source
+
+
 def test_float_result_mode_hides_wave_canvas() -> None:
     source = FLOAT_AHK.read_text(encoding="utf-8")
 

@@ -8,6 +8,7 @@ class VoiceFloat {
     static FloatGui := ""
     static TitleCtrl := ""
     static HintCtrl := ""
+    static TopPanelCtrl := ""
     static GearCtrl := ""
     static MinCtrl := ""
     static MicCircleCtrl := ""
@@ -27,7 +28,7 @@ class VoiceFloat {
     static Mode := ""
     static InsertCallback := ""
     static Width := 456
-    static Height := 166
+    static Height := 152
     static WaveTick := 0
     static WaveTimer := 0
     static WaveSlotHeights := [4, 4, 4, 5, 4, 5, 5, 6, 5, 6, 7, 9, 12, 18, 24, 28, 24, 18, 12, 9, 7, 6, 5, 6, 5, 5, 4, 5, 4, 4]
@@ -42,10 +43,11 @@ class VoiceFloat {
         this.FloatGui.MarginY := 0
         this.FloatGui.SetFont("s11 c233A63", "Microsoft YaHei")
         this.TitleCtrl := this.FloatGui.AddText("x28 y16 w105 h28 BackgroundTrans", "")
-        this.FloatGui.SetFont("s18 c6F7896", "Segoe MDL2 Assets")
-        this.GearCtrl := this.FloatGui.AddText("x365 y14 w28 h28 Center BackgroundTrans", Chr(0xE713))
-        this.FloatGui.SetFont("s15 c6F7896", "Microsoft YaHei")
-        this.MinCtrl := this.FloatGui.AddText("x424 y13 w24 h28 Center BackgroundTrans", "−")
+        this.TopPanelCtrl := this.FloatGui.AddText("x354 y10 w86 h36 Border BackgroundFFFFFF", "")
+        this.FloatGui.SetFont("s17 c6F7896", "Segoe MDL2 Assets")
+        this.GearCtrl := this.FloatGui.AddText("x368 y14 w28 h28 Center BackgroundTrans", Chr(0xE713))
+        this.FloatGui.SetFont("s13 c6F7896", "Microsoft YaHei")
+        this.MinCtrl := this.FloatGui.AddText("x414 y14 w18 h26 Center BackgroundTrans", "−")
 
         this.FloatGui.SetFont("s1 cFFFFFF", "Microsoft YaHei")
         this.MicCircleCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
@@ -59,17 +61,17 @@ class VoiceFloat {
         this.FloatGui.SetFont("s14 c5A6688", "Microsoft YaHei")
         this.HintCtrl := this.FloatGui.AddText("x118 y124 w240 h34 Center BackgroundTrans", "点击结束语音输入")
 
-        this.ResultBgCtrl := this.FloatGui.AddText("x24 y58 w428 h102 BackgroundFFFFFF", "")
+        this.ResultBgCtrl := this.FloatGui.AddText("x18 y42 w420 h78 Border BackgroundFFFFFF", "")
         this.FloatGui.SetFont("s19 c2563EB", "Segoe MDL2 Assets")
-        this.ResultMicCtrl := this.FloatGui.AddText("x58 y78 w36 h36 Center BackgroundTrans", Chr(0xE720))
+        this.ResultMicCtrl := this.FloatGui.AddText("x54 y62 w36 h36 Center BackgroundTrans", Chr(0xE720))
         this.FloatGui.SetFont("s11 c243B63", "Microsoft YaHei")
-        this.ResultTextCtrl := this.FloatGui.AddEdit("x112 y66 w292 h56 ReadOnly +Multi +VScroll -E0x200 -Border c243B63 BackgroundFFFFFF", "识别内容会显示在这里")
+        this.ResultTextCtrl := this.FloatGui.AddEdit("x104 y48 w292 h66 ReadOnly +Multi +VScroll -E0x200 -Border c243B63 BackgroundFFFFFF", "识别内容会显示在这里")
         this.FloatGui.SetFont("s11 c5B75B7", "Microsoft YaHei")
-        this.CloseCtrl := this.FloatGui.AddText("x424 y66 w20 h22 Center BackgroundTrans", "×")
+        this.CloseCtrl := this.FloatGui.AddText("x410 y54 w20 h22 Center BackgroundTrans", "×")
         this.FloatGui.SetFont("s9 c555B6E", "Microsoft YaHei")
-        this.ClearBtn := this.FloatGui.AddText("x220 y132 w56 h24 Center Border BackgroundF7F8FA c30343B 0x200", "清空")
-        this.CopyBtn := this.FloatGui.AddText("x284 y132 w56 h24 Center Border BackgroundF7F8FA c30343B 0x200", "复制")
-        this.InsertBtn := this.FloatGui.AddText("x348 y132 w72 h24 Center Border BackgroundEFF6FF c2563EB 0x200", "插入")
+        this.ClearBtn := this.FloatGui.AddText("x188 y122 w58 h26 Center Border BackgroundF7F8FA c30343B 0x200", "清空")
+        this.CopyBtn := this.FloatGui.AddText("x252 y122 w58 h26 Center Border BackgroundF7F8FA c30343B 0x200", "复制")
+        this.InsertBtn := this.FloatGui.AddText("x316 y122 w72 h26 Center Border BackgroundEFF6FF c2563EB 0x200", "插入")
         this.ClearBtn.OnEvent("Click", (*) => this.ClearText())
         this.CopyBtn.OnEvent("Click", (*) => this.CopyText())
         this.InsertBtn.OnEvent("Click", (*) => this.InsertText())
@@ -94,7 +96,8 @@ class VoiceFloat {
 
     static ApplyStyles() {
         UiStyle.RoundControl(this.FloatGui, 10)
-        UiStyle.RoundButtons([this.ClearBtn, this.CopyBtn, this.InsertBtn], 4)
+        UiStyle.RoundControls([this.TopPanelCtrl, this.ResultBgCtrl], 7)
+        UiStyle.RoundButtons([this.ClearBtn, this.CopyBtn, this.InsertBtn], 5)
     }
 
     static SetMode(mode) {

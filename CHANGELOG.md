@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-05-15：按标注收紧悬浮窗结果态布局
+
+- 按用户标注减少悬浮窗外层空白：窗口高度从 `166` 压到 `152`，识别结果区从 `y58` 上移到 `y42`。
+- 识别文本框高度从 `56` 增加到 `66`，结果区域可容纳更多文本，同时底部按钮仍保留足够间距。
+- 右上角设置/最小化区域新增封闭圆角边框，最小化符号缩小，避免看起来像散落的控件。
+- 结果框和底部 `清空 / 复制 / 插入` 按钮都应用更明确的小圆角，按钮位置收紧并对齐。
+- 新增 `tests/test_ahk_float_layout.py` 覆盖紧凑高度、结果框上移、文本框增高、右上封闭框和圆角按钮防回退。
+- 验证：`.venv\Scripts\python.exe -m pytest -q` 为 `28 passed`；`.venv\Scripts\python.exe -W error -m pytest -q` 为 `28 passed`；AHK 源码 `--float-self-test` 通过；`build-desktop-exe.ps1` 通过且 `release\test-reports\build-float-compact-reference.log` 无 warning/error 标记；`test-desktop-exe.ps1` 通过。
+- 本地安装目录 `%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖新版 `DoubaoASRHelper.exe` 和 `asr_bridge.exe`，哈希与 `dist` 产物一致。
+
 ## 2026-05-15：启动体检与冲突自动修复
 
 - 新增 `ahk_client/src/startup_doctor.ahk`，启动后会静默体检并修复常见冲突：旧版 `doubaoime-asr.bat`、重复 `Doubao ASR Helper.lnk`、当前标准 `豆包语音助手.lnk --hidden`、重复主进程和孤儿 `asr_bridge.exe`。
