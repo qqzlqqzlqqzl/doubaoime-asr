@@ -230,6 +230,7 @@ doubaoime-asr-desktop
 | 自动发送延迟 | `50ms` |
 
 工具会在后台监听全局热键，录音时显示悬浮窗，识别完成后把文本粘贴回开始录音前的窗口。按着说和按着说+自动发送结束时使用非阻塞 stop：松手后 AHK 不会卡住等待 ASR，而是继续轮询 bridge 的最终文本，拿到结果后自动插入。
+桌面快捷方式、开始菜单和免安装 EXE 的普通双击会直接打开设置界面；只有开机自启动快捷方式会带 `--hidden` 参数静默进托盘。
 首屏启动不再等待 Python bridge 冷启动；设置页和托盘先出现，`asr_bridge.exe` 随后在后台预热。当前安装版首屏完整 UI 性能用 `test-startup-performance.ps1` 验证，要求设置页窗口和关键控件全部在 `500ms` 内可见。
 配置和凭据缓存默认保存在 `%APPDATA%\DoubaoASRHelper`，因此打包后不依赖项目目录。
 如果检测到旧参考客户端目录 `%APPDATA%\DouBaoVoiceHelper\config.ini`，会自动迁移到 `%APPDATA%\DoubaoASRHelper\config.ini`，并把旧默认热键迁移为当前更安全的默认值。

@@ -22,6 +22,14 @@ SetWorkingDir(A_ScriptDir)
 Logger.Init()
 OnError(LogUnhandledError)
 
+HasLaunchArg(flag) {
+    for arg in A_Args {
+        if StrLower(arg) = StrLower(flag)
+            return true
+    }
+    return false
+}
+
 ; ============================================
 ; 语音流程控制器
 ; ============================================
@@ -39,11 +47,12 @@ class VoiceController {
     static FinishStartedAt := 0
 
     ; 初始化
-    static Init() {
+    static Init(showSettings := true) {
         Logger.Info("voice_controller_init")
         VoiceFloat.InsertCallback := ObjBindMethod(this, "ManualInsertFromFloat")
-        ; 加载配置并检查是否是首次运行（配置文件不存在）
-        isFirstRun := !Config.Init()
+        ; 加载配置
+        Config.Init()
+        Config.RefreshAutoStartShortcut()
 
         ; 设置热键回调
         HotkeyManager.SetCallbacks(
@@ -64,8 +73,8 @@ class VoiceController {
         ; 设置托盘
         this.SetupTray()
 
-        ; 如果是首次运行，弹出设置界面
-        if isFirstRun
+        ; 普通启动（桌面/开始菜单/免安装双击）直接打开设置界面；只有 --hidden 用于开机自启动静默进托盘。
+        if showSettings
             GuiManager.Show()
 
         ; 首屏显示后再后台预热 ASR bridge，避免 PyInstaller bridge 启动阻塞 UI。
@@ -603,7 +612,12 @@ if A_Args.Length > 0 && A_Args[1] = "--float-self-test" {
     ExitApp(0)
 }
 
-VoiceController.Init()
+if HasLaunchArg("--show-help") {
+    VoiceController.ShowHelp()
+    ExitApp(0)
+}
+
+VoiceController.Init(!HasLaunchArg("--hidden"))
 
 ; 保持脚本运行
 Persistent()

@@ -178,7 +178,7 @@ class Config {
 
         if enable {
             try {
-                FileCreateShortcut(A_ScriptFullPath, startupPath)
+                FileCreateShortcut(A_ScriptFullPath, startupPath, A_ScriptDir, "--hidden")
                 return true
             } catch {
                 return false
@@ -197,5 +197,11 @@ class Config {
     ; 检查是否已设置开机自启动
     static IsAutoStartEnabled() {
         return FileExist(A_Startup . "\豆包语音助手.lnk") ? true : false
+    }
+
+    static RefreshAutoStartShortcut() {
+        if this.IsAutoStartEnabled()
+            return this.SetAutoStart(true)
+        return true
     }
 }

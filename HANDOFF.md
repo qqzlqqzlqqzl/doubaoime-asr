@@ -6,6 +6,8 @@
 当前主要分支：`main`
 远端仓库：`https://github.com/qqzlqqzlqqzl/doubaoime-asr.git`
 
+最新未发布补丁：2026-05-15 桌面图标双击行为已改为直接打开设置界面。普通启动走 `VoiceController.Init(true)`，`--hidden` 才静默进托盘；`Config.SetAutoStart()` 创建/刷新开机自启动快捷方式时会写入 `--hidden` 参数。当前安装目录已覆盖新版，桌面快捷方式已刷新为无参数，验证证据为 `release/test-reports/desktop-shortcut-open-settings.json`、`installed-manual-open-existing-config.json`、`installed-hidden-launch-existing-config.json` 和截图 `installed-manual-open-existing-config.png`。
+
 当前最新大变更：`185e2a7 Audit upstream diffs and fix drift`。这一版把“为什么不用纯自写桌面壳、为什么要接入两个参考仓库、哪些 diff 是必要胶水、哪些 diff 已修成 bug”写进了 [CHANGELOG.md](CHANGELOG.md) 和 [UPSTREAM_DIFF_AUDIT.md](UPSTREAM_DIFF_AUDIT.md)。接手者必须先读这两份文档，否则很容易把 AHK 主客户端、Python bridge、旧 Python Tk 自测入口三者的职责搞混。
 
 最新未发布补丁：2026-05-15 首屏启动性能已收敛到 500ms 内完整 UI。根因是 `VoiceController.Init()` 原来在显示设置页前同步等待 PyInstaller one-file 的 `asr_bridge.exe` 启动并健康检查，冷启动证据 `release/test-reports/startup-before-fix.json` 为 `4962ms`。现在设置页/托盘先显示，随后 `SetTimer(() => BridgeClient.Warmup(), -50)` 后台预热 bridge；`BridgeClient.EnsureRunning()` 会复用 warmup 中的进程并等待其 healthy，避免首次热键触发时再启动第二个 bridge。新增 `test-startup-performance.ps1`，它枚举设置页子控件，要求三种模式、高级设置、保存/取消和状态栏全部在 `500ms` 内出现。当前安装目录证据 `startup-performance-installed.json` 为 `345 / 394 / 442 / 404 / 351ms`，便携版 `startup-performance-portable.json` 为 `428 / 300 / 316ms`。刚打包后 `dist` 首次 unsigned EXE 曾出现一次 `1043ms`，后续 `dist` 复测 `334 / 397 / 396 / 403 / 369ms`；这类首轮抖动更像 Windows 对新 unsigned EXE 的安全扫描，正式分发仍建议代码签名。
