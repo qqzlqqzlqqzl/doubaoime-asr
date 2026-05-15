@@ -41,7 +41,7 @@ class VoiceFloat {
         this.FloatGui.MarginX := 0
         this.FloatGui.MarginY := 0
         this.FloatGui.SetFont("s11 c233A63", "Microsoft YaHei")
-        this.TitleCtrl := this.FloatGui.AddText("x28 y16 w105 h28 BackgroundTrans", "普通话  ▸")
+        this.TitleCtrl := this.FloatGui.AddText("x28 y16 w105 h28 BackgroundTrans", "")
         this.FloatGui.SetFont("s18 c6F7896", "Segoe MDL2 Assets")
         this.GearCtrl := this.FloatGui.AddText("x365 y14 w28 h28 Center BackgroundTrans", Chr(0xE713))
         this.FloatGui.SetFont("s15 c6F7896", "Microsoft YaHei")

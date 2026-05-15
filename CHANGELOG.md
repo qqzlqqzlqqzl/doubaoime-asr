@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-05-15：去掉浮窗语言标签
+
+- 按最新 UI 要求，悬浮窗左上不再显示 `普通话` 文本和下拉箭头，仅保留右上设置/最小化入口与中部音量提示。
+- 已重新构建 `dist`、安装包和免安装包，并覆盖 `%LOCALAPPDATA%\DoubaoASRHelper` 下的当前安装版。
+- 验证：`.venv\Scripts\python.exe -m pytest -q` 为 `16 passed, 1 warning`；源码浮窗文本检查和截图见 `release\test-reports\float-no-language-label-source.*`；安装版浮窗文本检查和截图见 `release\test-reports\installed-float-no-language-label.*`。
+
 ## 2026-05-15：悬浮窗圆角和静音波形
 
 - 悬浮窗窗口本体在显示后应用 DPI 感知圆角裁剪，避免白色浮窗外框继续显示直角。
