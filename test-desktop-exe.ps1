@@ -175,6 +175,20 @@ public class AhkSmokeWin32 {
     $env:APPDATA = $OldFloatAppData
   }
 
+  $StartupDoctorReport = Join-Path $ReportsDir "ahk-startup-doctor-test.json"
+  Remove-Item -LiteralPath $StartupDoctorReport -Force -ErrorAction SilentlyContinue
+  $StartupDoctor = Start-Process -FilePath $AhkClientExe -ArgumentList @("selftest", "--startup-doctor-test", "--startup-doctor-report", $StartupDoctorReport) -PassThru -Wait
+  if ($StartupDoctor.ExitCode -ne 0) {
+    throw "AHK startup doctor self-test failed with exit code $($StartupDoctor.ExitCode)"
+  }
+  if (-not (Test-Path $StartupDoctorReport)) {
+    throw "AHK startup doctor self-test report was not written"
+  }
+  $StartupDoctorJson = Get-Content -Raw -Encoding UTF8 -LiteralPath $StartupDoctorReport | ConvertFrom-Json
+  if (-not $StartupDoctorJson.ok -or -not $StartupDoctorJson.legacy_bat_removed -or -not $StartupDoctorJson.duplicate_shortcut_removed -or -not $StartupDoctorJson.hotkeys_repaired) {
+    throw "AHK startup doctor self-test did not prove cleanup and hotkey repair: $StartupDoctorReport"
+  }
+
   $OldAppData = $env:APPDATA
   $env:APPDATA = Join-Path $ReportsDir "ahk-client-smoke-appdata"
   Remove-Item -LiteralPath $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue

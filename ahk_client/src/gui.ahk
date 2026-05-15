@@ -451,6 +451,11 @@ class GuiManager {
 
     ; 保存按钮
     static OnSave() {
+        conflict := this.FindInternalHotkeyConflict()
+        if conflict != "" {
+            this.UpdateStatusError(conflict)
+            return
+        }
         this.SaveConfigFromGui()
         this.UpdateStatus("配置已保存")
 
@@ -460,6 +465,30 @@ class GuiManager {
 
         ; 延迟后隐藏窗口
         SetTimer(() => this.Hide(), -500)
+    }
+
+    static FindInternalHotkeyConflict() {
+        values := Map(
+            "按着说触发键", this.DisplayNameToKey(this.HoldKeyEdit.Value),
+            "自由说触发键", this.DisplayNameToKey(this.FreeKeyEdit.Value),
+            "自动发送触发键", this.DisplayNameToKey(this.AutoSendKeyEdit.Value),
+            "取消键", this.DisplayNameToKey(this.CancelKeyEdit.Value),
+            "豆包快捷键", this.DisplayNameToKey(this.DouBaoHotkeyEdit.Value)
+        )
+        seen := Map()
+        for label, value in values {
+            normalized := StrLower(Trim(value))
+            if normalized = ""
+                continue
+            if seen.Has(normalized)
+                return label . " 与 " . seen[normalized] . " 冲突，请重新设置"
+            seen[normalized] := label
+        }
+        for label, value in values {
+            if label != "豆包快捷键" && Config.IsRiskyHotkey(value)
+                return label . " 不能使用普通单键或左侧单修饰键，请重新设置"
+        }
+        return ""
     }
 
     ; 取消按钮

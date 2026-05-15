@@ -6,6 +6,8 @@
 当前主要分支：`main`
 远端仓库：`https://github.com/qqzlqqzlqqzl/doubaoime-asr.git`
 
+最新未发布补丁：2026-05-15 启动体检与冲突自动修复已补齐。新增 `ahk_client/src/startup_doctor.ahk`，可清理旧版/重复启动项、刷新标准 `豆包语音助手.lnk --hidden`、关闭相关重复主进程和孤儿 `asr_bridge.exe`，并修复重复/危险热键配置。`VoiceController.Init()` 在可见启动时先显示设置页，再延迟初始化托盘、热键、启动体检和 bridge，避免新增体检拖慢首屏；隐藏 `--hidden` 自启动仍立即初始化托盘和热键。热键注册失败路径补了 `SafeHotkeyOff()` 回滚，候选键全失败时会按原配置重新注册，避免运行态和配置不一致。卸载器使用 PowerShell 字符码路径删除 `豆包语音助手.lnk`，避开 `cmd` 中文编码问题。证据：`source-startup-doctor-test.json` 和 `installed-startup-doctor-test.json` 均 `ok=true`，安装版报告 `legacy_bat_removed=true`、`duplicate_shortcut_removed=true`、`hotkeys_repaired=true`、`warning_count=0`；`installer-uninstall-startup-cleanup.json` 为 `ok=true` 且 `current_lnk_removed=true`；安装版首屏性能 `startup-performance-startup-doctor.json` 为 `425 / 448 / 412 / 413 / 405ms`，全部低于 500ms；`.venv\Scripts\python.exe -m pytest -q` 和 `-W error` 均 `26 passed`，`build-desktop-exe.ps1` 与 `test-desktop-exe.ps1` 通过。本地 `%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖新版，哈希与 `dist` 一致。
+
 最新未发布补丁：2026-05-15 悬浮窗结果区重叠已修复。根因是 `ahk_client/src/float.ahk` 中结果文本框 `y68 h72` 和底部按钮 `y132 h24` 垂直重叠 8px，同时 `SetMode()` 无条件显示 `WaveCanvasCtrl`，导致结果态波形、文本、滚动条和按钮压在同一区域。现在结果文本框为 `x112 y66 w292 h56`，按钮仍在 `y132`，结果背景底部留 6px；`ShowResultBox(true)` 会隐藏波形和提示文字；浮窗透明度改为 255，避免后方窗口文字透出来。新增 `tests/test_ahk_float_layout.py` 防回退。200% DPI 截图证据：`release/test-reports/source-float-result-no-overlap-dpi.png`、`installed-float-result-no-overlap-opaque-dpi.png`，安装版 JSON 显示 `gap=20`、`visible_button_count=3`、`visible_wave_candidates=0`。验证：`.venv\Scripts\python.exe -m pytest -q` 为 `20 passed`，`test-desktop-exe.ps1` 通过，`build-desktop-exe.ps1` 通过且 `build-float-no-overlap-opaque-clean.log` 没有 warning 标记。本地 `%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖新版，哈希与 `dist` 一致。
 
 最新未发布补丁：2026-05-15 测试 warning 已清零。`doubaoime_asr/wave_client.py` 的 `WaveSession` 已从 Pydantic v1 `class Config` 迁移到 v2 `ConfigDict`；`pyproject.toml` 已显式设置 `asyncio_default_fixture_loop_scope = "function"`；`tests/test_activation.py` 的临时 `LicenseServer` shutdown 后会调用 `server_close()`。验证：`.venv\Scripts\python.exe -m pytest -q` 和 `.venv\Scripts\python.exe -W error -m pytest -q` 都是 `16 passed`。本地安装目录已重新覆盖新版 `DoubaoASRHelper.exe` / `asr_bridge.exe`。
@@ -16,7 +18,7 @@
 
 当前最新大变更：`185e2a7 Audit upstream diffs and fix drift`。这一版把“为什么不用纯自写桌面壳、为什么要接入两个参考仓库、哪些 diff 是必要胶水、哪些 diff 已修成 bug”写进了 [CHANGELOG.md](CHANGELOG.md) 和 [UPSTREAM_DIFF_AUDIT.md](UPSTREAM_DIFF_AUDIT.md)。接手者必须先读这两份文档，否则很容易把 AHK 主客户端、Python bridge、旧 Python Tk 自测入口三者的职责搞混。
 
-最新未发布补丁：2026-05-15 首屏启动性能已收敛到 500ms 内完整 UI。根因是 `VoiceController.Init()` 原来在显示设置页前同步等待 PyInstaller one-file 的 `asr_bridge.exe` 启动并健康检查，冷启动证据 `release/test-reports/startup-before-fix.json` 为 `4962ms`。现在设置页/托盘先显示，随后 `SetTimer(() => BridgeClient.Warmup(), -50)` 后台预热 bridge；`BridgeClient.EnsureRunning()` 会复用 warmup 中的进程并等待其 healthy，避免首次热键触发时再启动第二个 bridge。新增 `test-startup-performance.ps1`，它枚举设置页子控件，要求三种模式、高级设置、保存/取消和状态栏全部在 `500ms` 内出现。当前安装目录证据 `startup-performance-installed.json` 为 `345 / 394 / 442 / 404 / 351ms`，便携版 `startup-performance-portable.json` 为 `428 / 300 / 316ms`。刚打包后 `dist` 首次 unsigned EXE 曾出现一次 `1043ms`，后续 `dist` 复测 `334 / 397 / 396 / 403 / 369ms`；这类首轮抖动更像 Windows 对新 unsigned EXE 的安全扫描，正式分发仍建议代码签名。
+最新未发布补丁：2026-05-15 首屏启动性能已收敛到 500ms 内完整 UI。根因是 `VoiceController.Init()` 原来在显示设置页前同步等待 PyInstaller one-file 的 `asr_bridge.exe` 启动并健康检查，冷启动证据 `release/test-reports/startup-before-fix.json` 为 `4962ms`。现在设置页先显示，托盘、热键、启动体检和 bridge 都延迟到首屏之后后台初始化；`BridgeClient.EnsureRunning()` 会复用 warmup 中的进程并等待其 healthy，避免首次热键触发时再启动第二个 bridge。新增 `test-startup-performance.ps1`，它枚举设置页子控件，要求三种模式、高级设置、保存/取消和状态栏全部在 `500ms` 内出现。当前安装目录证据 `startup-performance-startup-doctor.json` 为 `425 / 448 / 412 / 413 / 405ms`，全部低于 500ms。刚打包后 unsigned EXE 偶尔仍可能有 Windows 安全扫描抖动，正式分发仍建议代码签名。
 
 最新未发布补丁：2026-05-15 悬浮窗槽形波形已按直槽口宽度修正。`ahk_client/src/float.ahk` 使用单个 `Picture` 画布和 GDI `RoundRect` 绘制圆头竖槽；画布宽度调整为 `352`，刚好容纳 `30 * 4px + 29 * 8px`，避免此前两侧槽位被裁切。静态防回退检查仍要求 `float.ahk` 中没有 `AddProgress`、`WaveBars`、`WaveMaxHeights`。
 
@@ -947,6 +949,7 @@ python -m doubaoime_asr.desktop_app --self-test --self-test-report release\test-
 
 ```powershell
 python -m doubaoime_asr.desktop_app --self-test --self-test-report release\test-reports\source-self-test-hotkey.json
+.\.devtools\autohotkey\2.0.26\AutoHotkey64.exe ahk_client\src\main.ahk selftest --startup-doctor-test --startup-doctor-report release\test-reports\source-startup-doctor-test.json
 .\build-desktop-exe.ps1
 .\test-desktop-exe.ps1
 ```
@@ -992,6 +995,7 @@ python -m doubaoime_asr.desktop_app --tray-self-test --tray-self-test-report rel
 - `release\README-Windows.txt`
 - `release\README-Portable.txt`
 - `release\HELP.md`
+- `release\test-reports\installer-uninstall-startup-cleanup.json`，尤其确认当前中文自启动快捷方式 `current_lnk_removed=true`
 
 ### 改授权
 

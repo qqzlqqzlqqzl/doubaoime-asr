@@ -174,10 +174,12 @@ class Config {
 
     ; 设置开机自启动
     static SetAutoStart(enable) {
-        startupPath := A_Startup . "\豆包语音助手.lnk"
+        startupPath := this.StartupPath()
 
         if enable {
             try {
+                if !FileExist(this.StartupDir())
+                    DirCreate(this.StartupDir())
                 FileCreateShortcut(A_ScriptFullPath, startupPath, A_ScriptDir, "--hidden")
                 return true
             } catch {
@@ -196,12 +198,72 @@ class Config {
 
     ; 检查是否已设置开机自启动
     static IsAutoStartEnabled() {
-        return FileExist(A_Startup . "\豆包语音助手.lnk") ? true : false
+        return FileExist(this.StartupPath()) ? true : false
     }
 
     static RefreshAutoStartShortcut() {
         if this.IsAutoStartEnabled()
             return this.SetAutoStart(true)
         return true
+    }
+
+    static StartupDir() {
+        override := EnvGet("DOUBAO_ASR_STARTUP_DIR")
+        if override != ""
+            return override
+        return A_Startup
+    }
+
+    static StartupPath() {
+        return this.StartupDir() . "\豆包语音助手.lnk"
+    }
+
+    static RepairHotkeyConfig() {
+        changed := false
+        seen := Map()
+        hotkeyKeys := ["HoldToTalkKey", "FreeToTalkKey", "AutoSendKey", "CancelKey", "DouBaoHotkey"]
+
+        for keyName in hotkeyKeys {
+            value := this.Current[keyName]
+            normalized := StrLower(Trim(value))
+            if normalized = ""
+                continue
+            if seen.Has(normalized) {
+                Logger.Warn("startup_doctor_hotkey_duplicate key=" . keyName . " value=" . value . " reset=" . this.Default[keyName])
+                this.Current[keyName] := this.Default[keyName]
+                changed := true
+                normalized := StrLower(Trim(this.Current[keyName]))
+            }
+            if normalized != "" && !seen.Has(normalized)
+                seen[normalized] := keyName
+        }
+
+        riskyKeys := Map(
+            "HoldToTalkKey", this.Current["HoldToTalkKey"],
+            "FreeToTalkKey", this.Current["FreeToTalkKey"],
+            "AutoSendKey", this.Current["AutoSendKey"],
+            "CancelKey", this.Current["CancelKey"]
+        )
+        for keyName, value in riskyKeys {
+            if this.IsRiskyHotkey(value) {
+                Logger.Warn("startup_doctor_hotkey_risky key=" . keyName . " value=" . value . " reset=" . this.Default[keyName])
+                this.Current[keyName] := this.Default[keyName]
+                changed := true
+            }
+        }
+
+        if changed
+            this.Save()
+        return changed
+    }
+
+    static IsRiskyHotkey(value) {
+        value := Trim(value)
+        if value = ""
+            return false
+        if RegExMatch(value, "i)^[a-z0-9]$")
+            return true
+        lower := StrLower(value)
+        return lower = "ctrl" || lower = "lctrl" || lower = "alt" || lower = "lalt" || lower = "shift" || lower = "lshift" || lower = "win" || lower = "lwin"
     }
 }

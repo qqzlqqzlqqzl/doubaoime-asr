@@ -6,10 +6,13 @@
 
 ; 设置工作目录
 SetWorkingDir(A_ScriptDir)
+SetWinDelay(0)
+SetControlDelay(0)
 
 ; 引入模块
 #Include logger.ahk
 #Include config.ahk
+#Include startup_doctor.ahk
 #Include clipboard.ahk
 #Include window.ahk
 #Include hotkey.ahk
@@ -30,6 +33,14 @@ HasLaunchArg(flag) {
     return false
 }
 
+ArgValue(flag, defaultValue := "") {
+    for index, arg in A_Args {
+        if StrLower(arg) = StrLower(flag) && A_Args.Length >= index + 1
+            return A_Args[index + 1]
+    }
+    return defaultValue
+}
+
 ; ============================================
 ; 语音流程控制器
 ; ============================================
@@ -45,6 +56,7 @@ class VoiceController {
     static StatusPollTimer := 0
     static FinishPollTimer := 0
     static FinishStartedAt := 0
+    static HotkeysInitialized := false
 
     ; 初始化
     static Init(showSettings := true) {
@@ -52,7 +64,6 @@ class VoiceController {
         VoiceFloat.InsertCallback := ObjBindMethod(this, "ManualInsertFromFloat")
         ; 加载配置
         Config.Init()
-        Config.RefreshAutoStartShortcut()
 
         ; 设置热键回调
         HotkeyManager.SetCallbacks(
@@ -67,18 +78,28 @@ class VoiceController {
         ; 设置GUI保存回调
         GuiManager.OnSaveCallback := (*) => this.Reload()
 
-        ; 初始化热键
-        this.InitHotkeys()
-
-        ; 设置托盘
-        this.SetupTray()
-
         ; 普通启动（桌面/开始菜单/免安装双击）直接打开设置界面；只有 --hidden 用于开机自启动静默进托盘。
-        if showSettings
+        if showSettings {
             GuiManager.Show()
+            SetTimer(() => this.SetupTray(), -600)
+            SetTimer(() => this.EnsureHotkeysInitialized(), -800)
+        } else {
+            this.SetupTray()
+            this.EnsureHotkeysInitialized()
+        }
 
-        ; 首屏显示后再后台预热 ASR bridge，避免 PyInstaller bridge 启动阻塞 UI。
-        SetTimer(() => BridgeClient.Warmup(), -50)
+        ; 启动体检的 WMI/快捷方式清理放到首屏之后后台执行，避免拖慢设置页首屏。
+        SetTimer(() => StartupDoctor.Run(Config.Get("AutoStart"), false), -1200)
+
+        ; 首屏稳定后再后台预热 ASR bridge，避免 PyInstaller bridge 抢占前 500ms UI ready 时间。
+        SetTimer(() => BridgeClient.Warmup(), -1600)
+    }
+
+    static EnsureHotkeysInitialized() {
+        if this.HotkeysInitialized
+            return
+        StartupDoctor.RepairHotkeyConfig()
+        this.InitHotkeys()
     }
 
     ; 初始化热键
@@ -89,23 +110,92 @@ class VoiceController {
         cancelKey := Config.Get("CancelKey")
 
         result := HotkeyManager.Init(holdKey, freeKey, autoSendKey, cancelKey)
+        result := this.RepairFailedHotkeys(result)
 
         ; 检查注册结果并提供反馈
-        if !result.hold && holdKey != "" {
-            this.ShowTrayTip("热键注册失败", "按着说热键 '" holdKey "' 注册失败，可能与其他程序冲突")
+        if !result.hold && Config.Get("HoldToTalkKey") != "" {
+            this.ShowTrayTip("热键注册失败", "按着说热键 '" Config.Get("HoldToTalkKey") "' 注册失败，可能与其他程序冲突")
         }
 
-        if !result.free && freeKey != "" {
-            this.ShowTrayTip("热键注册失败", "自由说热键 '" freeKey "' 注册失败，可能与其他程序冲突")
+        if !result.free && Config.Get("FreeToTalkKey") != "" {
+            this.ShowTrayTip("热键注册失败", "自由说热键 '" Config.Get("FreeToTalkKey") "' 注册失败，可能与其他程序冲突")
         }
 
-        if !result.autoSend && autoSendKey != "" {
-            this.ShowTrayTip("热键注册失败", "自动发送热键 '" autoSendKey "' 注册失败，可能与其他程序冲突")
+        if !result.autoSend && Config.Get("AutoSendKey") != "" {
+            this.ShowTrayTip("热键注册失败", "自动发送热键 '" Config.Get("AutoSendKey") "' 注册失败，可能与其他程序冲突")
         }
 
-        if !result.cancel && cancelKey != "" {
-            this.ShowTrayTip("热键注册失败", "取消键 '" cancelKey "' 注册失败，可能与其他程序冲突")
+        if !result.cancel && Config.Get("CancelKey") != "" {
+            this.ShowTrayTip("热键注册失败", "取消键 '" Config.Get("CancelKey") "' 注册失败，可能与其他程序冲突")
         }
+        this.HotkeysInitialized := true
+    }
+
+    static RepairFailedHotkeys(result) {
+        changed := false
+        if !result.hold
+            changed := this.TryRepairHotkey("HoldToTalkKey", "按着说", ["RCtrl", "RAlt", "F8"], "hold") || changed
+        if !result.free
+            changed := this.TryRepairHotkey("FreeToTalkKey", "自由说", ["^!Space", "^!F8"], "free") || changed
+        if !result.autoSend
+            changed := this.TryRepairHotkey("AutoSendKey", "自动发送", ["^!Enter", "^!F9"], "autoSend") || changed
+
+        if changed {
+            Config.Save()
+            return HotkeyManager.Init(
+                Config.Get("HoldToTalkKey"),
+                Config.Get("FreeToTalkKey"),
+                Config.Get("AutoSendKey"),
+                Config.Get("CancelKey")
+            )
+        }
+        return result
+    }
+
+    static TryRepairHotkey(field, label, candidates, resultField) {
+        original := Config.Get(field)
+        attempted := false
+        for candidate in candidates {
+            if candidate = original
+                continue
+            attempted := true
+            Config.Set(field, candidate)
+            result := HotkeyManager.Init(
+                Config.Get("HoldToTalkKey"),
+                Config.Get("FreeToTalkKey"),
+                Config.Get("AutoSendKey"),
+                Config.Get("CancelKey")
+            )
+            if this.HotkeyResultValue(result, resultField) {
+                Logger.Warn("hotkey_auto_repair field=" . field . " old=" . original . " new=" . candidate)
+                this.ShowTrayTip("热键已自动修复", label . "已自动改为 " . GuiManager.KeyToDisplayName(candidate))
+                return true
+            }
+        }
+        Config.Set(field, original)
+        if attempted {
+            HotkeyManager.Init(
+                Config.Get("HoldToTalkKey"),
+                Config.Get("FreeToTalkKey"),
+                Config.Get("AutoSendKey"),
+                Config.Get("CancelKey")
+            )
+        }
+        return false
+    }
+
+    static HotkeyResultValue(result, field) {
+        switch field {
+            case "hold":
+                return result.hold
+            case "free":
+                return result.free
+            case "autoSend":
+                return result.autoSend
+            case "cancel":
+                return result.cancel
+        }
+        return false
     }
 
     ; 重新加载配置和热键
@@ -609,6 +699,11 @@ if A_Args.Length > 0 && A_Args[1] = "--float-self-test" {
     Sleep(5000)
     VoiceFloat.Hide()
     Logger.Info("float_self_test_end")
+    ExitApp(0)
+}
+
+if HasLaunchArg("--startup-doctor-test") {
+    RunStartupDoctorSelfTest(ArgValue("--startup-doctor-report"))
     ExitApp(0)
 }
 

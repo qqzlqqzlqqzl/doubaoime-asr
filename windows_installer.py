@@ -77,6 +77,7 @@ def write_uninstaller(install_dir: Path) -> Path:
                 'rmdir "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Doubao ASR Helper" >nul 2>nul',
                 'del "%USERPROFILE%\\Desktop\\Doubao ASR Helper.lnk" >nul 2>nul',
                 'del "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\doubaoime-asr.bat" >nul 2>nul',
+                'powershell -NoProfile -ExecutionPolicy Bypass -Command "$startup=Join-Path $env:APPDATA \'Microsoft\\Windows\\Start Menu\\Programs\\Startup\'; $name=[string]::Concat([char]35910,[char]21253,[char]35821,[char]38899,[char]21161,[char]25163,\'.lnk\'); Remove-Item -LiteralPath (Join-Path $startup $name) -Force -ErrorAction SilentlyContinue" >nul 2>nul',
                 'cd /d "%LOCALAPPDATA%"',
                 'start "" /min cmd /c "timeout /t 1 /nobreak >nul 2>nul & rmdir /s /q ""%INSTALL_DIR%"""',
                 'exit /b 0',

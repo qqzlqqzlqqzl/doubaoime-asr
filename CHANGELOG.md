@@ -1,5 +1,17 @@
 # 变更记录
 
+## 2026-05-15：启动体检与冲突自动修复
+
+- 新增 `ahk_client/src/startup_doctor.ahk`，启动后会静默体检并修复常见冲突：旧版 `doubaoime-asr.bat`、重复 `Doubao ASR Helper.lnk`、当前标准 `豆包语音助手.lnk --hidden`、重复主进程和孤儿 `asr_bridge.exe`。
+- 热键配置启动前会自愈：重复热键、裸字母/数字、左侧单修饰键会回到默认值；热键注册失败时会尝试低冲突候选键，成功后保存并重新注册。
+- 热键注册失败路径补了回滚：`SafeHotkeyOff()` 会清掉半注册的 down/up/组合键，候选键全部失败时也会按原配置重新注册，避免运行态热键和配置显示不一致。
+- 设置页保存前会阻止内部重复和危险热键，不再允许把冲突配置落盘。
+- 卸载器补充清理当前 AHK 自启动快捷方式；中文 `豆包语音助手.lnk` 使用 PowerShell 字符码路径删除，避开 `cmd` 批处理编码导致删不掉的问题。
+- 为保持 500ms 首屏目标，可见启动改为先显示设置页，再延迟初始化托盘、热键、启动体检和 bridge；隐藏自启动仍立即初始化托盘和热键。
+- 本地安装目录 `%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖新版 `DoubaoASRHelper.exe` 和 `asr_bridge.exe`，哈希与 `dist` 产物一致。
+- 验证：`.venv\Scripts\python.exe -m pytest -q` 为 `26 passed`；`.venv\Scripts\python.exe -W error -m pytest -q` 为 `26 passed`；`build-desktop-exe.ps1` 通过且 `release\test-reports\build-startup-doctor-clean.log` 无 warning/error 标记；`test-desktop-exe.ps1` 通过。
+- 证据：`release\test-reports\source-startup-doctor-test.json` 和 `installed-startup-doctor-test.json` 均为 `ok=true`，安装版报告 `legacy_bat_removed=true`、`duplicate_shortcut_removed=true`、`hotkeys_repaired=true`、`warning_count=0`；`installer-uninstall-startup-cleanup.json` 为 `ok=true` 且 `current_lnk_removed=true`；安装版首屏性能 `startup-performance-startup-doctor.json` 为 `425 / 448 / 412 / 413 / 405ms`，全部低于 500ms。
+
 ## 2026-05-15：悬浮窗结果区重叠修复
 
 - 修复结果态浮窗中文本框、滚动条、底部按钮和波形画布互相重叠的问题。
@@ -76,7 +88,7 @@
 ## 2026-05-15：首屏启动 500ms 内完整可用
 
 - 根因修复：AHK 主程序启动时不再同步等待 PyInstaller one-file 的 `asr_bridge.exe` 解包和 `/health` 检查。旧逻辑在首屏前调用 `BridgeClient.EnsureRunning()`，冷启动会把设置页显示直接拖到约 5 秒。
-- 新逻辑：设置页和托盘先显示，随后用 `SetTimer(() => BridgeClient.Warmup(), -50)` 在后台预热 bridge；真正录音时仍会走 `EnsureRunning()`，保证 bridge 不可用时有明确错误。
+- 新逻辑：设置页先显示，后台延迟初始化托盘、热键和 bridge；真正录音时仍会走 `EnsureRunning()`，保证 bridge 不可用时有明确错误。
 - 防重复 bridge：`BridgeClient.Warmup()` 启动中的 PID 会被记录，`EnsureRunning()` 会先等待已有 warmup 进程变为 healthy，不再在首秒热键触发时重复拉起第二个 `asr_bridge.exe`。
 - 新增 `test-startup-performance.ps1`：不只看窗口可见，而是枚举设置页子控件，确认 `【按着说】模式`、`【自由说】模式`、`【按着说+自动发送】模式`、`高级设置`、`保存`、`取消`、`状态: ● 已就绪` 全部出现，缺一个就算失败。
 - 悬浮窗圆头槽形波形追加修正：画布宽度从 `308` 调整到 `352`，匹配 `30 * 4px + 29 * 8px` 的槽形总宽，避免两侧直槽口被裁掉。

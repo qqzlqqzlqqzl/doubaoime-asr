@@ -88,6 +88,7 @@ class HotkeyManager {
     static RegisterHoldHotkey(key) {
         ; 直接使用传入的key，它已经是AHK格式（如 ^d, RAlt, XButton1, LAlt & RWin 等）
         keyName := key
+        prefix := ""
 
         try {
             ; 检测是否是 & 组合键格式
@@ -115,6 +116,8 @@ class HotkeyManager {
             return true
         } catch as e {
             ; 热键注册失败，输出错误信息
+            this.SafeHotkeyOff(prefix . keyName)
+            this.SafeHotkeyOff(prefix . keyName . " Up")
             return false
         }
     }
@@ -133,6 +136,8 @@ class HotkeyManager {
             this.RegisteredHotkeys["hold_type"] := "modifier"
             return true
         } catch as e {
+            this.SafeHotkeyOff(key)
+            this.SafeHotkeyOff(key . " Up")
             return false
         }
     }
@@ -170,6 +175,9 @@ class HotkeyManager {
             this.RegisteredHotkeys["hold_suffixKey"] := suffixKey
             return true
         } catch as e {
+            this.SafeHotkeyOff(key)
+            this.SafeHotkeyOff(prefixKey . " & " . suffixKey . " Up")
+            this.SafeHotkeyOff(prefixKey)
             return false
         }
     }
@@ -177,6 +185,7 @@ class HotkeyManager {
     ; 注册"自由说"热键
     static RegisterFreeHotkey(key) {
         keyName := key
+        prefix := ""
 
         try {
             ; 检测是否是 & 组合键格式
@@ -197,6 +206,7 @@ class HotkeyManager {
             this.RegisteredHotkeys["free_type"] := "normal"
             return true
         } catch as e {
+            this.SafeHotkeyOff(prefix . keyName)
             return false
         }
     }
@@ -213,6 +223,7 @@ class HotkeyManager {
             this.RegisteredHotkeys["free_type"] := "modifier"
             return true
         } catch as e {
+            this.SafeHotkeyOff(key . " Up")
             return false
         }
     }
@@ -245,6 +256,8 @@ class HotkeyManager {
             this.RegisteredHotkeys["free_suffixKey"] := suffixKey
             return true
         } catch as e {
+            this.SafeHotkeyOff(key)
+            this.SafeHotkeyOff(prefixKey)
             return false
         }
     }
@@ -254,6 +267,7 @@ class HotkeyManager {
     ; ============================================
     static RegisterAutoSendHoldHotkey(key) {
         keyName := key
+        prefix := ""
 
         try {
             ; 检测是否是 & 组合键格式
@@ -279,6 +293,8 @@ class HotkeyManager {
             this.RegisteredHotkeys["autoSend_type"] := "normal"
             return true
         } catch {
+            this.SafeHotkeyOff(prefix . keyName)
+            this.SafeHotkeyOff(prefix . keyName . " Up")
             return false
         }
     }
@@ -294,6 +310,8 @@ class HotkeyManager {
             this.RegisteredHotkeys["autoSend_type"] := "modifier"
             return true
         } catch {
+            this.SafeHotkeyOff(key)
+            this.SafeHotkeyOff(key . " Up")
             return false
         }
     }
@@ -323,8 +341,17 @@ class HotkeyManager {
             this.RegisteredHotkeys["autoSend_suffixKey"] := suffixKey
             return true
         } catch {
+            this.SafeHotkeyOff(key)
+            this.SafeHotkeyOff(prefixKey . " & " . suffixKey . " Up")
+            this.SafeHotkeyOff(prefixKey)
             return false
         }
+    }
+
+    static SafeHotkeyOff(name) {
+        if name = ""
+            return
+        try Hotkey(name, "Off")
     }
 
     ; 注销所有热键
