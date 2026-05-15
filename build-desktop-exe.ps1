@@ -41,9 +41,12 @@ Get-CimInstance Win32_Process |
 uv pip install -e '.[dev]'
 uv pip install pyinstaller
 
+$env:PYTHONWARNINGS = "ignore::SyntaxWarning"
+
 pyinstaller `
   --noconfirm `
   --clean `
+  --log-level WARN `
   --onefile `
   --windowed `
   --name asr_bridge `
@@ -80,6 +83,7 @@ if (-not (Test-Path $AhkCompiler)) {
 pyinstaller `
   --noconfirm `
   --clean `
+  --log-level WARN `
   --onefile `
   --windowed `
   --name DoubaoASRHelperSetup `

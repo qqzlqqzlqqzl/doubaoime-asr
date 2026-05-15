@@ -6,6 +6,8 @@
 当前主要分支：`main`
 远端仓库：`https://github.com/qqzlqqzlqqzl/doubaoime-asr.git`
 
+最新未发布补丁：2026-05-15 悬浮窗结果区重叠已修复。根因是 `ahk_client/src/float.ahk` 中结果文本框 `y68 h72` 和底部按钮 `y132 h24` 垂直重叠 8px，同时 `SetMode()` 无条件显示 `WaveCanvasCtrl`，导致结果态波形、文本、滚动条和按钮压在同一区域。现在结果文本框为 `x112 y66 w292 h56`，按钮仍在 `y132`，结果背景底部留 6px；`ShowResultBox(true)` 会隐藏波形和提示文字。新增 `tests/test_ahk_float_layout.py` 防回退。200% DPI 截图证据：`release/test-reports/source-float-result-no-overlap-dpi.png`、`installed-float-result-no-overlap-dpi.png`，安装版 JSON 显示 `gap=20`、`visible_button_count=3`、`visible_wave_candidates=0`。验证：`.venv\Scripts\python.exe -m pytest -q` 为 `19 passed`，`test-desktop-exe.ps1` 通过，`build-desktop-exe.ps1` 通过且 `build-float-no-overlap-clean.log` 没有 warning 标记。本地 `%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖新版，哈希与 `dist` 一致。
+
 最新未发布补丁：2026-05-15 测试 warning 已清零。`doubaoime_asr/wave_client.py` 的 `WaveSession` 已从 Pydantic v1 `class Config` 迁移到 v2 `ConfigDict`；`pyproject.toml` 已显式设置 `asyncio_default_fixture_loop_scope = "function"`；`tests/test_activation.py` 的临时 `LicenseServer` shutdown 后会调用 `server_close()`。验证：`.venv\Scripts\python.exe -m pytest -q` 和 `.venv\Scripts\python.exe -W error -m pytest -q` 都是 `16 passed`。本地安装目录已重新覆盖新版 `DoubaoASRHelper.exe` / `asr_bridge.exe`。
 
 最新未发布补丁：2026-05-15 设置页热键输入行已改为原生 `Edit(ReadOnly)` + `Button`，输入框和 `录制` 按钮贴边并重叠 1 个逻辑像素，修复用户截图指出的边框断线/不连贯问题。不要再恢复 `AddText(... Border ...)` 伪输入框和伪按钮组合；那套在 DPI 缩放下会被 `SetWindowRgn`/控件边框裁切。当前安装版截图证据为 `release/test-reports/installed-hotkey-row-connected-final.png`，文本检查为 `installed-hotkey-row-connected-final.json`。前端评审 agent 已复核通过。

@@ -15,6 +15,7 @@ dependencies = [
     "requests>=2.32.5",
     "sounddevice>=0.5.0",
     "sv-ttk>=2.6.1",
+    "tzdata>=2025.2",
     "websockets>=12.0",
 ]
 

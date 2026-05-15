@@ -53,21 +53,19 @@ class VoiceFloat {
 
         this.WaveCanvasCtrl := this.FloatGui.AddPicture("x52 y70 w352 h44 0xE", "")
 
-        this.FloatGui.SetFont("s1 cFFFFFF", "Microsoft YaHei")
-        this.HintCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
         this.FloatGui.SetFont("s10 c65708E", "Microsoft YaHei")
         this.StateCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
         this.TextCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
         this.FloatGui.SetFont("s14 c5A6688", "Microsoft YaHei")
         this.HintCtrl := this.FloatGui.AddText("x118 y124 w240 h34 Center BackgroundTrans", "点击结束语音输入")
 
-        this.ResultBgCtrl := this.FloatGui.AddText("x24 y62 w428 h104 BackgroundFFFFFF", "")
+        this.ResultBgCtrl := this.FloatGui.AddText("x24 y58 w428 h102 BackgroundFFFFFF", "")
         this.FloatGui.SetFont("s19 c2563EB", "Segoe MDL2 Assets")
-        this.ResultMicCtrl := this.FloatGui.AddText("x64 y78 w34 h38 Center BackgroundTrans", Chr(0xE720))
+        this.ResultMicCtrl := this.FloatGui.AddText("x58 y78 w36 h36 Center BackgroundTrans", Chr(0xE720))
         this.FloatGui.SetFont("s11 c243B63", "Microsoft YaHei")
-        this.ResultTextCtrl := this.FloatGui.AddEdit("x132 y68 w258 h72 ReadOnly +Multi +VScroll -E0x200 -Border c243B63 BackgroundFFFFFF", "识别内容会显示在这里")
+        this.ResultTextCtrl := this.FloatGui.AddEdit("x112 y66 w292 h56 ReadOnly +Multi +VScroll -E0x200 -Border c243B63 BackgroundFFFFFF", "识别内容会显示在这里")
         this.FloatGui.SetFont("s11 c5B75B7", "Microsoft YaHei")
-        this.CloseCtrl := this.FloatGui.AddText("x424 y69 w20 h22 Center BackgroundTrans", "×")
+        this.CloseCtrl := this.FloatGui.AddText("x424 y66 w20 h22 Center BackgroundTrans", "×")
         this.FloatGui.SetFont("s9 c555B6E", "Microsoft YaHei")
         this.ClearBtn := this.FloatGui.AddText("x220 y132 w56 h24 Center Border BackgroundF7F8FA c30343B 0x200", "清空")
         this.CopyBtn := this.FloatGui.AddText("x284 y132 w56 h24 Center Border BackgroundF7F8FA c30343B 0x200", "复制")
@@ -108,14 +106,15 @@ class VoiceFloat {
         showMic := mode = "ready" || mode = "starting"
         this.MicCircleCtrl.Visible := false
         this.MicIconCtrl.Visible := false
-        this.WaveCanvasCtrl.Visible := true
+        hasResult := this.LastText != ""
+        this.WaveCanvasCtrl.Visible := !hasResult
         if showMic {
             this.StopWave()
         } else {
             this.StopWave()
         }
         this.UpdateVolume(0)
-        this.ShowResultBox(true)
+        this.ShowResultBox(hasResult)
     }
 
     static Update(text := "", state := "") {
@@ -141,6 +140,10 @@ class VoiceFloat {
     static ShowResultBox(visible := true) {
         for ctrl in [this.ResultBgCtrl, this.ResultMicCtrl, this.ResultTextCtrl, this.CloseCtrl, this.ClearBtn, this.CopyBtn, this.InsertBtn]
             ctrl.Visible := visible
+        if this.WaveCanvasCtrl != ""
+            this.WaveCanvasCtrl.Visible := !visible
+        if this.HintCtrl != ""
+            this.HintCtrl.Visible := !visible && this.LastText = ""
     }
 
     static FormatResultText(text) {

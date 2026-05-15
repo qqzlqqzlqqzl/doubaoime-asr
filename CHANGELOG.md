@@ -1,5 +1,17 @@
 # 变更记录
 
+## 2026-05-15：悬浮窗结果区重叠修复
+
+- 修复结果态浮窗中文本框、滚动条、底部按钮和波形画布互相重叠的问题。
+- 结果文本框改为 `x112 y66 w292 h56`，底部按钮仍在 `y132`，保留 10 个逻辑像素间距；200% DPI 下实测间距为 20px。
+- `ShowResultBox()` 现在会在结果态隐藏 `WaveCanvasCtrl` 和提示文字，避免波形穿到识别结果下方。
+- 新增 `tests/test_ahk_float_layout.py`，静态检查结果文本不压按钮、结果背景不贴底、结果态隐藏波形。
+- 构建链路补充 `tzdata` 依赖并设置 PyInstaller `--log-level WARN`，同时屏蔽第三方 `opuslib` 的 `SyntaxWarning`，让构建日志不再出现误导性的 warning。
+- 本地安装目录 `%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖新版 `DoubaoASRHelper.exe` 和 `asr_bridge.exe`，哈希与 `dist` 产物一致。
+- 验证：`.venv\Scripts\python.exe -m pytest -q` 为 `19 passed`；`test-desktop-exe.ps1` 通过；`build-desktop-exe.ps1` 通过且 `release\test-reports\build-float-no-overlap-clean.log` 无 warning 标记。
+- 截图证据：源码浮窗 `release\test-reports\source-float-result-no-overlap-dpi.png`；安装版浮窗 `release\test-reports\installed-float-result-no-overlap-dpi.png`。两张截图均为 200% DPI，结果态 `gap=20`、按钮数为 3、可见波形候选为 0。
+- 前端复核 agent 结论：通过，未发现 200% DPI 下文本框、滚动条、按钮、波形仍有重叠风险。
+
 ## 2026-05-15：测试 warning 清零
 
 - `WaveSession` 的 Pydantic 配置从 v1 风格 `class Config` 迁移到 v2 风格 `ConfigDict`，修复 `PydanticDeprecatedSince20`。
