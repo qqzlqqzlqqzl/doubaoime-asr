@@ -20,6 +20,7 @@ except ImportError:
 from .config import ASRConfig, SessionConfig
 from .audio import AudioEncoder
 from .asr_pb2 import AsrRequest, AsrResponse as AsrResponsePb, FrameState
+from .transcript import TranscriptAccumulator
 
 # PCM 音频数据的类型别名
 AudioChunk = bytes
@@ -172,15 +173,19 @@ class DoubaoASR:
         :param on_interim: 可选的中间结果回调
         :return: 最终识别文本
         """
-        final_text = ""
+        transcript = TranscriptAccumulator()
         async for response in self.transcribe_stream(audio, realtime=realtime):
             if response.type == ResponseType.INTERIM_RESULT and on_interim:
                 on_interim(response.text)
-            elif response.type == ResponseType.FINAL_RESULT:
-                final_text = response.text
+            if response.type in {ResponseType.INTERIM_RESULT, ResponseType.FINAL_RESULT}:
+                transcript.update(
+                    response.text,
+                    is_final=response.type == ResponseType.FINAL_RESULT,
+                )
             elif response.type == ResponseType.ERROR:
                 raise ASRError(response.error_msg, response)
-        return final_text
+        transcript.commit()
+        return transcript.text
     
     async def transcribe_stream(self, audio: Union[str, Path, bytes], *, realtime: bool = False) -> AsyncIterator[ASRResponse]:
         """
