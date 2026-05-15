@@ -51,7 +51,7 @@ class VoiceFloat {
         this.MicCircleCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
         this.MicIconCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
 
-        this.WaveCanvasCtrl := this.FloatGui.AddPicture("x84 y70 w308 h44 0xE", "")
+        this.WaveCanvasCtrl := this.FloatGui.AddPicture("x52 y70 w352 h44 0xE", "")
 
         this.FloatGui.SetFont("s1 cFFFFFF", "Microsoft YaHei")
         this.HintCtrl := this.FloatGui.AddText("x0 y0 w1 h1 BackgroundTrans", "")
@@ -166,7 +166,7 @@ class VoiceFloat {
     static RenderWaveSlots(level := 0) {
         if this.WaveCanvasCtrl = ""
             return
-        width := 308
+        width := 352
         height := 44
         screenDc := DllCall("User32\GetDC", "ptr", 0, "ptr")
         memDc := DllCall("Gdi32\CreateCompatibleDC", "ptr", screenDc, "ptr")

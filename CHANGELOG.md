@@ -1,5 +1,23 @@
 # 变更记录
 
+## 2026-05-15：首屏启动 500ms 内完整可用
+
+- 根因修复：AHK 主程序启动时不再同步等待 PyInstaller one-file 的 `asr_bridge.exe` 解包和 `/health` 检查。旧逻辑在首屏前调用 `BridgeClient.EnsureRunning()`，冷启动会把设置页显示直接拖到约 5 秒。
+- 新逻辑：设置页和托盘先显示，随后用 `SetTimer(() => BridgeClient.Warmup(), -50)` 在后台预热 bridge；真正录音时仍会走 `EnsureRunning()`，保证 bridge 不可用时有明确错误。
+- 防重复 bridge：`BridgeClient.Warmup()` 启动中的 PID 会被记录，`EnsureRunning()` 会先等待已有 warmup 进程变为 healthy，不再在首秒热键触发时重复拉起第二个 `asr_bridge.exe`。
+- 新增 `test-startup-performance.ps1`：不只看窗口可见，而是枚举设置页子控件，确认 `【按着说】模式`、`【自由说】模式`、`【按着说+自动发送】模式`、`高级设置`、`保存`、`取消`、`状态: ● 已就绪` 全部出现，缺一个就算失败。
+- 悬浮窗圆头槽形波形追加修正：画布宽度从 `308` 调整到 `352`，匹配 `30 * 4px + 29 * 8px` 的槽形总宽，避免两侧直槽口被裁掉。
+
+### 本轮验证
+
+- `build-desktop-exe.ps1`：通过，重新生成 AHK 主程序、Python bridge、安装器和 zip。
+- `.venv\Scripts\python.exe -m pytest -q`：`16 passed, 1 warning`。
+- `test-desktop-exe.ps1`：通过，输出 `AHK bridge desktop tests passed.`。
+- `test-startup-performance.ps1` 安装目录真实路径：`release\test-reports\startup-performance-installed.json`，5 次完整 UI ready 为 `345 / 394 / 442 / 404 / 351ms`，平均 `387.2ms`，全部低于 `500ms`。
+- `test-startup-performance.ps1` 免安装版：`release\test-reports\startup-performance-portable.json`，3 次完整 UI ready 为 `428 / 300 / 316ms`，平均 `348.0ms`，全部低于 `500ms`。
+- `test-startup-performance.ps1` dist 复测：`release\test-reports\startup-performance-dist-repeat.json`，5 次完整 UI ready 为 `334 / 397 / 396 / 403 / 369ms`，全部低于 `500ms`。刚打包后的首次 unsigned EXE 冷启动曾出现 `1043ms`，后续复测稳定低于目标；正式外部分发仍建议代码签名，减少 SmartScreen / 安全策略带来的首轮扫描抖动。
+- 修复前安装版证据：`release\test-reports\startup-before-fix.json` 记录首屏 `4962ms`。
+
 ## 2026-05-15：悬浮窗圆头槽形波形
 
 - 悬浮窗波形从多个 Windows `Progress` 控件改为单个 `Picture` 画布，使用 GDI `RoundRect` 自绘圆头细竖槽，避免出现硬边长方形控件感。

@@ -60,18 +60,15 @@ class VoiceController {
         ; 初始化热键
         this.InitHotkeys()
 
-        ; 提前拉起本地 ASR bridge；失败时热键触发也会再次尝试
-        if !BridgeClient.EnsureRunning() {
-            Logger.Warn("bridge_startup_deferred")
-            this.ShowTrayTip("提示", "ASR bridge 暂未启动，首次录音时会再次尝试")
-        }
-
         ; 设置托盘
         this.SetupTray()
 
         ; 如果是首次运行，弹出设置界面
         if isFirstRun
             GuiManager.Show()
+
+        ; 首屏显示后再后台预热 ASR bridge，避免 PyInstaller bridge 启动阻塞 UI。
+        SetTimer(() => BridgeClient.Warmup(), -50)
     }
 
     ; 初始化热键

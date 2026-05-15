@@ -230,6 +230,7 @@ doubaoime-asr-desktop
 | 自动发送延迟 | `50ms` |
 
 工具会在后台监听全局热键，录音时显示悬浮窗，识别完成后把文本粘贴回开始录音前的窗口。按着说和按着说+自动发送结束时使用非阻塞 stop：松手后 AHK 不会卡住等待 ASR，而是继续轮询 bridge 的最终文本，拿到结果后自动插入。
+首屏启动不再等待 Python bridge 冷启动；设置页和托盘先出现，`asr_bridge.exe` 随后在后台预热。当前安装版首屏完整 UI 性能用 `test-startup-performance.ps1` 验证，要求设置页窗口和关键控件全部在 `500ms` 内可见。
 配置和凭据缓存默认保存在 `%APPDATA%\DoubaoASRHelper`，因此打包后不依赖项目目录。
 如果检测到旧参考客户端目录 `%APPDATA%\DouBaoVoiceHelper\config.ini`，会自动迁移到 `%APPDATA%\DoubaoASRHelper\config.ini`，并把旧默认热键迁移为当前更安全的默认值。
 录音悬浮窗有两种参考图式状态：待说话时显示蓝色麦克风图和“点击/长按说话”，录音中显示蓝色声波条和“点击结束语音输入”，帮助用户确认当前确实在录音。
@@ -267,6 +268,15 @@ EXE 内置「使用说明」窗口，安装后开始菜单也会生成 Help 快�
 ```
 
 这一步会覆盖 bridge 自测、HTTP health/status、AHK 主客户端自动拉起 bridge、安装目录包含双 EXE、便携 zip 包含 bridge。
+
+测试首屏是否在 500ms 内完整出现：
+
+```powershell
+.\test-startup-performance.ps1 -ExePath "$env:LOCALAPPDATA\DoubaoASRHelper\DoubaoASRHelper.exe" -Runs 5
+.\test-startup-performance.ps1 -ExePath "release\DoubaoASRHelper-portable.exe" -Runs 3
+```
+
+该脚本会枚举设置页子控件，确认三种模式、高级设置、保存/取消和状态栏都已渲染；只看到空窗口不算通过。
 
 其中按着说的核心闭环必须满足：松开触发键后自动插入识别文字，不需要点击悬浮窗“插入”。可单独跑：
 

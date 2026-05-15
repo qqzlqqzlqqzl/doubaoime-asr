@@ -8,6 +8,7 @@ class BridgeClient {
     static Host := "127.0.0.1"
     static Port := 18765
     static ProcessHandle := ""
+    static WarmupStarted := false
 
     static BaseUrl() {
         return "http://" . this.Host . ":" . this.Port
@@ -28,8 +29,21 @@ class BridgeClient {
     }
 
     static EnsureRunning() {
-        if this.IsAvailable()
+        if this.IsAvailable() {
+            this.WarmupStarted := true
             return true
+        }
+
+        if this.WarmupStarted {
+            if this.WaitForAvailable(5000)
+                return true
+            if this.ProcessHandle != "" && ProcessExist(this.ProcessHandle) {
+                Logger.Error("bridge_warmup_not_ready pid=" . this.ProcessHandle)
+                return false
+            }
+            this.WarmupStarted := false
+            this.ProcessHandle := ""
+        }
 
         exe := this.BridgeExePath()
         if exe = "" {
@@ -41,13 +55,19 @@ class BridgeClient {
             Logger.Info("bridge_launch exe=" . exe . " port=" . this.Port)
             Run('"' . exe . '" --host ' . this.Host . ' --port ' . this.Port, , "Hide", &pid)
             Logger.Info("bridge_launch_pid pid=" . pid)
+            this.ProcessHandle := pid
+            this.WarmupStarted := true
         } catch {
             Logger.Error("bridge_launch_failed exe=" . exe)
             return false
         }
 
+        return this.WaitForAvailable(5000)
+    }
+
+    static WaitForAvailable(timeoutMs := 5000) {
         startTime := A_TickCount
-        while (A_TickCount - startTime) < 5000 {
+        while (A_TickCount - startTime) < timeoutMs {
             if this.IsAvailable()
                 return true
             Sleep(150)
@@ -55,9 +75,45 @@ class BridgeClient {
         return false
     }
 
+    static Warmup() {
+        if this.WarmupStarted
+            return true
+        if this.IsAvailableFast() {
+            this.WarmupStarted := true
+            return true
+        }
+
+        exe := this.BridgeExePath()
+        if exe = "" {
+            Logger.Error("bridge_warmup_exe_missing")
+            return false
+        }
+
+        try {
+            Logger.Info("bridge_warmup_launch exe=" . exe . " port=" . this.Port)
+            Run('"' . exe . '" --host ' . this.Host . ' --port ' . this.Port, , "Hide", &pid)
+            Logger.Info("bridge_warmup_pid pid=" . pid)
+            this.ProcessHandle := pid
+            this.WarmupStarted := true
+            return true
+        } catch as e {
+            Logger.Exception("bridge_warmup_launch_failed exe=" . exe, e)
+            return false
+        }
+    }
+
     static IsAvailable() {
         try {
             response := this.Request("GET", "/health", "", 800)
+            return InStr(response, '"ok": true') || InStr(response, '"ok":true')
+        } catch {
+            return false
+        }
+    }
+
+    static IsAvailableFast() {
+        try {
+            response := this.Request("GET", "/health", "", 80)
             return InStr(response, '"ok": true') || InStr(response, '"ok":true')
         } catch {
             return false
@@ -126,7 +182,8 @@ class BridgeClient {
 
     static Request(method, path, body := "", timeoutMs := 3000) {
         http := ComObject("WinHttp.WinHttpRequest.5.1")
-        http.SetTimeouts(1000, 1000, timeoutMs, timeoutMs)
+        phaseTimeout := Min(1000, Max(50, timeoutMs))
+        http.SetTimeouts(phaseTimeout, phaseTimeout, timeoutMs, timeoutMs)
         http.Open(method, this.BaseUrl() . path, false)
         if body != "" {
             http.SetRequestHeader("Content-Type", "application/json; charset=utf-8")

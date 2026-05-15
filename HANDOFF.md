@@ -2,11 +2,15 @@
 
 这份文档是给下一个接手的 AI 或开发者看的。目标是让接手者不用重新翻聊天记录，也能快速理解当前项目状态、重要决策、构建测试方法、常见坑和下一步方向。
 
-最后更新：2026-05-14
+最后更新：2026-05-15
 当前主要分支：`main`
 远端仓库：`https://github.com/qqzlqqzlqqzl/doubaoime-asr.git`
 
 当前最新大变更：`185e2a7 Audit upstream diffs and fix drift`。这一版把“为什么不用纯自写桌面壳、为什么要接入两个参考仓库、哪些 diff 是必要胶水、哪些 diff 已修成 bug”写进了 [CHANGELOG.md](CHANGELOG.md) 和 [UPSTREAM_DIFF_AUDIT.md](UPSTREAM_DIFF_AUDIT.md)。接手者必须先读这两份文档，否则很容易把 AHK 主客户端、Python bridge、旧 Python Tk 自测入口三者的职责搞混。
+
+最新未发布补丁：2026-05-15 首屏启动性能已收敛到 500ms 内完整 UI。根因是 `VoiceController.Init()` 原来在显示设置页前同步等待 PyInstaller one-file 的 `asr_bridge.exe` 启动并健康检查，冷启动证据 `release/test-reports/startup-before-fix.json` 为 `4962ms`。现在设置页/托盘先显示，随后 `SetTimer(() => BridgeClient.Warmup(), -50)` 后台预热 bridge；`BridgeClient.EnsureRunning()` 会复用 warmup 中的进程并等待其 healthy，避免首次热键触发时再启动第二个 bridge。新增 `test-startup-performance.ps1`，它枚举设置页子控件，要求三种模式、高级设置、保存/取消和状态栏全部在 `500ms` 内出现。当前安装目录证据 `startup-performance-installed.json` 为 `345 / 394 / 442 / 404 / 351ms`，便携版 `startup-performance-portable.json` 为 `428 / 300 / 316ms`。刚打包后 `dist` 首次 unsigned EXE 曾出现一次 `1043ms`，后续 `dist` 复测 `334 / 397 / 396 / 403 / 369ms`；这类首轮抖动更像 Windows 对新 unsigned EXE 的安全扫描，正式分发仍建议代码签名。
+
+最新未发布补丁：2026-05-15 悬浮窗槽形波形已按直槽口宽度修正。`ahk_client/src/float.ahk` 使用单个 `Picture` 画布和 GDI `RoundRect` 绘制圆头竖槽；画布宽度调整为 `352`，刚好容纳 `30 * 4px + 29 * 8px`，避免此前两侧槽位被裁切。静态防回退检查仍要求 `float.ahk` 中没有 `AddProgress`、`WaveBars`、`WaveMaxHeights`。
 
 最新未发布前置：2026-05-14 用户明确要求不要继续自创 UI，AHK 设置页已恢复为 `xiaohu31/doubao-voice-helper/src/gui.ahk` 的上游布局：`Gui("+Resize -MaximizeBox")`、`SetFont("s10", "Microsoft YaHei")`、`Show("w400 h630")`，各分组和控件坐标与参考客户端一致。不要再恢复上一轮的 `-DPIScale`、`s6` 字体或手动 DPI 窗口缩放。安装版 DPI-aware 截图证据为 `release/test-reports/installed-ahk-settings-reference-restored-dpiaware.png`，窗口 `826x1331` 物理像素，对应上游 `400x630` 逻辑窗口；源码截图为 `release/test-reports/source-ahk-settings-reference-restored.png`。本轮已覆盖 `%LOCALAPPDATA%\DoubaoASRHelper` 下的 `DoubaoASRHelper.exe` 和 `asr_bridge.exe`。
 
@@ -151,6 +155,7 @@ python -m doubaoime_asr.desktop_app --hold-release-auto-insert-test --hold-relea
 ```powershell
 .\build-desktop-exe.ps1
 .\test-desktop-exe.ps1
+.\test-startup-performance.ps1 -ExePath "$env:LOCALAPPDATA\DoubaoASRHelper\DoubaoASRHelper.exe" -Runs 5
 ```
 
 如果改了激活码、授权服务器或设备绑定：
