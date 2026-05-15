@@ -65,7 +65,7 @@ class VoiceFloat {
         this.FloatGui.SetFont("s19 c2563EB", "Segoe MDL2 Assets")
         this.ResultMicCtrl := this.FloatGui.AddText("x54 y62 w36 h36 Center BackgroundTrans", Chr(0xE720))
         this.FloatGui.SetFont("s11 c243B63", "Microsoft YaHei")
-        this.ResultTextCtrl := this.FloatGui.AddEdit("x104 y48 w292 h66 ReadOnly +Multi +VScroll -E0x200 -Border c243B63 BackgroundFFFFFF", "识别内容会显示在这里")
+        this.ResultTextCtrl := this.FloatGui.AddText("x104 y48 w292 h66 Border BackgroundFFFFFF c243B63", "识别内容会显示在这里")
         this.FloatGui.SetFont("s11 c5B75B7", "Microsoft YaHei")
         this.CloseCtrl := this.FloatGui.AddText("x410 y54 w20 h22 Center BackgroundTrans", "×")
         this.FloatGui.SetFont("s9 c555B6E", "Microsoft YaHei")
@@ -96,8 +96,8 @@ class VoiceFloat {
 
     static ApplyStyles() {
         UiStyle.RoundControl(this.FloatGui, 10)
-        UiStyle.RoundControls([this.TopPanelCtrl, this.ResultBgCtrl], 7)
         UiStyle.RoundButtons([this.ClearBtn, this.CopyBtn, this.InsertBtn], 5)
+        this.HideDecorationControls()
     }
 
     static SetMode(mode) {
@@ -141,12 +141,20 @@ class VoiceFloat {
     }
 
     static ShowResultBox(visible := true) {
-        for ctrl in [this.ResultBgCtrl, this.ResultMicCtrl, this.ResultTextCtrl, this.CloseCtrl, this.ClearBtn, this.CopyBtn, this.InsertBtn]
+        for ctrl in [this.ResultMicCtrl, this.ResultTextCtrl, this.CloseCtrl, this.ClearBtn, this.CopyBtn, this.InsertBtn]
             ctrl.Visible := visible
+        this.HideDecorationControls()
         if this.WaveCanvasCtrl != ""
             this.WaveCanvasCtrl.Visible := !visible
         if this.HintCtrl != ""
             this.HintCtrl.Visible := !visible && this.LastText = ""
+    }
+
+    static HideDecorationControls() {
+        if this.TopPanelCtrl != ""
+            this.TopPanelCtrl.Visible := false
+        if this.ResultBgCtrl != ""
+            this.ResultBgCtrl.Visible := false
     }
 
     static FormatResultText(text) {
@@ -158,12 +166,7 @@ class VoiceFloat {
     static ScrollResultToLatest() {
         if this.ResultTextCtrl = ""
             return
-        try {
-            textLength := StrLen(this.ResultTextCtrl.Value)
-            DllCall("User32\SendMessageW", "ptr", this.ResultTextCtrl.Hwnd, "uint", 0xB1, "ptr", textLength, "ptr", textLength)
-            DllCall("User32\SendMessageW", "ptr", this.ResultTextCtrl.Hwnd, "uint", 0xB7, "ptr", 0, "ptr", 0)
-            DllCall("User32\SendMessageW", "ptr", this.ResultTextCtrl.Hwnd, "uint", 0x115, "ptr", 7, "ptr", 0)
-        }
+        try DllCall("User32\InvalidateRect", "ptr", this.ResultTextCtrl.Hwnd, "ptr", 0, "int", true)
     }
 
     static UpdateVolume(level := 0) {

@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-05-15：修复悬浮窗结果态文字空白
+
+- 修复用户截图中悬浮窗结果态只剩边框和按钮、结果文字/麦克风/关闭/右上图标不可见的问题。
+- 根因是结果态使用了多个叠放的 Static/Edit 子控件，`ResultBgCtrl` 和 `TopPanelCtrl` 这类纯装饰框在当前浮窗样式和 DPI 下会盖住内部文字控件；控件文本仍可被系统读到，但视觉上被白色背景框遮掉。
+- 结果文本从只读 `Edit` 改为带边框的 `Text` 控件，避免 Edit 在 no-activate 浮窗中滚动/重绘异常；结果背景框和右上装饰框改为隐藏，避免继续遮挡文字。
+- `ScrollResultToLatest()` 不再把光标/滚动位置推到末尾，只触发控件重绘；复制/插入仍使用完整 `LastText`，不受可见框截断影响。
+- 新增/更新 `tests/test_ahk_float_layout.py` 断言结果文本不再使用 `Edit`，并防止恢复到会遮挡文字的装饰框路径。
+- 验证：`.venv\Scripts\python.exe -m pytest -q` 为 `33 passed`；`.venv\Scripts\python.exe -W error -m pytest -q` 为 `33 passed`；源码和安装版 `--float-self-test` 均通过；安装版 DWM 截图 `release\test-reports\installed-float-result-text-visible-dwm.png` 可见结果文字、麦克风、关闭按钮和底部按钮；`build-desktop-exe.ps1` 与 `test-desktop-exe.ps1` 通过；安装版首屏 1 秒口径 `startup-performance-float-text-visible-1s.json` 通过，5 次为 `562 / 668 / 506 / 513 / 342ms`。
+- 本地安装目录 `%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖新版 `DoubaoASRHelper.exe` 和 `asr_bridge.exe`，哈希与 `dist` 一致。
+
 ## 2026-05-15：修复快速松手导致 `already_recording`
 
 - 修复用户实测出现的 `DoubaoASRHelper.exe 错误 already_recording`。根因是 bridge 后台预热和首次按键启动之间存在窗口期，会重复拉起 `asr_bridge.exe`；同时用户在 `/start` 还没返回时松手，`/stop` 先到达后端返回 `no_active_session`，随后 `/start` 成功并把会话留在 `recording`。

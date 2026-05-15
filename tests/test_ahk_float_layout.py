@@ -56,14 +56,23 @@ def test_float_controls_keep_rounded_closed_outlines() -> None:
 
     assert "this.TopPanelCtrl" in source
     assert "this.ResultBgCtrl := this.FloatGui.AddText(\"x18 y42 w420 h78 Border" in source
-    assert "UiStyle.RoundControls([this.TopPanelCtrl, this.ResultBgCtrl], 7)" in source
     assert "UiStyle.RoundButtons([this.ClearBtn, this.CopyBtn, this.InsertBtn], 5)" in source
+    assert "HideDecorationControls()" in source
 
 
 def test_float_result_mode_hides_wave_canvas() -> None:
     source = FLOAT_AHK.read_text(encoding="utf-8")
 
     assert "this.WaveCanvasCtrl.Visible := !visible" in source
+
+
+def test_float_result_text_keeps_visible_start_of_long_text() -> None:
+    source = FLOAT_AHK.read_text(encoding="utf-8")
+
+    assert "this.ResultTextCtrl := this.FloatGui.AddText" in source
+    assert "this.ResultTextCtrl := this.FloatGui.AddEdit" not in source
+    assert "this.ResultTextCtrl := this.FloatGui.AddText(\"x104 y48 w292 h66 Border" in source
+    assert '"uint", 0x115, "ptr", 7' not in source
 
 
 def test_float_window_is_opaque_to_avoid_background_bleed() -> None:
