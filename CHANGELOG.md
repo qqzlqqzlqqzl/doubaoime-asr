@@ -1,5 +1,20 @@
 # 变更记录
 
+## 2026-05-15：悬浮窗圆角和静音波形
+
+- 悬浮窗窗口本体在显示后应用 DPI 感知圆角裁剪，避免白色浮窗外框继续显示直角。
+- 静音或低音量时，波形固定为低幅小点线，不再使用中心峰值起伏；只有 `audio_level >= 6` 时才按真实音量绘制起伏。
+
+### 本轮验证
+
+- 源码浮窗静音截图：`release\test-reports\source-float-rounded-quiet.png`，外框四角已圆角，未说话时波形无明显起伏。
+- 安装版浮窗静音截图：`release\test-reports\installed-float-rounded-quiet.png`。
+- `build-desktop-exe.ps1`：通过，重新生成 `dist` 和 `release` 产物。
+- `.venv\Scripts\python.exe -m pytest -q`：`16 passed, 1 warning`。
+- AHK 源码 `--float-self-test`：通过。
+- `test-desktop-exe.ps1`：通过，输出 `AHK bridge desktop tests passed.`。
+- 安装目录已覆盖新版 `DoubaoASRHelper.exe`；`test-startup-performance.ps1` 安装版最终复测 5 次完整 UI ready 为 `441 / 270 / 386 / 463 / 408ms`。
+
 ## 2026-05-15：设置页和悬浮窗控件小圆角
 
 - 新增轻量 `UiStyle` 辅助，对设置页 `录制 / 保存 / 取消`、热键输入框、数字输入框，以及悬浮窗 `清空 / 复制 / 插入` 动作按钮应用 DPI 感知的小圆角，保持参考客户端的紧凑布局。

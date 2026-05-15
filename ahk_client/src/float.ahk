@@ -95,6 +95,7 @@ class VoiceFloat {
     }
 
     static ApplyStyles() {
+        UiStyle.RoundControl(this.FloatGui, 10)
         UiStyle.RoundButtons([this.ClearBtn, this.CopyBtn, this.InsertBtn], 4)
     }
 
@@ -190,16 +191,17 @@ class VoiceFloat {
         startX := Round((width - totalWidth) / 2)
         centerY := Round(height / 2)
         activeColor := this.ColorRef("5B7CFA")
-        quietColor := this.ColorRef("4F75FF")
+        quietColor := this.ColorRef("5E7CFF")
+        isQuiet := level < 6
 
         for index, baseHeight in this.WaveSlotHeights {
             wave := 0.86 + (0.14 * Sin((this.WaveTick + index * 3) / 4.2))
             centerBoost := index >= 13 && index <= 18 ? 1.2 : 0.92
-            slotHeight := level < 3 ? baseHeight : Max(4, Round(baseHeight * Max(level, 18) / 72 * wave * centerBoost))
+            slotHeight := isQuiet ? 3 : Max(4, Round(baseHeight * Max(level, 18) / 72 * wave * centerBoost))
             slotHeight := Min(32, slotHeight)
             x := startX + ((index - 1) * (slotWidth + slotGap))
             y := centerY - Round(slotHeight / 2)
-            color := level < 3 ? quietColor : activeColor
+            color := isQuiet ? quietColor : activeColor
             this.DrawRoundedSlot(memDc, x, y, slotWidth, slotHeight, color)
         }
 
