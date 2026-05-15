@@ -6,6 +6,8 @@
 当前主要分支：`main`
 远端仓库：`https://github.com/qqzlqqzlqqzl/doubaoime-asr.git`
 
+最新未发布补丁：2026-05-15 设置页热键输入行已改为原生 `Edit(ReadOnly)` + `Button`，输入框和 `录制` 按钮贴边并重叠 1 个逻辑像素，修复用户截图指出的边框断线/不连贯问题。不要再恢复 `AddText(... Border ...)` 伪输入框和伪按钮组合；那套在 DPI 缩放下会被 `SetWindowRgn`/控件边框裁切。当前安装版截图证据为 `release/test-reports/installed-hotkey-row-connected-final.png`，文本检查为 `installed-hotkey-row-connected-final.json`。前端评审 agent 已复核通过。
+
 最新未发布补丁：2026-05-15 桌面图标双击行为已改为直接打开设置界面。普通启动走 `VoiceController.Init(true)`，`--hidden` 才静默进托盘；`Config.SetAutoStart()` 创建/刷新开机自启动快捷方式时会写入 `--hidden` 参数。当前安装目录已覆盖新版，桌面快捷方式已刷新为无参数，验证证据为 `release/test-reports/desktop-shortcut-open-settings.json`、`installed-manual-open-existing-config.json`、`installed-hidden-launch-existing-config.json` 和截图 `installed-manual-open-existing-config.png`。
 
 当前最新大变更：`185e2a7 Audit upstream diffs and fix drift`。这一版把“为什么不用纯自写桌面壳、为什么要接入两个参考仓库、哪些 diff 是必要胶水、哪些 diff 已修成 bug”写进了 [CHANGELOG.md](CHANGELOG.md) 和 [UPSTREAM_DIFF_AUDIT.md](UPSTREAM_DIFF_AUDIT.md)。接手者必须先读这两份文档，否则很容易把 AHK 主客户端、Python bridge、旧 Python Tk 自测入口三者的职责搞混。

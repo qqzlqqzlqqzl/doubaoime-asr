@@ -1,5 +1,14 @@
 # 变更记录
 
+## 2026-05-15：热键输入行边框连贯性修复
+
+- 设置页五组热键行改回原生 `Edit(ReadOnly)` + `Button` 控件，并把输入框和 `录制` 按钮贴边对齐，避免此前伪输入框、伪按钮各自画边框造成断线和裁切感。
+- 热键输入行统一由 `AddHotkeyRow()` 生成，右边缘保持在 `x=360`，五组行宽一致；按钮与输入框重叠 1 个逻辑像素，减少 Windows 主题按钮边缘留下的视觉缝隙。
+- 录制按钮不再参与手动圆角裁剪，交给系统原生主题绘制，降低 150% / 200% DPI 下被 `SetWindowRgn` 裁掉边框的风险。
+- 已构建并覆盖当前安装目录；截图证据：`release\test-reports\installed-hotkey-row-connected-final.png`，文本检查证据：`release\test-reports\installed-hotkey-row-connected-final.json`。
+- 前端评审 agent 复核通过：旧的断裂/裁切边框问题消失，剩余为原生控件正常边界；建议后续如继续打磨，可补 150% / 200% DPI 专项截图。
+- 验证：`.venv\Scripts\python.exe -m pytest -q` 为 `16 passed, 1 warning`；安装版启动性能复测 `408 / 438 / 462 / 453 / 415ms`，报告为 `release\test-reports\startup-performance-hotkey-row-connected-repeat.json`。
+
 ## 2026-05-15：桌面图标双击直接打开设置界面
 
 - 普通启动不再只静默进托盘；桌面快捷方式、开始菜单和免安装 EXE 双击都会直接显示设置界面。

@@ -43,6 +43,7 @@ class GuiManager {
 
     ; 创建主窗口
     static CreateMainWindow() {
+        this.RoundedInputControls := []
         this.MainGui := Gui("+Resize -MaximizeBox", "豆包语音助手 - 设置")
         this.MainGui.SetFont("s10", "Microsoft YaHei")
         this.MainGui.OnEvent("Close", (*) => this.OnClose())
@@ -50,28 +51,32 @@ class GuiManager {
         ; ===== 按着说模式 =====
         this.MainGui.AddGroupBox("x10 y10 w380 h80", "【按着说】模式")
         this.MainGui.AddText("x20 y35", "触发按键：")
-        this.HoldKeyEdit := this.AddRoundedTextInput(90, 32, 180, 25, "")
-        this.HoldRecordBtn := this.MainGui.AddText("x280 y30 w80 h25 Center Border BackgroundF7F8FA c30343B 0x200", "录制")
+        holdRow := this.AddHotkeyRow(90, 32, 190, 80)
+        this.HoldKeyEdit := holdRow.Input
+        this.HoldRecordBtn := holdRow.Button
         this.HoldRecordBtn.OnEvent("Click", (*) => this.StartRecording("hold"))
         this.MainGui.AddText("x20 y60 cGray", "按住说话，松开自动插入")
 
         ; ===== 自由说模式 =====
         this.MainGui.AddGroupBox("x10 y100 w380 h80", "【自由说】模式")
         this.MainGui.AddText("x20 y125", "触发按键：")
-        this.FreeKeyEdit := this.AddRoundedTextInput(90, 122, 180, 25, "")
-        this.FreeRecordBtn := this.MainGui.AddText("x280 y120 w80 h25 Center Border BackgroundF7F8FA c30343B 0x200", "录制")
+        freeRow := this.AddHotkeyRow(90, 122, 190, 80)
+        this.FreeKeyEdit := freeRow.Input
+        this.FreeRecordBtn := freeRow.Button
         this.FreeRecordBtn.OnEvent("Click", (*) => this.StartRecording("free"))
         this.MainGui.AddText("x20 y150 cGray", "点击开始，再次点击结束并插入")
 
         ; ===== 按着说+自动发送模式 =====
         this.MainGui.AddGroupBox("x10 y190 w380 h105", "【按着说+自动发送】模式")
         this.MainGui.AddText("x20 y215", "触发按键：")
-        this.AutoSendKeyEdit := this.AddRoundedTextInput(90, 212, 180, 25, "")
-        this.AutoSendRecordBtn := this.MainGui.AddText("x280 y210 w80 h25 Center Border BackgroundF7F8FA c30343B 0x200", "录制")
+        autoSendRow := this.AddHotkeyRow(90, 212, 190, 80)
+        this.AutoSendKeyEdit := autoSendRow.Input
+        this.AutoSendRecordBtn := autoSendRow.Button
         this.AutoSendRecordBtn.OnEvent("Click", (*) => this.StartRecording("autoSend"))
         this.MainGui.AddText("x20 y242", "取消按键：")
-        this.CancelKeyEdit := this.AddRoundedTextInput(90, 239, 180, 25, "")
-        this.CancelRecordBtn := this.MainGui.AddText("x280 y237 w80 h25 Center Border BackgroundF7F8FA c30343B 0x200", "录制")
+        cancelRow := this.AddHotkeyRow(90, 239, 190, 80)
+        this.CancelKeyEdit := cancelRow.Input
+        this.CancelRecordBtn := cancelRow.Button
         this.CancelRecordBtn.OnEvent("Click", (*) => this.StartRecording("cancel"))
         this.MainGui.AddText("x20 y267 cGray", "按住说话松开发送，说话中按取消键可取消")
 
@@ -80,8 +85,9 @@ class GuiManager {
 
         ; ===== 豆包快捷键 =====
         this.MainGui.AddText("x20 y315", "豆包快捷键：")
-        this.DouBaoHotkeyEdit := this.AddRoundedTextInput(110, 312, 160, 25, "")
-        this.DouBaoRecordBtn := this.MainGui.AddText("x280 y310 w80 h25 Center Border BackgroundF7F8FA c30343B 0x200", "录制")
+        doubaoRow := this.AddHotkeyRow(110, 312, 170, 80)
+        this.DouBaoHotkeyEdit := doubaoRow.Input
+        this.DouBaoRecordBtn := doubaoRow.Button
         this.DouBaoRecordBtn.OnEvent("Click", (*) => this.StartRecording("doubao"))
 
         ; ===== 插入延迟 =====
@@ -120,10 +126,11 @@ class GuiManager {
 
     }
 
-    static AddRoundedTextInput(x, y, w, h, text := "") {
-        ctrl := this.MainGui.AddText(Format("x{} y{} w{} h{} Border BackgroundFFFFFF c000000 0x200", x, y, w, h), text)
-        this.RoundedInputControls.Push(ctrl)
-        return ctrl
+    static AddHotkeyRow(x, y, inputW, buttonW, text := "") {
+        rowH := 25
+        input := this.MainGui.AddEdit(Format("x{} y{} w{} h{} ReadOnly -Tabstop", x, y, inputW, rowH), text)
+        button := this.MainGui.AddButton(Format("x{} y{} w{} h{} -Tabstop", x + inputW - 1, y, buttonW + 1, rowH), "录制")
+        return { Input: input, Button: button }
     }
 
     static AddRoundedNumberEdit(x, y, w, h, text := "") {
@@ -146,11 +153,6 @@ class GuiManager {
 
     static ApplyStyles() {
         UiStyle.RoundButtons([
-            this.HoldRecordBtn,
-            this.FreeRecordBtn,
-            this.AutoSendRecordBtn,
-            this.CancelRecordBtn,
-            this.DouBaoRecordBtn,
             this.SaveBtn,
             this.CancelBtn
         ], 4)
