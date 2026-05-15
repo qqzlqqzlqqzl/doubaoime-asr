@@ -57,6 +57,10 @@ class VoiceController {
     static FinishPollTimer := 0
     static FinishStartedAt := 0
     static HotkeysInitialized := false
+    static StartInProgress := false
+    static ReleasePending := false
+    static CancelPending := false
+    static ActiveMode := ""
 
     ; 初始化
     static Init(showSettings := true) {
@@ -310,29 +314,50 @@ class VoiceController {
 
     ; 语音开始（按着说模式按下 或 自由说模式开始）
     static OnVoiceStart() {
+        this.BeginVoiceStart("hold", false)
+    }
+
+    static BeginVoiceStart(mode, autoSend) {
         ; 如果已经在处理中或已禁用，忽略本次触发
         if this.IsProcessing || !this.IsEnabled
             return
 
-        Logger.Info("voice_start mode=hold")
+        Logger.Info("voice_start mode=" . mode)
         this.IsProcessing := true
+        this.IsAutoSendEnabled := autoSend
+        this.StartInProgress := true
+        this.ReleasePending := false
+        this.CancelPending := false
+        this.ActiveMode := mode
         VoiceFloat.Show("", "", "ready")
 
         ; 1. 记录当前焦点窗口
         WindowManager.SaveCurrentWindow()
 
         ; 2. 启动本地 ASR bridge 录音
-        result := BridgeClient.Start("hold")
+        result := BridgeClient.Start(mode)
+        this.StartInProgress := false
         if !result.ok {
-            Logger.Error("voice_start_failed mode=hold error=" . result.error)
-            this.IsProcessing := false
-            HotkeyManager.ResetState()
-            this.ShowTrayTip("错误", result.error)
-            VoiceFloat.Hide()
+            Logger.Error("voice_start_failed mode=" . mode . " error=" . result.error)
+            this.ResetAfterFinish()
+            this.ShowErrorTip(result.error)
             return
         }
-        Logger.Info("voice_started mode=hold session=" . result.session_id)
+        Logger.Info("voice_started mode=" . mode . " session=" . result.session_id)
+        if this.CancelPending {
+            Logger.Info("voice_cancel_after_start mode=" . mode)
+            BridgeClient.Cancel()
+            this.ResetAfterFinish()
+            this.ShowTrayTip("提示", "语音输入已取消")
+            return
+        }
         VoiceFloat.Show("", "", "recording")
+        if this.ReleasePending {
+            Logger.Info("voice_release_after_start mode=" . mode)
+            this.ReleasePending := false
+            this.DoInsertProcess()
+            return
+        }
         this.StartStatusPolling()
     }
 
@@ -340,6 +365,12 @@ class VoiceController {
     static OnHoldEnd() {
         if !this.IsProcessing
             return
+
+        if this.StartInProgress {
+            this.ReleasePending := true
+            Logger.Info("voice_release_queued mode=" . this.ActiveMode)
+            return
+        }
 
         ; 执行插入流程
         this.DoInsertProcess()
@@ -351,45 +382,32 @@ class VoiceController {
             ; 开始说话
             this.OnVoiceStart()
         } else {
-            if this.IsProcessing
+            if this.IsProcessing {
+                if this.StartInProgress {
+                    this.ReleasePending := true
+                    Logger.Info("voice_free_stop_queued mode=" . this.ActiveMode)
+                    return
+                }
                 this.DoInsertProcess()
+            }
         }
     }
 
     ; 按着说+自动发送模式开始
     static OnAutoSendVoiceStart() {
-        ; 如果已经在处理中或已禁用，忽略本次触发
-        if this.IsProcessing || !this.IsEnabled
-            return
-
-        Logger.Info("voice_start mode=autoSend")
-        this.IsProcessing := true
-        this.IsAutoSendEnabled := true  ; 标记需要自动发送
-        VoiceFloat.Show("", "", "ready")
-
-        ; 1. 记录当前焦点窗口
-        WindowManager.SaveCurrentWindow()
-
-        ; 2. 启动本地 ASR bridge 录音
-        result := BridgeClient.Start("autoSend")
-        if !result.ok {
-            Logger.Error("voice_start_failed mode=autoSend error=" . result.error)
-            this.IsProcessing := false
-            this.IsAutoSendEnabled := false
-            HotkeyManager.ResetState()
-            this.ShowTrayTip("错误", result.error)
-            VoiceFloat.Hide()
-            return
-        }
-        Logger.Info("voice_started mode=autoSend session=" . result.session_id)
-        VoiceFloat.Show("", "", "recording")
-        this.StartStatusPolling()
+        this.BeginVoiceStart("autoSend", true)
     }
 
     ; 按着说+自动发送模式松开
     static OnAutoSendHoldEnd() {
         if !this.IsProcessing
             return
+
+        if this.StartInProgress {
+            this.ReleasePending := true
+            Logger.Info("voice_auto_send_release_queued mode=" . this.ActiveMode)
+            return
+        }
 
         ; 执行插入流程（会检查 IsAutoSendEnabled 标志）
         this.DoInsertProcess()
@@ -400,17 +418,17 @@ class VoiceController {
         if !this.IsProcessing
             return
 
+        if this.StartInProgress {
+            this.CancelPending := true
+            this.ReleasePending := false
+            Logger.Info("voice_cancel_queued mode=" . this.ActiveMode)
+            return
+        }
+
         ; 通知本地 ASR bridge 取消本次录音
         Logger.Info("voice_cancel")
         BridgeClient.Cancel()
-        this.StopStatusPolling()
-        this.StopFinishPolling()
-        VoiceFloat.Hide()
-
-        ; 重置状态
-        this.IsProcessing := false
-        this.IsAutoSendEnabled := false
-        HotkeyManager.ResetState()
+        this.ResetAfterFinish()
 
         ; 显示提示（可选）
         this.ShowTrayTip("提示", "语音输入已取消")
@@ -418,6 +436,12 @@ class VoiceController {
 
     ; 执行插入流程
     static DoInsertProcess() {
+        if this.StartInProgress {
+            this.ReleasePending := true
+            Logger.Info("voice_stop_queued_while_starting mode=" . this.ActiveMode)
+            return
+        }
+
         ; 1. 非阻塞停止 bridge 录音，后续用定时器轮询最终结果，避免 AHK UI 卡死
         Logger.Info("voice_stop_async auto_send=" . (this.IsAutoSendEnabled ? "1" : "0"))
         this.StopStatusPolling()
@@ -428,7 +452,13 @@ class VoiceController {
         result := BridgeClient.StopAsync()
         if !result.ok {
             Logger.Error("voice_stop_failed error=" . result.error)
-            this.ShowTrayTip("错误", result.error)
+            if result.error = "no_active_session" {
+                Logger.Warn("voice_stop_no_active_session_reset")
+                BridgeClient.Cancel()
+                this.ResetAfterFinish()
+                return
+            }
+            this.ShowErrorTip(result.error)
             this.ResetAfterFinish()
             return
         }
@@ -458,7 +488,7 @@ class VoiceController {
         status := BridgeClient.Status()
         if status.error != "" {
             Logger.Error("recording_status_error error=" . status.error)
-            this.ShowTrayTip("错误", status.error)
+            this.ShowErrorTip(status.error)
             this.ResetAfterFinish()
             return
         }
@@ -490,7 +520,7 @@ class VoiceController {
 
         if status.error != "" {
             Logger.Error("finish_status_error error=" . status.error)
-            this.ShowTrayTip("错误", status.error)
+            this.ShowErrorTip(status.error)
             this.ResetAfterFinish()
             return
         }
@@ -551,6 +581,10 @@ class VoiceController {
         ; 重置状态
         this.IsProcessing := false
         this.IsAutoSendEnabled := false  ; 重置自动发送标志
+        this.StartInProgress := false
+        this.ReleasePending := false
+        this.CancelPending := false
+        this.ActiveMode := ""
         HotkeyManager.ResetState()
     }
 
@@ -615,6 +649,24 @@ class VoiceController {
     static ShowTrayTip(title, message) {
         if Config.Get("ShowTrayTip")
             TrayTip(message, title, 1)
+    }
+
+    static ShowErrorTip(message) {
+        if message = "no_active_session"
+            return
+        this.ShowTrayTip("错误", this.FriendlyError(message))
+    }
+
+    static FriendlyError(message) {
+        if message = "already_recording"
+            return "上一次录音还在收尾，已自动重置，请再试一次"
+        if message = "ASR bridge 未启动"
+            return "语音服务启动失败，请稍后再试"
+        if InStr(message, "already_recording")
+            return "上一次录音还在收尾，已自动重置，请再试一次"
+        if InStr(message, "no_active_session")
+            return "本次录音已经结束"
+        return message
     }
 
     ; 切换启用状态

@@ -1,5 +1,16 @@
 # 变更记录
 
+## 2026-05-15：修复快速松手导致 `already_recording`
+
+- 修复用户实测出现的 `DoubaoASRHelper.exe 错误 already_recording`。根因是 bridge 后台预热和首次按键启动之间存在窗口期，会重复拉起 `asr_bridge.exe`；同时用户在 `/start` 还没返回时松手，`/stop` 先到达后端返回 `no_active_session`，随后 `/start` 成功并把会话留在 `recording`。
+- `ahk_client/src/bridge.ahk` 新增 `LaunchInProgress`/`LaunchStartedAt` 和统一 `LaunchBridge()`，在 `Run()` 之前就标记 bridge 正在启动，`EnsureRunning()` 会优先等待已有 warmup 进程，不再重复拉起后端。
+- `ahk_client/src/main.ahk` 新增 `StartInProgress`、`ReleasePending`、`CancelPending` 和 `ActiveMode`。按着说/按着说+发送/自由说停止如果发生在启动中，会先排队；`Start()` 成功返回后立即执行 stop/cancel，避免遗留 recording 会话。
+- `already_recording` 会先尝试 `Cancel()` 并重试一次 `/start`；`no_active_session` 作为释放竞态被静默重置，不再把内部错误码直接弹给用户。
+- 新增 `tests/test_ahk_bridge_race.py`，覆盖 bridge 启动串行化、`already_recording` 恢复、启动中松手排队、内部错误码不直出。
+- 本地安装目录 `%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖新版主程序；`dist`/安装目录主程序哈希一致。
+- 验证：`.venv\Scripts\python.exe -m pytest -q` 为 `32 passed`；`.venv\Scripts\python.exe -W error -m pytest -q` 为 `32 passed`；`build-desktop-exe.ps1` 通过；`test-desktop-exe.ps1` 通过；安装版首屏按用户接受口径 `TargetMs=1000` 通过，`startup-performance-race-fix-1s.json` 记录 5 次为 `475 / 500 / 544 / 733 / 880ms`，全部控件完整显示。
+- 备注：本机曾短暂拦截刚构建的未签名 bridge/安装器，属于 Windows 应用控制策略/未签名分发风险；最终使用本地可运行产物复测通过。正式分发仍建议代码签名。
+
 ## 2026-05-15：按标注收紧悬浮窗结果态布局
 
 - 按用户标注减少悬浮窗外层空白：窗口高度从 `166` 压到 `152`，识别结果区从 `y58` 上移到 `y42`。

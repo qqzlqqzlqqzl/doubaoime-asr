@@ -30,6 +30,10 @@
 
 首屏启动性能复测备注：2026-05-15，新增 `test-startup-performance.ps1`，不再只记录“窗口可见”，而是枚举设置页子控件，确认 `【按着说】模式`、`【自由说】模式`、`【按着说+自动发送】模式`、`高级设置`、`保存`、`取消`、`状态: ● 已就绪` 全部出现。修复前安装版 `startup-before-fix.json` 为 `4962ms`。最新安装目录真实路径 `startup-performance-startup-doctor.json`：5 次完整 UI ready 为 `425 / 448 / 412 / 413 / 405ms`，平均 `420.6ms`，`missing_texts=[]`，全部低于 `500ms`。为避免启动体检拖慢首屏，可见启动先显示设置页，托盘、热键、启动体检和 bridge 延迟到首屏后初始化；隐藏自启动仍立即初始化托盘和热键。免安装版旧证据 `startup-performance-portable.json`：`428 / 300 / 316ms`，平均 `348.0ms`。unsigned EXE 偶尔仍可能受 Windows 安全扫描影响，正式外部分发仍建议代码签名。
 
+2026-05-15 追加 `already_recording` 竞态修复后复测：用户明确接受首屏“超一点点没问题，只要不超过 1 秒”。安装版 `startup-performance-race-fix-1s.json` 使用 `TargetMs=1000`，5 次完整 UI ready 为 `475 / 500 / 544 / 733 / 880ms`，平均 `626.4ms`，`missing_texts=[]`，全部低于 1 秒。严格 500ms 口径在当前未签名产物和 Windows 应用控制策略扫描下会偶发超线，不再作为本轮阻断项；分发给外部机器仍建议签名以减少安全扫描抖动。
+
+`already_recording` 竞态修复备注：2026-05-15，用户报错时日志显示 `/stop` 的 `no_active_session` 发生在 `voice_started session=1` 之前，随后 bridge 留在 `recording`，后续 `/start` 都返回 `already_recording`。本轮修复 AHK bridge 启动串行化和启动中松手排队；新增 `tests/test_ahk_bridge_race.py` 静态防回退；验证 `.venv\Scripts\python.exe -m pytest -q` 和 `-W error` 均为 `32 passed`，`build-desktop-exe.ps1` 与 `test-desktop-exe.ps1` 通过，本地安装目录已覆盖新版主程序。
+
 启动体检与冲突自愈备注：2026-05-15，新增 `startup_doctor.ahk`。源码报告 `source-startup-doctor-test.json` 和安装版报告 `installed-startup-doctor-test.json` 均为 `ok=true`：旧 `doubaoime-asr.bat` 删除、重复 `Doubao ASR Helper.lnk` 删除、标准 `豆包语音助手.lnk` 刷新且带 `--hidden`、无关文件保留、重复/危险热键恢复默认。`test-desktop-exe.ps1` 已把该 self-test 纳入 AHK smoke。卸载清理补充证据 `installer-uninstall-startup-cleanup.json` 为 `ok=true`，确认旧 bat 和当前中文启动快捷方式都能在隔离 `APPDATA` 下被删除。
 
 悬浮窗音量和长文本复测备注：2026-05-14，顶部蓝色波形改为真实麦克风音量指示，不再是定时器假动画。安装版 bridge 录音态证据 `release/test-reports/installed-bridge-audio-level-status.json`：`has_audio_level=true`，当前未说话底噪 `audio_level=3`、`audio_peak=3`。安装版长文本浮窗证据 `release/test-reports/installed-long-float-final.json` 和 `installed-long-float-final.png`：窗口 `457x167`，子控件包含长测试文本以及 `清空 / 复制 / 插入`。本轮 `build-desktop-exe.ps1`、`test-desktop-exe.ps1` 和 `.venv\Scripts\python.exe -m pytest` 均通过；已覆盖 `%LOCALAPPDATA%\DoubaoASRHelper` 下主程序和 bridge。

@@ -9,6 +9,8 @@ class BridgeClient {
     static Port := 18765
     static ProcessHandle := ""
     static WarmupStarted := false
+    static LaunchInProgress := false
+    static LaunchStartedAt := 0
 
     static BaseUrl() {
         return "http://" . this.Host . ":" . this.Port
@@ -31,36 +33,34 @@ class BridgeClient {
     static EnsureRunning() {
         if this.IsAvailable() {
             this.WarmupStarted := true
+            this.LaunchInProgress := false
             return true
         }
 
-        if this.WarmupStarted {
-            if this.WaitForAvailable(5000)
+        if this.WarmupStarted || this.LaunchInProgress {
+            waitMs := this.LaunchInProgress ? 12000 : 7000
+            if this.WaitForAvailable(waitMs)
                 return true
+            if this.LaunchInProgress {
+                Logger.Warn("bridge_launch_still_starting elapsed_ms=" . (A_TickCount - this.LaunchStartedAt))
+                if this.WaitForAvailable(5000)
+                    return true
+            }
             if this.ProcessHandle != "" && ProcessExist(this.ProcessHandle) {
                 Logger.Error("bridge_warmup_not_ready pid=" . this.ProcessHandle)
                 return false
             }
+            if this.LaunchInProgress && (A_TickCount - this.LaunchStartedAt) < 15000 {
+                Logger.Error("bridge_launch_no_pid_yet elapsed_ms=" . (A_TickCount - this.LaunchStartedAt))
+                return false
+            }
             this.WarmupStarted := false
+            this.LaunchInProgress := false
             this.ProcessHandle := ""
         }
 
-        exe := this.BridgeExePath()
-        if exe = "" {
-            Logger.Error("bridge_exe_missing")
+        if !this.LaunchBridge("bridge_launch", "bridge_launch_pid")
             return false
-        }
-
-        try {
-            Logger.Info("bridge_launch exe=" . exe . " port=" . this.Port)
-            Run('"' . exe . '" --host ' . this.Host . ' --port ' . this.Port, , "Hide", &pid)
-            Logger.Info("bridge_launch_pid pid=" . pid)
-            this.ProcessHandle := pid
-            this.WarmupStarted := true
-        } catch {
-            Logger.Error("bridge_launch_failed exe=" . exe)
-            return false
-        }
 
         return this.WaitForAvailable(5000)
     }
@@ -76,28 +76,38 @@ class BridgeClient {
     }
 
     static Warmup() {
-        if this.WarmupStarted
+        if this.WarmupStarted || this.LaunchInProgress
             return true
         if this.IsAvailableFast() {
             this.WarmupStarted := true
             return true
         }
 
+        return this.LaunchBridge("bridge_warmup_launch", "bridge_warmup_pid")
+    }
+
+    static LaunchBridge(launchEvent, pidEvent) {
         exe := this.BridgeExePath()
         if exe = "" {
-            Logger.Error("bridge_warmup_exe_missing")
+            Logger.Error(launchEvent . "_exe_missing")
             return false
         }
 
+        this.WarmupStarted := true
+        this.LaunchInProgress := true
+        this.LaunchStartedAt := A_TickCount
         try {
-            Logger.Info("bridge_warmup_launch exe=" . exe . " port=" . this.Port)
+            Logger.Info(launchEvent . " exe=" . exe . " port=" . this.Port)
             Run('"' . exe . '" --host ' . this.Host . ' --port ' . this.Port, , "Hide", &pid)
-            Logger.Info("bridge_warmup_pid pid=" . pid)
             this.ProcessHandle := pid
-            this.WarmupStarted := true
+            this.LaunchInProgress := false
+            Logger.Info(pidEvent . " pid=" . pid)
             return true
         } catch as e {
-            Logger.Exception("bridge_warmup_launch_failed exe=" . exe, e)
+            this.WarmupStarted := false
+            this.LaunchInProgress := false
+            this.ProcessHandle := ""
+            Logger.Exception(launchEvent . "_failed exe=" . exe, e)
             return false
         }
     }
@@ -127,12 +137,33 @@ class BridgeClient {
         try {
             response := this.Request("POST", "/start", body, 3000)
             result := this.ParseResult(response)
+            if !result.ok && result.error = "already_recording"
+                return this.RecoverAlreadyRecording(mode, body, result)
             if !result.ok
                 Logger.Error("bridge_start_rejected mode=" . mode . " error=" . result.error)
             return result
         } catch as e {
             Logger.Exception("bridge_start_exception mode=" . mode, e)
             return { ok: false, text: "", final_text: "", state: "error", error: e.Message, done: false, cancelled: false, session_id: 0, audio_level: 0 }
+        }
+    }
+
+    static RecoverAlreadyRecording(mode, body, firstResult) {
+        Logger.Warn("bridge_start_already_recording_recover mode=" . mode . " state=" . firstResult.state . " session=" . firstResult.session_id)
+        this.Cancel()
+        Sleep(200)
+        try {
+            response := this.Request("POST", "/start", body, 3000)
+            result := this.ParseResult(response)
+            if result.ok {
+                Logger.Info("bridge_start_recovered mode=" . mode . " session=" . result.session_id)
+                return result
+            }
+            Logger.Error("bridge_start_recovery_failed mode=" . mode . " error=" . result.error)
+            return result
+        } catch as e {
+            Logger.Exception("bridge_start_recovery_exception mode=" . mode, e)
+            return { ok: false, text: "", final_text: "", state: "error", error: "上一次录音还在收尾，请稍后再试", done: false, cancelled: false, session_id: 0, audio_level: 0 }
         }
     }
 
