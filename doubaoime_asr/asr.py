@@ -33,6 +33,19 @@ def _connect_websocket(config: ASRConfig):
     return websockets.connect(config.ws_url, **kwargs)
 
 
+async def _close_websocket(ws: ClientConnection, timeout: float = 2.0) -> None:
+    with contextlib.suppress(Exception):
+        result = ws.close()
+        if inspect.isawaitable(result):
+            await asyncio.wait_for(result, timeout=timeout)
+    wait_closed = getattr(ws, "wait_closed", None)
+    if wait_closed is not None:
+        with contextlib.suppress(Exception):
+            result = wait_closed()
+            if inspect.isawaitable(result):
+                await asyncio.wait_for(result, timeout=timeout)
+
+
 class ResponseType(Enum):
     """
     ASR 响应类型
@@ -234,6 +247,7 @@ class DoubaoASR:
                         await send_task
                     with contextlib.suppress(asyncio.CancelledError):
                         await recv_task
+                    await _close_websocket(ws)
 
         except websockets.exceptions.WebSocketException as e:
             raise ASRError(f"WebSocket 错误: {e}") from e
@@ -292,6 +306,7 @@ class DoubaoASR:
                         await send_task
                     with contextlib.suppress(asyncio.CancelledError):
                         await recv_task
+                    await _close_websocket(ws)
 
         except websockets.exceptions.WebSocketException as e:
             raise ASRError(f"WebSocket 错误: {e}") from e
