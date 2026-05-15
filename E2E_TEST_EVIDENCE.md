@@ -4,6 +4,8 @@
 
 结论：没有全部测完。当前环境已经跑完一部分能自动化闭合的链路；需要真人按键、真实外部应用、重启、干净电脑、长时间运行或受控授权服务器的项目，下面明确标为 `BLOCKED` 或 `NOT_RUN`，不按通过计算。
 
+悬浮窗结果态输入框化备注：2026-05-15，用户明确指出 `清空 / 复制 / 插入` 对主流程没有意义，按住说松开后应该自动插入。本轮将结果态收敛为一个识别文本框和轻量关闭入口，隐藏三个手动操作按钮；`test-desktop-exe.ps1` 改为只枚举可见子控件并断言这些按钮不能出现，避免后续回退。证据：源码截图 `release/test-reports/source-float-result-inputbox-only-dwm.png`、安装版截图 `release/test-reports/installed-float-result-inputbox-only-dwm.png` 均为 `842x222` 物理像素，可见子控件为状态、完整测试识别文本和 `×`，`hidden_actions=true`；`.venv\Scripts\python.exe -m pytest -q` 与 `-W error` 均为 `34 passed`；`build-desktop-exe.ps1` 和 `test-desktop-exe.ps1` 通过；安装版首屏 `startup-performance-float-inputbox-only-1s.json` 为 `450 / 494 / 562 / 416 / 283ms`。
+
 协作备注：2026-05-13 本机已拉取另一台电脑的最新文档提交，并推送 `64e49f0 Fix settings layout in compact windows`。这个提交修复设置页在普通、窄窗口、最小窗口和 150%/200% DPI 下的布局测试失败。另一台电脑继续前应先 `git fetch origin` 并确认已包含该提交，避免用旧版 `desktop_app.py` 覆盖。
 
 自查修正：

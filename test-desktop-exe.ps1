@@ -63,6 +63,7 @@ public class AhkSmokeWin32 {
     }, IntPtr.Zero);
     if (target == IntPtr.Zero) return texts.ToArray();
     EnumChildWindows(target, delegate(IntPtr child, IntPtr lParam) {
+      if (!IsWindowVisible(child)) return true;
       string text = GetControlText(child);
       if (!String.IsNullOrWhiteSpace(text)) texts.Add(text);
       return true;
@@ -146,9 +147,9 @@ public class AhkSmokeWin32 {
       throw "AHK float self-test window is too small: ${FloatWidth}x${FloatHeight}"
     }
     $ChildTexts = @([AhkSmokeWin32]::GetChildTexts($FloatProcess.Id, "DoubaoASRHelperFloat"))
-    foreach ($ExpectedText in @("清空", "复制", "插入")) {
-      if ($ChildTexts -notcontains $ExpectedText) {
-        throw "AHK float self-test missing result action: $ExpectedText"
+    foreach ($HiddenAction in @("清空", "复制", "插入")) {
+      if ($ChildTexts -contains $HiddenAction) {
+        throw "AHK float self-test should not expose manual result action: $HiddenAction"
       }
     }
     if (-not ($ChildTexts -join "`n").Contains("这是我用豆包语音输入的内容")) {

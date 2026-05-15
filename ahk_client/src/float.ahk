@@ -29,7 +29,7 @@ class VoiceFloat {
     static InsertCallback := ""
     static Width := 420
     static Height := 152
-    static ResultHeight := 118
+    static ResultHeight := 110
     static WaveTick := 0
     static WaveTimer := 0
     static WaveSlotHeights := [4, 4, 4, 5, 4, 5, 5, 6, 5, 6, 7, 9, 12, 18, 24, 28, 24, 18, 12, 9, 7, 6, 5, 6, 5, 5, 4, 5, 4, 4]
@@ -66,9 +66,9 @@ class VoiceFloat {
         this.FloatGui.SetFont("s19 c2563EB", "Segoe MDL2 Assets")
         this.ResultMicCtrl := this.FloatGui.AddText("x0 y0 w1 h1 Center BackgroundTrans", Chr(0xE720))
         this.FloatGui.SetFont("s11 c243B63", "Microsoft YaHei")
-        this.ResultTextCtrl := this.FloatGui.AddText("x18 y14 w354 h68 Border BackgroundFFFFFF c243B63", "识别内容会显示在这里")
+        this.ResultTextCtrl := this.FloatGui.AddText("x18 y12 w360 h84 Border BackgroundFFFFFF c243B63", "识别内容会显示在这里")
         this.FloatGui.SetFont("s11 c5B75B7", "Microsoft YaHei")
-        this.CloseCtrl := this.FloatGui.AddText("x386 y38 w20 h22 Center BackgroundTrans", "×")
+        this.CloseCtrl := this.FloatGui.AddText("x390 y12 w20 h22 Center BackgroundTrans", "×")
         this.FloatGui.SetFont("s9 c555B6E", "Microsoft YaHei")
         this.ClearBtn := this.FloatGui.AddText("x170 y88 w58 h26 Center Border BackgroundF7F8FA c30343B 0x200", "清空")
         this.CopyBtn := this.FloatGui.AddText("x234 y88 w58 h26 Center Border BackgroundF7F8FA c30343B 0x200", "复制")
@@ -147,8 +147,10 @@ class VoiceFloat {
         this.ResultMicCtrl.Visible := false
         this.GearCtrl.Visible := !visible
         this.MinCtrl.Visible := !visible
-        for ctrl in [this.ResultTextCtrl, this.CloseCtrl, this.ClearBtn, this.CopyBtn, this.InsertBtn]
+        for ctrl in [this.ResultTextCtrl, this.CloseCtrl]
             ctrl.Visible := visible
+        for ctrl in [this.ClearBtn, this.CopyBtn, this.InsertBtn]
+            ctrl.Visible := false
         this.HideDecorationControls()
         if this.WaveCanvasCtrl != ""
             this.WaveCanvasCtrl.Visible := !visible

@@ -22,13 +22,15 @@ def _bottom(rect: tuple[int, int, int, int]) -> int:
     return rect[1] + rect[3]
 
 
-def test_float_result_text_does_not_overlap_action_buttons() -> None:
+def test_float_result_text_has_no_visible_action_button_row() -> None:
     source = FLOAT_AHK.read_text(encoding="utf-8")
     result_text = _control_rect(source, "this.ResultTextCtrl")
 
-    for button in ("this.ClearBtn", "this.CopyBtn", "this.InsertBtn"):
-        button_rect = _control_rect(source, button)
-        assert _bottom(result_text) <= button_rect[1] - 4, button
+    assert result_text[1] <= 14
+    assert result_text[3] >= 80
+    assert "for ctrl in [this.ResultTextCtrl, this.CloseCtrl]" in source
+    assert "for ctrl in [this.ClearBtn, this.CopyBtn, this.InsertBtn]" in source
+    assert "ctrl.Visible := false" in source
 
 
 def test_float_result_box_does_not_touch_window_bottom() -> None:
@@ -36,21 +38,21 @@ def test_float_result_box_does_not_touch_window_bottom() -> None:
     height_match = re.search(r"static ResultHeight := (\d+)", source)
     assert height_match, "VoiceFloat.ResultHeight not found"
     window_height = int(height_match.group(1))
-    insert_btn = _control_rect(source, "this.InsertBtn")
+    result_text = _control_rect(source, "this.ResultTextCtrl")
 
-    assert _bottom(insert_btn) <= window_height - 4
+    assert _bottom(result_text) <= window_height - 10
 
 
-def test_float_result_box_is_compact_but_taller() -> None:
+def test_float_result_box_is_compact_input_display() -> None:
     source = FLOAT_AHK.read_text(encoding="utf-8")
     result_text = _control_rect(source, "this.ResultTextCtrl")
 
     assert result_text[0] <= 20
-    assert result_text[1] <= 20
-    assert result_text[2] >= 320
-    assert result_text[3] >= 68
+    assert result_text[1] <= 14
+    assert result_text[2] >= 350
+    assert result_text[3] >= 80
     assert 'static Height := 152' in source
-    assert 'static ResultHeight := 118' in source
+    assert 'static ResultHeight := 110' in source
     assert 'static Width := 420' in source
 
 
@@ -74,7 +76,7 @@ def test_float_result_text_keeps_visible_start_of_long_text() -> None:
 
     assert "this.ResultTextCtrl := this.FloatGui.AddText" in source
     assert "this.ResultTextCtrl := this.FloatGui.AddEdit" not in source
-    assert "this.ResultTextCtrl := this.FloatGui.AddText(\"x18 y14 w354 h68 Border" in source
+    assert "this.ResultTextCtrl := this.FloatGui.AddText(\"x18 y12 w360 h84 Border" in source
     assert "this.ResultMicCtrl.Visible := false" in source
     assert "this.GearCtrl.Visible := !visible" in source
     assert "this.MinCtrl.Visible := !visible" in source

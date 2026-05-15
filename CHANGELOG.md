@@ -1,5 +1,13 @@
 # 变更记录
 
+## 2026-05-15：简化悬浮窗结果态为输入框
+
+- 按最新反馈移除结果态主界面里的 `清空 / 复制 / 插入` 三个手动操作按钮；结果态只保留识别文本框和轻量关闭入口。
+- 结果态高度从 `118` 收到 `110`，文本框扩大到 `x18 y12 w360 h84`，把原按钮行空间还给识别文本。
+- 自动插入仍是核心路径：按着说松开后由 AHK 异步轮询最终文本并插入，不依赖悬浮窗按钮。
+- 更新 `tests/test_ahk_float_layout.py` 和 `test-desktop-exe.ps1`，防止按钮重新出现在结果态。
+- 验证：`.venv\Scripts\python.exe -m pytest -q` 与 `-W error` 均为 `34 passed`；`build-desktop-exe.ps1` 和 `test-desktop-exe.ps1` 通过；源码与安装版 DWM 截图 `source-float-result-inputbox-only-dwm.png`、`installed-float-result-inputbox-only-dwm.png` 均为 `842x222`，可见子控件只有状态、识别文本和 `×`；安装版首屏 1 秒口径为 `450 / 494 / 562 / 416 / 283ms`。
+
 ## 2026-05-15：收紧悬浮窗结果态空白区域
 
 - 按用户红框标注继续压缩结果态浮窗空白：结果态窗口宽度从 `456` 收到 `420`，结果态高度单独压到 `118`，不再沿用录音态 `152` 高度。
@@ -7,7 +15,7 @@
 - 结果态隐藏大麦克风占位、齿轮和最小化入口，只保留关闭 `×`、结果文字和 `清空 / 复制 / 插入`，避免顶部、左侧和右侧大块空白。
 - 底部按钮上移到 `y88`，整体物理截图高度从约 `306px` 降到 `238px`。
 - 更新 `tests/test_ahk_float_layout.py`，断言结果态独立高度、紧凑宽度、文字框左上扩展、隐藏结果态图标占位。
-- 验证：`.venv\Scripts\python.exe -m pytest -q` 和 `-W error` 均为 `33 passed`；源码和安装版 `--float-self-test` 通过；安装版截图 `release\test-reports\installed-float-result-compact-no-empty-dwm.png` 为 `842x238` 物理像素；`build-desktop-exe.ps1` 与 `test-desktop-exe.ps1` 通过；安装版首屏 `startup-performance-float-compact-no-empty-1s.json` 为 `372 / 427 / 402 / 437 / 448ms`。
+- 当时验证：`.venv\Scripts\python.exe -m pytest -q` 和 `-W error` 均为 `33 passed`；源码和安装版 `--float-self-test` 通过；安装版截图 `release\test-reports\installed-float-result-compact-no-empty-dwm.png` 为 `842x238` 物理像素；`build-desktop-exe.ps1` 与 `test-desktop-exe.ps1` 通过；安装版首屏 `startup-performance-float-compact-no-empty-1s.json` 为 `372 / 427 / 402 / 437 / 448ms`。
 - 本地安装目录 `%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖新版，哈希与 `dist` 一致。
 
 ## 2026-05-15：修复悬浮窗结果态文字空白

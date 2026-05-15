@@ -83,7 +83,7 @@
 | E21 | 授权断网打包版烟测 | 安装版运行 `--license-network-test`，写出 `installed-license-network-test.json`，验证普通版不受授权断网影响，受控版服务器不可达时阻止使用但保留本地 token |
 | E22 | AHK 旧配置迁移烟测 | `test-desktop-exe.ps1` 在隔离 `APPDATA` 下预置旧目录 `%APPDATA%\DouBaoVoiceHelper\config.ini` | AHK 主客户端启动后创建 `%APPDATA%\DoubaoASRHelper\config.ini`，并把旧默认 `XButton1/F9/F12/Ctrl+Alt+Shift+D` 迁移为 `Ctrl+Alt+Space/Ctrl+Alt+Enter/Esc/Ctrl+Alt+D`，`ConfigVersion=3` |
 | E23 | 上游差异审计复核 | 阅读 [UPSTREAM_DIFF_AUDIT.md](UPSTREAM_DIFF_AUDIT.md)，并用两个参考仓库当前 HEAD 对照源码 | 每个新增/修改/保留差异都有 why；解释不成立的差异必须修复或补测试，不能只写文档掩盖 |
-| E24 | AHK 悬浮窗可见性烟测 | `test-desktop-exe.ps1` 启动 `DoubaoASRHelper.exe --float-self-test` 并枚举 Win32 窗口及子控件 | 能找到可见的 `DoubaoASRHelperFloat`，窗口宽高达到阈值，识别结果框内出现测试文本，并且能枚举到 `清空`、`复制`、`插入` 三个操作，报告写入 `release\test-reports\ahk-float-self-test.json` |
+| E24 | AHK 悬浮窗可见性烟测 | `test-desktop-exe.ps1` 启动 `DoubaoASRHelper.exe --float-self-test` 并枚举 Win32 窗口及子控件 | 能找到可见的 `DoubaoASRHelperFloat`，窗口宽高达到阈值，识别结果框内出现测试文本，并且不能枚举到 `清空`、`复制`、`插入` 三个手动操作，报告写入 `release\test-reports\ahk-float-self-test.json` |
 | E25 | 崩溃排查日志烟测 | `test-desktop-exe.ps1` 在隔离 `APPDATA` 中运行 bridge self-test 和 AHK float self-test | 生成 `client-YYYYMMDD.log` 和 `asr_bridge-YYYYMMDD.log`，并包含关键事件如 `float_self_test_start`、`self_test_ok` |
 | E26 | 首屏 500ms 完整 UI 性能 | `test-startup-performance.ps1` 启动安装版或免安装版 EXE，并枚举设置页子控件 | 设置页窗口和 `【按着说】模式`、`【自由说】模式`、`【按着说+自动发送】模式`、`高级设置`、`保存`、`取消`、`状态: ● 已就绪` 全部在 `500ms` 内出现；报告写入 `release\test-reports\startup-performance*.json` |
 | E27 | AHK 启动体检与冲突自愈烟测 | `test-desktop-exe.ps1` 运行 `DoubaoASRHelper.exe selftest --startup-doctor-test --startup-doctor-report ...`，或单独运行源码/安装版同名参数 | 报告 `ok=true`，旧启动 bat 被删除、重复快捷方式被删除、无关文件保留、标准 `豆包语音助手.lnk` 带 `--hidden`、重复/危险热键恢复默认；真实重启仍归入 T13 手工闭环 |
@@ -132,7 +132,7 @@
 | U06 | 快捷键自定义 | 点击“录制”并输入新组合键后保存 | 配置保存成功，重启后仍生效 |
 | U07 | 快捷键冲突 | 配置重复快捷键、裸字母键或 Windows 保留组合键，例如 `Alt + Tab` | 弹窗提示冲突或不可用风险，不能保存问题配置 |
 | U08 | 默认值复核 | 清空配置后首次启动设置页 | 默认值显示为 `右Ctrl`、`Ctrl+Alt+Space`、`Ctrl+Alt+Enter`、`Esc`、`Ctrl+Alt+D`、插入延迟 `0.3 秒`、剪贴板超时 `100ms`、发送延迟 `50ms` |
-| U09 | 悬浮窗操作 | 录音后在悬浮窗点击清空、复制、插入 | 三个操作都生效，窗口不遮挡主流程 |
+| U09 | 悬浮窗结果态 | 录音后查看悬浮窗结果态 | 结果态像输入框一样显示识别文本，不出现 `清空`、`复制`、`插入` 手动按钮；松开按键后自动插入并收起 |
 | U10 | 帮助文档 | 打开“使用说明”和 release `HELP.md` | 能看到首次运行、默认快捷键、系统托盘、长文本测试和卸载说明 |
 | U11 | 延迟设置 | 调整插入延迟、剪贴板超时、发送延迟并保存后重启 | 数值保持在允许范围内，插入延迟滑块按 50ms 吸附并显示秒数，两个高级延迟输入框按 50ms 吸附 |
 | U12 | UI 截图复核 | 打开 `release\test-reports\installed-ahk-settings-reference-restored-dpiaware.png` 和 `source-ahk-settings-reference-restored.png`；再用 `git diff --no-index .devtools\reference\doubao-voice-helper\src\gui.ahk ahk_client\src\gui.ahk` 复核当前差异 | 设置页应按 `xiaohu31/doubao-voice-helper` 的 AHK 上游布局显示三种模式块、豆包快捷键、插入延迟、剪贴板保护、开机自启动、高级设置、保存/取消和状态；视觉布局 diff 应为零，允许保留 `Space/Enter/Esc/...` 热键显示与反向转换兼容 |
