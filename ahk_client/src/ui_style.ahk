@@ -4,7 +4,7 @@
 #Requires AutoHotkey v2.0
 
 class UiStyle {
-    static RoundButton(ctrl, cornerRadius := 4) {
+    static RoundControl(ctrl, cornerRadius := 4) {
         if ctrl = ""
             return
         try {
@@ -35,13 +35,21 @@ class UiStyle {
                 DllCall("Gdi32\DeleteObject", "ptr", region)
             }
         } catch as e {
-            Logger.Exception("round_button_failed", e)
+            Logger.Exception("round_control_failed", e)
         }
     }
 
-    static RoundButtons(controls, cornerRadius := 4) {
+    static RoundControls(controls, cornerRadius := 4) {
         for ctrl in controls
-            this.RoundButton(ctrl, cornerRadius)
+            this.RoundControl(ctrl, cornerRadius)
+    }
+
+    static RoundButton(ctrl, cornerRadius := 4) {
+        this.RoundControl(ctrl, cornerRadius)
+    }
+
+    static RoundButtons(controls, cornerRadius := 4) {
+        this.RoundControls(controls, cornerRadius)
     }
 
     static GetDpiForWindow(hwnd) {
