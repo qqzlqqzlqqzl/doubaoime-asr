@@ -25,6 +25,7 @@ def run_license_server(tmp_path: Path, codes: dict[str, Any]) -> Iterator[tuple[
     finally:
         server.shutdown()
         thread.join(timeout=5)
+        server.server_close()
 
 
 def sample_codes(max_devices: int = 1, disabled: bool = False, expires_at: str = "2027-12-31T23:59:59Z") -> dict[str, Any]:

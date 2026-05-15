@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from .constants import HANDSHAKE_URL, HKDF_INFO, USER_AGENT
 
@@ -70,8 +70,7 @@ class WaveSession(BaseModel):
     ticket_long_exp: int
     expires_at: float
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def is_expired(self) -> bool:
         """检查会话是否已过期"""

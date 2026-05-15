@@ -6,6 +6,8 @@
 当前主要分支：`main`
 远端仓库：`https://github.com/qqzlqqzlqqzl/doubaoime-asr.git`
 
+最新未发布补丁：2026-05-15 测试 warning 已清零。`doubaoime_asr/wave_client.py` 的 `WaveSession` 已从 Pydantic v1 `class Config` 迁移到 v2 `ConfigDict`；`pyproject.toml` 已显式设置 `asyncio_default_fixture_loop_scope = "function"`；`tests/test_activation.py` 的临时 `LicenseServer` shutdown 后会调用 `server_close()`。验证：`.venv\Scripts\python.exe -m pytest -q` 和 `.venv\Scripts\python.exe -W error -m pytest -q` 都是 `16 passed`。本地安装目录已重新覆盖新版 `DoubaoASRHelper.exe` / `asr_bridge.exe`。
+
 最新未发布补丁：2026-05-15 设置页热键输入行已改为原生 `Edit(ReadOnly)` + `Button`，输入框和 `录制` 按钮贴边并重叠 1 个逻辑像素，修复用户截图指出的边框断线/不连贯问题。不要再恢复 `AddText(... Border ...)` 伪输入框和伪按钮组合；那套在 DPI 缩放下会被 `SetWindowRgn`/控件边框裁切。当前安装版截图证据为 `release/test-reports/installed-hotkey-row-connected-final.png`，文本检查为 `installed-hotkey-row-connected-final.json`。前端评审 agent 已复核通过。
 
 最新未发布补丁：2026-05-15 桌面图标双击行为已改为直接打开设置界面。普通启动走 `VoiceController.Init(true)`，`--hidden` 才静默进托盘；`Config.SetAutoStart()` 创建/刷新开机自启动快捷方式时会写入 `--hidden` 参数。当前安装目录已覆盖新版，桌面快捷方式已刷新为无参数，验证证据为 `release/test-reports/desktop-shortcut-open-settings.json`、`installed-manual-open-existing-config.json`、`installed-hidden-launch-existing-config.json` 和截图 `installed-manual-open-existing-config.png`。

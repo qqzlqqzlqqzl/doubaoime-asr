@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-05-15：测试 warning 清零
+
+- `WaveSession` 的 Pydantic 配置从 v1 风格 `class Config` 迁移到 v2 风格 `ConfigDict`，修复 `PydanticDeprecatedSince20`。
+- `pyproject.toml` 显式设置 `asyncio_default_fixture_loop_scope = "function"`，避免 pytest-asyncio 默认值变更提示。
+- 激活码测试里的本地 `LicenseServer` 在 shutdown 后补充 `server_close()`，清理严格 warning 模式下暴露的未关闭 socket。
+- 验证：`.venv\Scripts\python.exe -m pytest -q` 为 `16 passed`；`.venv\Scripts\python.exe -W error -m pytest -q` 也为 `16 passed`。
+
 ## 2026-05-15：热键输入行边框连贯性修复
 
 - 设置页五组热键行改回原生 `Edit(ReadOnly)` + `Button` 控件，并把输入框和 `录制` 按钮贴边对齐，避免此前伪输入框、伪按钮各自画边框造成断线和裁切感。

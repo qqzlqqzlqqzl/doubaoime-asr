@@ -40,3 +40,6 @@ where = ["."]
 
 [tool.setuptools.package-data]
 doubaoime_asr = ["*.pyi", "*.proto", "license-config.json", "assets/*.ico"]
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
