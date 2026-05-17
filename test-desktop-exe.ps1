@@ -99,7 +99,7 @@ public class AhkSmokeWin32 {
 
   $BridgeProcess = Start-Process -FilePath $BridgeExe -ArgumentList "--port 18767" -PassThru
   try {
-    $Deadline = (Get-Date).AddSeconds(15)
+    $Deadline = (Get-Date).AddSeconds(30)
     $Health = $null
     while ((Get-Date) -lt $Deadline) {
       try {
@@ -117,9 +117,36 @@ public class AhkSmokeWin32 {
     if (-not $Status.ok -or $Status.state -ne "idle") {
       throw "asr_bridge.exe status is not idle"
     }
+    $Reset = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:18767/reset" -ContentType "application/json" -Body "{}" -TimeoutSec 2
+    if (-not $Reset.ok -or $Reset.state -ne "idle") {
+      throw "asr_bridge.exe reset self-heal endpoint failed"
+    }
   }
   finally {
     Stop-Process -Id $BridgeProcess.Id -Force -ErrorAction SilentlyContinue
+  }
+
+  $OldBridgeCheckAppData = $env:APPDATA
+  $env:APPDATA = Join-Path $ReportsDir "ahk-bridge-self-check-appdata"
+  Remove-Item -LiteralPath $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force -Path $env:APPDATA | Out-Null
+  $BridgeCheckProcess = Start-Process -FilePath $AhkClientExe -ArgumentList "--bridge-self-check-test" -PassThru -Wait
+  try {
+    if ($BridgeCheckProcess.ExitCode -ne 0) {
+      throw "AHK bridge self-check failed with exit code $($BridgeCheckProcess.ExitCode)"
+    }
+    $ClientLog = Join-Path $env:APPDATA ("DoubaoASRHelper\logs\client-" + (Get-Date -Format "yyyyMMdd") + ".log")
+    if (-not (Test-Path $ClientLog)) {
+      throw "AHK bridge self-check did not create a client log"
+    }
+    $ClientLogText = Get-Content -LiteralPath $ClientLog -Raw
+    if ($ClientLogText -notmatch "bridge_self_check_test_end") {
+      throw "AHK bridge self-check log missing completion marker"
+    }
+  }
+  finally {
+    Get-Process asr_bridge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    $env:APPDATA = $OldBridgeCheckAppData
   }
 
   $OldFloatAppData = $env:APPDATA

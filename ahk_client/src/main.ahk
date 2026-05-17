@@ -458,7 +458,8 @@ class VoiceController {
                 this.ResetAfterFinish()
                 return
             }
-            this.ShowErrorTip(result.error)
+            BridgeClient.Repair("voice_stop_failed")
+            this.ShowTrayTip("错误", "ASR 出错，已自动自检修复，请重试")
             this.ResetAfterFinish()
             return
         }
@@ -488,7 +489,8 @@ class VoiceController {
         status := BridgeClient.Status()
         if status.error != "" {
             Logger.Error("recording_status_error error=" . status.error)
-            this.ShowErrorTip(status.error)
+            BridgeClient.Repair("recording_status_error")
+            this.ShowTrayTip("错误", "ASR 出错，已自动自检修复，请重试")
             this.ResetAfterFinish()
             return
         }
@@ -520,7 +522,8 @@ class VoiceController {
 
         if status.error != "" {
             Logger.Error("finish_status_error error=" . status.error)
-            this.ShowErrorTip(status.error)
+            BridgeClient.Repair("finish_status_error")
+            this.ShowTrayTip("错误", "ASR 出错，已自动自检修复，请重试")
             this.ResetAfterFinish()
             return
         }
@@ -756,6 +759,25 @@ if A_Args.Length > 0 && A_Args[1] = "--float-self-test" {
 
 if HasLaunchArg("--startup-doctor-test") {
     RunStartupDoctorSelfTest(ArgValue("--startup-doctor-report"))
+    ExitApp(0)
+}
+
+if HasLaunchArg("--bridge-self-check-test") {
+    Logger.Info("bridge_self_check_test_start")
+    check := BridgeClient.SelfCheck(true, "self_test")
+    if !check.ok {
+        Logger.Error("bridge_self_check_test_failed error=" . check.error)
+        BridgeClient.StopManagedBridge()
+        ExitApp(2)
+    }
+    reset := BridgeClient.Reset("self_test_end")
+    if !reset.ok {
+        Logger.Error("bridge_self_check_test_reset_failed error=" . reset.error)
+        BridgeClient.StopManagedBridge()
+        ExitApp(3)
+    }
+    BridgeClient.StopManagedBridge()
+    Logger.Info("bridge_self_check_test_end")
     ExitApp(0)
 }
 

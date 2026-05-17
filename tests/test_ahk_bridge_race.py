@@ -57,6 +57,8 @@ def test_internal_bridge_race_errors_are_not_shown_raw_to_user() -> None:
     assert 'ShowTrayTip("错误", result.error)' not in source
     assert 'ShowTrayTip("错误", status.error)' not in source
     assert "this.ShowErrorTip(result.error)" in source
-    assert "this.ShowErrorTip(status.error)" in source
+    assert 'BridgeClient.Repair("recording_status_error")' in source
+    assert 'BridgeClient.Repair("finish_status_error")' in source
+    assert "ASR 出错，已自动自检修复，请重试" in source
     assert 'if message = "already_recording"' in source
     assert 'if message = "no_active_session"' in source

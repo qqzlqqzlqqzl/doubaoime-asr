@@ -1,5 +1,22 @@
 # 变更记录
 
+## 2026-05-17：ASR bridge 自检与自动修复
+
+- 先同步远端 `091eec2 Simplify float result input display`，再把本机未提交的 bridge 自修复改动重新套到最新 AHK 启动预热、快速松手 race fix 和结果态输入框版本上。
+- `doubaoime_asr/asr_bridge.py` 新增 `POST /reset`，可取消并清空当前 session；用于把 `TimeoutError('timed out during opening handshake')`、`already_recording`、残留 error session 等坏状态恢复为 `idle`，不用用户手动杀进程。
+- `ahk_client/src/bridge.ahk` 新增 `SelfCheck()` / `Repair()` / `Reset()` / `StopManagedBridge()`：启动录音前会检查 `/status`，发现错误态会先 `/reset`，必要时结束本客户端拉起的 bridge 进程树再重启。
+- `ahk_client/src/main.ahk` 在录音中和收尾轮询发现 bridge 错误时，会自动执行修复并提示“ASR 出错，已自动自检修复，请重试”，避免用户继续卡在同一个坏状态。
+- `test-desktop-exe.ps1` 纳入 bridge `/reset` 和 AHK `--bridge-self-check-test` 烟测；新增 `tests/test_asr_bridge.py` 覆盖 stale session reset。
+
+### 本轮验证
+
+- AHK 源码 `--bridge-self-check-test`：通过，结束时会清理自己拉起的 bridge 进程树。
+- `.venv\Scripts\python.exe -m pytest -q`：`35 passed`。
+- `.venv\Scripts\python.exe -m compileall doubaoime_asr\asr_bridge.py`：通过。
+- `build-desktop-exe.ps1`：通过，已重建 `dist\DoubaoASRHelper.exe`、`dist\asr_bridge.exe`、安装器和 release zip。
+- `test-desktop-exe.ps1`：通过，输出 `AHK bridge desktop tests passed.`；其中 AHK 主程序自动拉起打包 bridge 的等待窗口按 PyInstaller 冷启动耗时放宽到 30 秒，客户端侧也会在 warmup 进程仍存在时继续等待到完整启动窗口。
+- 本地安装目录 `%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖最新 `DoubaoASRHelper.exe` 和 `asr_bridge.exe`，哈希与 `dist` 一致；安装目录主程序 `--bridge-self-check-test` 通过。
+
 ## 2026-05-15：简化悬浮窗结果态为输入框
 
 - 按最新反馈移除结果态主界面里的 `清空 / 复制 / 插入` 三个手动操作按钮；结果态只保留识别文本框和轻量关闭入口。

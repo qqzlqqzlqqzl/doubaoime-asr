@@ -87,6 +87,7 @@
 | E25 | 崩溃排查日志烟测 | `test-desktop-exe.ps1` 在隔离 `APPDATA` 中运行 bridge self-test 和 AHK float self-test | 生成 `client-YYYYMMDD.log` 和 `asr_bridge-YYYYMMDD.log`，并包含关键事件如 `float_self_test_start`、`self_test_ok` |
 | E26 | 首屏 500ms 完整 UI 性能 | `test-startup-performance.ps1` 启动安装版或免安装版 EXE，并枚举设置页子控件 | 设置页窗口和 `【按着说】模式`、`【自由说】模式`、`【按着说+自动发送】模式`、`高级设置`、`保存`、`取消`、`状态: ● 已就绪` 全部在 `500ms` 内出现；报告写入 `release\test-reports\startup-performance*.json` |
 | E27 | AHK 启动体检与冲突自愈烟测 | `test-desktop-exe.ps1` 运行 `DoubaoASRHelper.exe selftest --startup-doctor-test --startup-doctor-report ...`，或单独运行源码/安装版同名参数 | 报告 `ok=true`，旧启动 bat 被删除、重复快捷方式被删除、无关文件保留、标准 `豆包语音助手.lnk` 带 `--hidden`、重复/危险热键恢复默认；真实重启仍归入 T13 手工闭环 |
+| E28 | ASR bridge 自检与错误态自愈 | `test-desktop-exe.ps1` 调用 bridge `POST /reset`，并运行 `DoubaoASRHelper.exe --bridge-self-check-test`；源码可单独跑同名参数 | bridge 错误/残留 session 可被 reset 到 `idle`；AHK 自检会检查 `/status`、必要时 reset/restart，并在结束时清理自己拉起的 bridge 进程树；打包 bridge 冷启动接近 10 秒时，AHK 和 smoke 测试都应继续等待而不是误报不可用 |
 
 ### 上游差异审计测试
 

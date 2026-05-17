@@ -38,7 +38,7 @@ class BridgeClient {
         }
 
         if this.WarmupStarted || this.LaunchInProgress {
-            waitMs := this.LaunchInProgress ? 12000 : 7000
+            waitMs := this.LaunchInProgress ? 12000 : 10000
             if this.WaitForAvailable(waitMs)
                 return true
             if this.LaunchInProgress {
@@ -47,6 +47,12 @@ class BridgeClient {
                     return true
             }
             if this.ProcessHandle != "" && ProcessExist(this.ProcessHandle) {
+                elapsedMs := A_TickCount - this.LaunchStartedAt
+                if elapsedMs < 25000 {
+                    Logger.Warn("bridge_warmup_waiting pid=" . this.ProcessHandle . " elapsed_ms=" . elapsedMs)
+                    if this.WaitForAvailable(25000 - elapsedMs)
+                        return true
+                }
                 Logger.Error("bridge_warmup_not_ready pid=" . this.ProcessHandle)
                 return false
             }
@@ -112,6 +118,76 @@ class BridgeClient {
         }
     }
 
+    static SelfCheck(repair := true, reason := "manual") {
+        Logger.Info("bridge_self_check_start reason=" . reason)
+        if !this.EnsureRunning() {
+            Logger.Error("bridge_self_check_failed reason=" . reason . " error=unavailable")
+            return { ok: false, repaired: false, error: "ASR bridge 未启动", state: "offline" }
+        }
+
+        try {
+            status := this.ParseResult(this.Request("GET", "/status", "", 1200))
+        } catch as e {
+            Logger.Exception("bridge_self_check_status_exception reason=" . reason, e)
+            if repair
+                return this.Repair(reason . "_status_exception")
+            return { ok: false, repaired: false, error: e.Message, state: "offline" }
+        }
+
+        if status.error != "" {
+            Logger.Warn("bridge_self_check_dirty reason=" . reason . " state=" . status.state . " error=" . status.error)
+            if repair
+                return this.Repair(reason . "_dirty_status")
+            return { ok: false, repaired: false, error: status.error, state: status.state }
+        }
+
+        Logger.Info("bridge_self_check_ok reason=" . reason . " state=" . status.state)
+        return { ok: true, repaired: false, error: "", state: status.state }
+    }
+
+    static Repair(reason := "manual") {
+        Logger.Warn("bridge_repair_start reason=" . reason)
+        reset := this.Reset(reason)
+        if reset.ok {
+            Logger.Warn("bridge_repair_reset_ok reason=" . reason . " state=" . reset.state)
+            return { ok: true, repaired: true, error: "", state: reset.state }
+        }
+
+        Logger.Warn("bridge_repair_reset_failed reason=" . reason . " error=" . reset.error)
+        this.StopManagedBridge()
+        if this.EnsureRunning() {
+            Logger.Warn("bridge_repair_restart_ok reason=" . reason)
+            return { ok: true, repaired: true, error: "", state: "ready" }
+        }
+        Logger.Error("bridge_repair_failed reason=" . reason)
+        return { ok: false, repaired: false, error: "ASR bridge 自动修复失败", state: "offline" }
+    }
+
+    static Reset(reason := "manual") {
+        if !this.EnsureRunning()
+            return { ok: false, text: "", final_text: "", state: "offline", error: "ASR bridge 未启动", done: false, cancelled: false, session_id: 0, audio_level: 0 }
+        try {
+            Logger.Warn("bridge_reset_request reason=" . reason)
+            response := this.Request("POST", "/reset", "{}", 3000)
+            return this.ParseResult(response)
+        } catch as e {
+            Logger.Exception("bridge_reset_exception reason=" . reason, e)
+            return { ok: false, text: "", final_text: "", state: "error", error: e.Message, done: false, cancelled: false, session_id: 0, audio_level: 0 }
+        }
+    }
+
+    static StopManagedBridge() {
+        if this.ProcessHandle != "" {
+            try {
+                Logger.Warn("bridge_process_close pid=" . this.ProcessHandle)
+                RunWait("taskkill /F /T /PID " . this.ProcessHandle, , "Hide")
+            }
+            this.ProcessHandle := ""
+            this.WarmupStarted := false
+            this.LaunchInProgress := false
+        }
+    }
+
     static IsAvailable() {
         try {
             response := this.Request("GET", "/health", "", 800)
@@ -131,8 +207,9 @@ class BridgeClient {
     }
 
     static Start(mode := "hold") {
-        if !this.EnsureRunning()
-            return { ok: false, error: "ASR bridge 未启动" }
+        check := this.SelfCheck(true, "before_start_" . mode)
+        if !check.ok
+            return { ok: false, error: check.error }
         body := '{"mode":"' . mode . '"}'
         try {
             response := this.Request("POST", "/start", body, 3000)

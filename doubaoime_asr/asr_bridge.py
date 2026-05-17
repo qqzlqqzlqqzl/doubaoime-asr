@@ -309,6 +309,19 @@ class BridgeState:
         session.cancel()
         return BridgeResult(True, state="cancelled", session_id=session.session_id)
 
+    def reset(self) -> BridgeResult:
+        LOGGER.warning("bridge_reset_requested")
+        with self._lock:
+            session = self._session
+            self._session = None
+        if session is not None:
+            session.cancel()
+            session.wait(2.0)
+            LOGGER.warning("bridge_reset_done previous_session=%s", session.session_id)
+            return BridgeResult(True, state="idle", session_id=session.session_id)
+        LOGGER.warning("bridge_reset_done previous_session=none")
+        return BridgeResult(True, state="idle", session_id=self._session_id)
+
     def status(self) -> dict[str, Any]:
         session = self._session
         if session is None:
@@ -347,6 +360,9 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             return
         if path == "/cancel":
             self._send_json(self.bridge.cancel().__dict__)
+            return
+        if path == "/reset":
+            self._send_json(self.bridge.reset().__dict__)
             return
         self.send_error(HTTPStatus.NOT_FOUND)
 
