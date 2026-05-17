@@ -16,6 +16,7 @@
 - `build-desktop-exe.ps1`：通过，已重建 `dist\DoubaoASRHelper.exe`、`dist\asr_bridge.exe`、安装器和 release zip。
 - `test-desktop-exe.ps1`：通过，输出 `AHK bridge desktop tests passed.`；其中 AHK 主程序自动拉起打包 bridge 的等待窗口按 PyInstaller 冷启动耗时放宽到 30 秒，客户端侧也会在 warmup 进程仍存在时继续等待到完整启动窗口。
 - 本地安装目录 `%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖最新 `DoubaoASRHelper.exe` 和 `asr_bridge.exe`，哈希与 `dist` 一致；安装目录主程序 `--bridge-self-check-test` 通过。
+- `test-long-text-asr.ps1`：通过，使用打包 `dist\asr_bridge.exe` 调真实 ASR，报告 `ok=true`、识别 556 字、命中 9 个关键词。
 
 ## 2026-05-15：简化悬浮窗结果态为输入框
 
