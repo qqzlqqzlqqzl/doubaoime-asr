@@ -18,6 +18,15 @@
 - 本地安装目录 `%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖最新 `DoubaoASRHelper.exe` 和 `asr_bridge.exe`，哈希与 `dist` 一致；安装目录主程序 `--bridge-self-check-test` 通过。
 - `test-long-text-asr.ps1`：通过，使用打包 `dist\asr_bridge.exe` 调真实 ASR，报告 `ok=true`、识别 556 字、命中 9 个关键词。
 
+## 2026-05-19：实时录音增加软件增益、AGC 和轻量降噪
+
+- 新增 `doubaoime_asr/audio_processing.py`，实时麦克风 PCM 在送 ASR 前会做去 DC 偏移、噪声底估计、噪声门/下扩展、AGC 增益和峰值限幅。
+- `asr_bridge.py` 的录音 callback 不再直接上传原始 `bytes(indata)`，而是上传处理后的 int16 PCM；`/status` 额外返回 `raw_audio_level`、`audio_gain`、`noise_floor`、`audio_gated`，便于排查低音量、底噪和增益状态。
+- 内存策略：每次只处理当前 20ms PCM 小帧，不保存历史音频；处理器只保留噪声底和平滑增益等少量浮点状态。新增 2000 帧压力测试，断言当前内存增长低于 256KB、峰值低于 2MB。
+- 修复 Windows 上 `device_fingerprint()` 调用 `platform.node()` 可能触发 WMI 卡死的问题，改为使用 `COMPUTERNAME`、`socket.gethostname()`、`sys.platform` 和处理器架构，避免激活校验拖死启动或测试。
+- `sounddevice` 改为懒加载，`asr_bridge` 和旧 Python 桌面入口在不录音时不会导入 PortAudio，减少启动和测试阶段卡顿风险。打包脚本也改为避开 WMI/CIM：进程清理用 `Get-Process`，PyInstaller 通过 `tools/run_pyinstaller_no_wmi.py` 固定安全的 `platform` 信息，避免 Python 3.13 在 `platform.win32_ver()/system()` 里卡住。
+- 验证：`.venv\Scripts\python.exe -m pytest -q` 与 `-W error` 均为 `40 passed`；`.venv\Scripts\python.exe -m doubaoime_asr.asr_bridge --self-test`、`dist\asr_bridge.exe --self-test`、安装目录 `asr_bridge.exe --self-test` 均通过；`build-desktop-exe.ps1`、`test-desktop-exe.ps1` 通过；本地 `%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖新版且哈希与 `dist` 一致；安装版首屏 1 秒口径为 `378 / 324 / 318 / 355 / 298ms`。
+
 ## 2026-05-15：简化悬浮窗结果态为输入框
 
 - 按最新反馈移除结果态主界面里的 `清空 / 复制 / 插入` 三个手动操作按钮；结果态只保留识别文本框和轻量关闭入口。

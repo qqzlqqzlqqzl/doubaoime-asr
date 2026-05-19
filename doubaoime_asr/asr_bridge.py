@@ -17,14 +17,13 @@ import threading
 import time
 from typing import Any
 
-import sounddevice as sd
-
 if getattr(sys, "frozen", False):
     bundle_dir = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
     os.environ["PATH"] = str(bundle_dir) + os.pathsep + os.environ.get("PATH", "")
 
 from doubaoime_asr.asr import ASRError, ResponseType, transcribe_realtime
 from doubaoime_asr.activation import load_license_config, verify_license
+from doubaoime_asr.audio_processing import AudioProcessor
 from doubaoime_asr.config import ASRConfig
 from doubaoime_asr.transcript import TranscriptAccumulator
 
@@ -34,6 +33,16 @@ DEFAULT_CREDENTIAL_PATH = APP_CONFIG_DIR / "credentials.json"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 18765
 LOG_DIR = APP_CONFIG_DIR / "logs"
+_SOUNDDEVICE: Any = None
+
+
+def _sounddevice() -> Any:
+    global _SOUNDDEVICE
+    if _SOUNDDEVICE is None:
+        import sounddevice as sd
+
+        _SOUNDDEVICE = sd
+    return _SOUNDDEVICE
 
 
 def setup_logging() -> logging.Logger:
@@ -92,11 +101,16 @@ class RecordingSession:
         self.cancelled = False
         self.audio_level = 0
         self.audio_peak = 0
+        self.raw_audio_level = 0
+        self.audio_gain = 1.0
+        self.noise_floor = 0.0
+        self.audio_gated = False
+        self.audio_processor = AudioProcessor()
         self.state = "starting"
         self.done = threading.Event()
         self._lock = threading.RLock()
         self._loop: asyncio.AbstractEventLoop | None = None
-        self._stream: sd.InputStream | None = None
+        self._stream: Any = None
         self._thread = threading.Thread(target=self._run_asr_thread, name=f"asr-bridge-{session_id}", daemon=True)
 
     def start(self) -> None:
@@ -108,13 +122,20 @@ class RecordingSession:
                 LOGGER.warning("audio_callback_status session=%s status=%s", self.session_id, status)
                 with self._lock:
                     self.error = str(status)
-            audio_bytes = bytes(indata)
+            raw_audio_bytes = bytes(indata)
+            raw_level, _raw_peak = self._measure_level(raw_audio_bytes)
+            audio_bytes, processing = self.audio_processor.process(raw_audio_bytes)
             level, peak = self._measure_level(audio_bytes)
             with self._lock:
+                self.raw_audio_level = raw_level
                 self.audio_level = level
                 self.audio_peak = peak
+                self.audio_gain = processing.gain
+                self.noise_floor = processing.noise_floor
+                self.audio_gated = processing.gated
             self.audio_queue.put(audio_bytes)
 
+        sd = _sounddevice()
         self._stream = sd.InputStream(
             samplerate=self.config.sample_rate,
             channels=self.config.channels,
@@ -161,6 +182,10 @@ class RecordingSession:
                 "error": self.error,
                 "audio_level": self.audio_level,
                 "audio_peak": self.audio_peak,
+                "raw_audio_level": self.raw_audio_level,
+                "audio_gain": round(self.audio_gain, 3),
+                "noise_floor": round(self.noise_floor, 1),
+                "audio_gated": self.audio_gated,
                 "thread_alive": self._thread.is_alive(),
                 "done": self.done.is_set(),
             }
@@ -405,6 +430,19 @@ def run_self_test() -> int:
         raise SystemExit("silent audio should report zero level")
     if session._measure_level((5000).to_bytes(2, "little", signed=True) * 320)[0] <= 0:
         raise SystemExit("non-silent audio should report positive level")
+    processed_silence, silence_stats = session.audio_processor.process((0).to_bytes(2, "little", signed=True) * 320)
+    if processed_silence != (0).to_bytes(2, "little", signed=True) * 320 or not silence_stats.gated:
+        raise SystemExit("audio processor should keep digital silence silent")
+    quiet_speech = (
+        (900).to_bytes(2, "little", signed=True)
+        + (-900).to_bytes(2, "little", signed=True)
+    ) * 160
+    for _ in range(8):
+        processed_quiet, quiet_stats = session.audio_processor.process(quiet_speech)
+    if quiet_stats.output_rms <= quiet_stats.input_rms:
+        raise SystemExit("audio processor should increase quiet speech level")
+    if len(processed_quiet) != len(quiet_speech):
+        raise SystemExit("audio processor changed PCM frame length")
     result = state.cancel()
     if not result.ok:
         raise SystemExit("cancel without active session failed")

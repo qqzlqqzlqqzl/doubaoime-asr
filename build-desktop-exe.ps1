@@ -9,6 +9,13 @@ function Test-Truthy {
   return @("1", "true", "yes", "on") -contains $Normalized
 }
 
+function Assert-LastExitCode {
+  param([string]$Step)
+  if ($LASTEXITCODE -ne 0) {
+    throw "$Step failed with exit code $LASTEXITCODE"
+  }
+}
+
 $LicenseServerUrl = "$env:DOUBAO_ASR_LICENSE_URL".Trim()
 $RequireActivation = Test-Truthy $env:DOUBAO_ASR_REQUIRE_ACTIVATION
 if ($RequireActivation -and -not $LicenseServerUrl) {
@@ -31,19 +38,24 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding $false
 
 $AppExe = Join-Path $PSScriptRoot "dist\DoubaoASRHelper.exe"
 $BridgeExe = Join-Path $PSScriptRoot "dist\asr_bridge.exe"
-Get-CimInstance Win32_Process |
-  Where-Object { $_.ExecutablePath -eq $AppExe -or $_.ExecutablePath -eq $BridgeExe } |
+Get-Process DoubaoASRHelper,asr_bridge -ErrorAction SilentlyContinue |
+  Where-Object { $_.Path -eq $AppExe -or $_.Path -eq $BridgeExe } |
   ForEach-Object {
-    Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-    Wait-Process -Id $_.ProcessId -Timeout 10 -ErrorAction SilentlyContinue
+    Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+    Wait-Process -Id $_.Id -Timeout 10 -ErrorAction SilentlyContinue
   }
 
-uv pip install -e '.[dev]'
-uv pip install pyinstaller
+$PyInstallerPackage = Join-Path $PSScriptRoot ".venv\Lib\site-packages\PyInstaller"
+if (-not (Test-Path $PyInstallerPackage)) {
+  uv pip install -e '.[dev]'
+  Assert-LastExitCode "uv pip install project"
+  uv pip install pyinstaller
+  Assert-LastExitCode "uv pip install pyinstaller"
+}
 
 $env:PYTHONWARNINGS = "ignore::SyntaxWarning"
 
-pyinstaller `
+python (Join-Path $PSScriptRoot "tools\run_pyinstaller_no_wmi.py") `
   --noconfirm `
   --clean `
   --log-level WARN `
@@ -59,6 +71,7 @@ pyinstaller `
   --hidden-import pynput.keyboard._win32 `
   --hidden-import pynput.mouse._win32 `
   doubaoime_asr\asr_bridge.py
+Assert-LastExitCode "pyinstaller asr_bridge"
 
 $AhkDir = Join-Path $PSScriptRoot ".devtools\autohotkey\2.0.26"
 $AhkBase = Join-Path $AhkDir "AutoHotkey64.exe"
@@ -79,8 +92,9 @@ if (-not (Test-Path $AhkCompiler)) {
   /out $AppExe `
   /base $AhkBase `
   /icon (Join-Path $PSScriptRoot "ahk_client\assets\icon.ico")
+Assert-LastExitCode "Ahk2Exe DoubaoASRHelper"
 
-pyinstaller `
+python (Join-Path $PSScriptRoot "tools\run_pyinstaller_no_wmi.py") `
   --noconfirm `
   --clean `
   --log-level WARN `
@@ -91,6 +105,7 @@ pyinstaller `
   --add-binary "dist\DoubaoASRHelper.exe;." `
   --add-binary "dist\asr_bridge.exe;." `
   windows_installer.py
+Assert-LastExitCode "pyinstaller setup"
 
 $ReleaseDir = Join-Path $PSScriptRoot "release"
 New-Item -ItemType Directory -Force -Path $ReleaseDir | Out-Null
@@ -99,6 +114,7 @@ Copy-Item -Force (Join-Path $PSScriptRoot "dist\asr_bridge.exe") (Join-Path $Rel
 Copy-Item -Force (Join-Path $PSScriptRoot "dist\DoubaoASRHelperSetup.exe") (Join-Path $ReleaseDir "DoubaoASRHelperSetup.exe")
 $HelpPath = Join-Path $ReleaseDir "HELP.md"
 python -m doubaoime_asr.desktop_help $HelpPath
+Assert-LastExitCode "generate HELP.md"
 
 $ActivationReadme = if ($RequireActivation) {
   "Activation: this build requires an activation code and talks to $LicenseServerUrl."

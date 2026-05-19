@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import platform
 import socket
 import sys
 import time
@@ -89,10 +88,10 @@ def device_fingerprint() -> str:
         [
             "doubao-asr-helper-device-v1",
             machine_guid,
-            platform.node(),
+            os.environ.get("COMPUTERNAME", ""),
             socket.gethostname(),
-            platform.system(),
-            platform.machine(),
+            sys.platform,
+            os.environ.get("PROCESSOR_ARCHITECTURE", ""),
         ]
     )
     return hashlib.sha256(raw.encode("utf-8", errors="ignore")).hexdigest()

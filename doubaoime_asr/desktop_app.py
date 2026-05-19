@@ -14,9 +14,8 @@ import time
 import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Any, Callable, Iterable
 
-import sounddevice as sd
 import sv_ttk
 import tkinter as tk
 import tkinter.font as tkfont
@@ -88,6 +87,16 @@ FLOAT_MAX_LINES = 12
 APP_ICON_RELATIVE_PATH = Path("assets") / "app.ico"
 APP_USER_MODEL_ID = "DoubaoASRHelper.Desktop"
 SINGLE_INSTANCE_MUTEX_NAME = "Local\\DoubaoASRHelper.SingleInstance"
+_SOUNDDEVICE: Any = None
+
+
+def _sounddevice() -> Any:
+    global _SOUNDDEVICE
+    if _SOUNDDEVICE is None:
+        import sounddevice as sd
+
+        _SOUNDDEVICE = sd
+    return _SOUNDDEVICE
 _DPI_AWARENESS_CONFIGURED = False
 MAX_CLIPBOARD_SNAPSHOT_BYTES = 64 * 1024 * 1024
 
@@ -1423,7 +1432,7 @@ class DesktopApp:
         self.cancelled = False
         self.target_hwnd: int | None = None
         self.audio_queue: queue.Queue[bytes | None] | None = None
-        self.audio_stream: sd.InputStream | None = None
+        self.audio_stream: Any = None
         self.asr_thread: threading.Thread | None = None
         self.transcript = TranscriptAccumulator()
         self.final_text = ""
@@ -3122,6 +3131,7 @@ class DesktopApp:
         audio_queue: queue.Queue[bytes | None] = queue.Queue()
         self.audio_queue = audio_queue
         try:
+            sd = _sounddevice()
             self.audio_stream = sd.InputStream(
                 samplerate=16000,
                 channels=1,
@@ -3677,6 +3687,7 @@ def run_self_test(report_path: str | None = None) -> int:
         return f"encoded {len(frames)} frame(s)"
 
     def sounddevice_check() -> str:
+        sd = _sounddevice()
         devices = sd.query_devices()
         input_count = sum(1 for device in devices if int(device.get("max_input_channels", 0)) > 0)
         if input_count == 0:
