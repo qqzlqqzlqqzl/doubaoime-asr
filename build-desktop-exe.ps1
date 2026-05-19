@@ -68,6 +68,7 @@ python (Join-Path $PSScriptRoot "tools\run_pyinstaller_no_wmi.py") `
   --add-data "$AppIcon;doubaoime_asr\assets" `
   --collect-data sv_ttk `
   --hidden-import doubaoime_asr.long_text_sample `
+  --hidden-import doubaoime_asr.audio_processing_e2e `
   --hidden-import pynput.keyboard._win32 `
   --hidden-import pynput.mouse._win32 `
   doubaoime_asr\asr_bridge.py

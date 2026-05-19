@@ -10,6 +10,8 @@
 
 最新未发布补丁：2026-05-19 实时录音链路已加入软件增益、归一化/AGC 和轻量降噪。新增 `doubaoime_asr/audio_processing.py`，在 `asr_bridge.py` 的 sounddevice callback 中把原始 int16 PCM 先交给 `AudioProcessor`，做去 DC 偏移、噪声底估计、噪声门/下扩展、AGC 增益和峰值限幅，再送入 `audio_queue` 给 ASR。`/status` 现在额外暴露 `raw_audio_level`、`audio_gain`、`noise_floor`、`audio_gated`。内存注意点：处理器不缓存历史音频，只处理当前 20ms 小帧，并只保留噪声底和平滑增益；`tests/test_audio_processing.py` 有 2000 帧压力测试防止内存随帧数增长。另修复 `activation.device_fingerprint()` 使用 `platform.node()` 在 Windows 上触发 WMI 卡死的问题，改为非 WMI 信息；`sounddevice` 也改为懒加载，避免不录音时导入 PortAudio 卡住。打包脚本为规避本机 WMI 卡死，已新增 `tools/run_pyinstaller_no_wmi.py` 并移除 `Get-CimInstance Win32_Process` 依赖。验证：`.venv\Scripts\python.exe -m pytest -q` 和 `-W error` 均为 `40 passed`；源码、`dist`、安装目录 `asr_bridge --self-test` 均通过；`build-desktop-exe.ps1`、`test-desktop-exe.ps1` 通过；本地 `%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖新版且哈希与 `dist` 一致；安装版首屏 `378 / 324 / 318 / 355 / 298ms`。
 
+最新未发布补丁：2026-05-19 增加模拟音频管道 ASR 闭环，回应“用自己生成的模拟音频管道传输过去”的要求。新增 `doubaoime_asr/audio_processing_e2e.py` 和 `test-simulated-audio-asr.ps1`，会用 Windows SAPI 生成中文语音 WAV，再降级为低音量、带底噪和 DC 偏移的 16kHz mono int16 样本；同一份降级样本分别 raw degraded 与 `AudioProcessor` processed 两路送入 `transcribe_realtime`，报告写入 `release/test-reports/simulated-audio-processing-asr*.json`。这项不使用电脑扬声器、耳机、麦克风或物理热键，只验证“模拟音频 -> 20ms PCM 分帧 -> 音频处理 -> ASR -> 文本合并”。源码实测默认降级样本：raw 175 字、processed 179 字、关键词 `清晨/会议室/备用电池` 全命中、ASR 错误 0；低音量样本：raw 178 字、processed 187 字、关键词全命中、ASR 错误 0。打包版 `test-simulated-audio-asr.ps1` 报告 `ok=true`，raw 179 字、processed 179 字、关键词全命中、错误 0；安装目录 `asr_bridge.exe` 报告 `ok=true`，raw 180 字、processed 179 字、关键词全命中、错误 0，说明 ASR 文本存在 1 字级波动但管道稳定。为避免弱语音被降噪门吃掉，`AudioProcessingConfig` 的噪声门更温和，AGC 释放速度更快。验证：`tests/test_audio_processing.py`、`tests/test_audio_processing_e2e.py`、`tests/test_asr_bridge.py` 专项 `8 passed`；完整 `.venv\Scripts\python.exe -m pytest -q` 当前为 `42 passed`。
+
 最新未发布补丁：2026-05-15 悬浮窗结果态已从“操作面板”改成“输入框显示”。用户明确质疑 `清空 / 复制 / 插入` 的意义，核心交互应是松开按键后自动插入。因此 `ahk_client/src/float.ahk` 中结果态现在只显示 `ResultTextCtrl` 和关闭 `×`，三个手动按钮创建后强制隐藏；`ResultHeight` 从 `118` 收到 `110`，文本框扩大为 `x18 y12 w360 h84`。`tests/test_ahk_float_layout.py` 和 `test-desktop-exe.ps1` 已改为防止这些按钮重新出现在结果态，其中 `GetChildTexts()` 只枚举可见子控件，避免隐藏控件误报。验证：`.venv\Scripts\python.exe -m pytest -q` 与 `-W error` 均为 `34 passed`；`build-desktop-exe.ps1` 和 `test-desktop-exe.ps1` 通过；源码与安装版 DWM 截图 `source-float-result-inputbox-only-dwm.png`、`installed-float-result-inputbox-only-dwm.png` 均为 `842x222`，可见子控件只有状态、识别文本和 `×`；本地 `%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖新版，哈希与 `dist` 一致；安装版首屏 1 秒口径为 `450 / 494 / 562 / 416 / 283ms`。下一位接手时不要把结果态恢复成 `清空 / 复制 / 插入` 按钮行，自动插入才是验收主路径。
 
 最新未发布补丁：2026-05-15 悬浮窗结果态已按用户标注收紧。`ahk_client/src/float.ahk` 中窗口高度从 `166` 改为 `152`，结果背景从 `x24 y58 w428 h102` 改为 `x18 y42 w420 h78 Border`，文本框从 `x112 y66 w292 h56` 改为 `x104 y48 w292 h66`，底部按钮移到 `y122 h26` 并加更明确圆角。右上设置/最小化增加 `TopPanelCtrl` 封闭圆角框，最小化符号缩小。新增 `tests/test_ahk_float_layout.py` 断言结果区上移、文本框增高、右上封闭框和圆角按钮防回退。验证：`.venv\Scripts\python.exe -m pytest -q` 和 `-W error` 均为 `28 passed`；AHK 源码 `--float-self-test` 通过；`build-desktop-exe.ps1` 通过且 `build-float-compact-reference.log` 无 warning/error；`test-desktop-exe.ps1` 通过。本地 `%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖新版，哈希与 `dist` 一致。
@@ -199,6 +201,7 @@ python -m doubaoime_asr.desktop_app --hold-release-auto-insert-test --hold-relea
 
 ```powershell
 .\test-long-text-asr.ps1
+.\test-simulated-audio-asr.ps1
 ```
 
 ## 3. 本地开发环境

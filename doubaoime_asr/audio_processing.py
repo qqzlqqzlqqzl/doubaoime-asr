@@ -14,15 +14,15 @@ class AudioProcessingConfig:
     enabled: bool = True
     target_rms: float = 3600.0
     max_gain: float = 4.0
-    min_gain: float = 0.65
+    min_gain: float = 0.75
     limiter_peak: float = 0.92 * INT16_MAX
     noise_floor_initial: float = 120.0
-    noise_gate_floor: float = 150.0
-    noise_gate_ratio: float = 2.4
-    noise_reduction_gain: float = 0.18
+    noise_gate_floor: float = 95.0
+    noise_gate_ratio: float = 1.7
+    noise_reduction_gain: float = 0.30
     dc_offset_removal: bool = True
     attack: float = 0.35
-    release: float = 0.08
+    release: float = 0.16
 
 
 @dataclass

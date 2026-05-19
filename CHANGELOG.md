@@ -1,5 +1,21 @@
 # 变更记录
 
+## 2026-05-19：模拟音频管道 ASR 闭环
+
+- 新增 `doubaoime_asr/audio_processing_e2e.py` 和 `test-simulated-audio-asr.ps1`，自动生成中文 TTS WAV，再降级为低音量、带底噪和 DC 偏移的 16kHz mono int16 样本。
+- 新增 `asr_bridge --simulated-audio-processing-test`，同一份降级样本会分两路进入 `transcribe_realtime`：raw degraded 直传、processed degraded 经过 `AudioProcessor` 的去 DC、噪声门、AGC 和限幅处理。
+- 报告写入 `release/test-reports/simulated-audio-processing-asr*.json`，包含 clean/degraded 音频 RMS/peak、处理前后 RMS、增益、噪声门帧数、识别字数、关键词、错误事件和 raw/processed 对照。
+- 根据模拟闭环结果调低噪声门激进程度，并加快 AGC 释放速度，避免极低音量语音被降噪门误压。
+- 这项测试不使用扬声器、耳机、麦克风或物理热键；它验证的是“生成音频 -> PCM 分帧 -> 可选处理 -> ASR -> 文本合并”的自动闭环，不能替代真实目标窗口、真人讲话和耳机声学闭环。
+
+### 本轮验证
+
+- `.venv\Scripts\python.exe -m pytest -q`：`42 passed`。
+- 源码模拟 ASR 默认降级样本：raw 175 字、processed 179 字，关键词 `清晨 / 会议室 / 备用电池` 全命中，ASR 错误 0。
+- 源码模拟 ASR 低音量样本：raw 178 字、processed 187 字，关键词全命中，ASR 错误 0。
+- 打包 `dist\asr_bridge.exe` 专项脚本：`release/test-reports/simulated-audio-processing-asr.json` 为 `ok=true`，raw 179 字、processed 179 字，关键词全命中，ASR 错误 0，处理后平均 RMS 从 232.030 提到 340.002。
+- 本地安装目录 `%LOCALAPPDATA%\DoubaoASRHelper\asr_bridge.exe` 专项报告：`simulated-audio-processing-asr-installed.json` 为 `ok=true`，raw 180 字、processed 179 字，关键词全命中，ASR 错误 0；该次 ASR 文本字数轻微波动但核心关键词和可用性保持。
+
 ## 2026-05-17：ASR bridge 自检与自动修复
 
 - 先同步远端 `091eec2 Simplify float result input display`，再把本机未提交的 bridge 自修复改动重新套到最新 AHK 启动预热、快速松手 race fix 和结果态输入框版本上。

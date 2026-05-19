@@ -90,6 +90,7 @@
 | E28 | ASR bridge 自检与错误态自愈 | `test-desktop-exe.ps1` 调用 bridge `POST /reset`，并运行 `DoubaoASRHelper.exe --bridge-self-check-test`；源码可单独跑同名参数 | bridge 错误/残留 session 可被 reset 到 `idle`；AHK 自检会检查 `/status`、必要时 reset/restart，并在结束时清理自己拉起的 bridge 进程树；打包 bridge 冷启动接近 10 秒时，AHK 和 smoke 测试都应继续等待而不是误报不可用 |
 | E29 | 实时音频处理单元和内存烟测 | `.venv\Scripts\python.exe -m pytest tests\test_audio_processing.py -q` | 静音不被放大、底噪被压低、低音量语音被 AGC 提升、大音量被限幅、PCM 长度保持不变；连续 2000 帧处理后当前内存增长低于 256KB、峰值低于 2MB |
 | E30 | bridge 音频处理自测 | `.venv\Scripts\python.exe -m doubaoime_asr.asr_bridge --self-test` 或打包后 `dist\asr_bridge.exe --self-test` | bridge 自测确认静音保持静音、低音量交流语音被提升、处理后帧长度不变 |
+| E31 | 模拟音频管道 ASR 闭环 | `.venv\Scripts\python.exe -m doubaoime_asr.asr_bridge --simulated-audio-processing-test` 或打包后 `.\test-simulated-audio-asr.ps1` | 生成中文 TTS 样本和低音量带底噪降级样本，不使用扬声器/麦克风；同一份降级 PCM 分别以 raw 和 `AudioProcessor` processed 送入 `transcribe_realtime`，报告写入 `release\test-reports\simulated-audio-processing-asr*.json`，包含输入/输出 RMS、增益、噪声门、识别字数、关键词、错误事件和 raw/processed 对照 |
 
 ### 上游差异审计测试
 
@@ -175,6 +176,6 @@
 2. 跑 `.\test-license-stress.ps1`。
 3. 再按正式授权服务器设置环境变量，跑 `.\build-desktop-exe.ps1`。
 4. 跑 `.\test-desktop-exe.ps1`。
-5. 有 ASR 凭据时跑 `.\test-long-text-asr.ps1`。
+5. 有 ASR 凭据时跑 `.\test-long-text-asr.ps1` 和 `.\test-simulated-audio-asr.ps1`。
 6. 手工验收 U01-U14，重点看首次启动无登录/授权弹窗、语音输入闭环、主界面缩放截图、一键恢复默认和系统托盘后台运行。
 7. 发外部用户前至少补跑 T01-T12；正式分发前再补 T13-T20。

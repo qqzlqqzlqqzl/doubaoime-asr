@@ -314,6 +314,14 @@ python -m doubaoime_asr.desktop_app --hold-release-auto-insert-test --hold-relea
 
 该测试会生成 `.devtools\samples\long-text-volume-stress.wav`，并输出 `release\test-reports\long-text-asr.json`。样本由多段中文 TTS 拼接而成，段间包含停顿，音量会按高低模式变化。
 
+生成模拟语音、降级为低音量带底噪样本，并用同一个实时 ASR 管道对照 raw degraded 与 `AudioProcessor` processed：
+
+```powershell
+.\test-simulated-audio-asr.ps1
+```
+
+该测试不使用电脑扬声器或麦克风，会输出 `release\test-reports\simulated-audio-processing-asr.json`。它用于验证“模拟音频 -> 20ms PCM 分帧 -> 可选软件增益/降噪/AGC -> `transcribe_realtime` -> 文本合并”的自动闭环，不能替代物理热键、真人讲话、耳机声学录回和真实目标窗口插入验收。
+
 ### 激活码分发控制
 
 默认开发构建不要求激活。要做受控分发版，先准备一个授权服务器地址，然后在打包前设置环境变量：

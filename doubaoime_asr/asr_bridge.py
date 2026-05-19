@@ -514,6 +514,25 @@ def run_long_text_test(
     return 0 if result["ok"] else 1
 
 
+def run_simulated_audio_processing_test(args: argparse.Namespace) -> int:
+    from doubaoime_asr.audio_processing_e2e import run_simulated_audio_processing_test as run_test
+
+    return run_test(
+        clean_audio_path=args.simulated_audio_clean,
+        degraded_audio_path=args.simulated_audio_degraded,
+        report_path=args.simulated_audio_report,
+        credential_path=args.credential_path,
+        generate_only=args.simulated_audio_generate_only,
+        segment_count=args.simulated_audio_segments,
+        gain=args.simulated_degrade_gain,
+        noise_rms=args.simulated_noise_rms,
+        dc_offset=args.simulated_dc_offset,
+        seed=args.simulated_seed,
+        min_processed_chars=args.simulated_min_processed_chars,
+        min_keywords=args.simulated_min_keywords,
+    )
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run the local Doubao ASR bridge.")
     parser.add_argument("--host", default=DEFAULT_HOST)
@@ -527,6 +546,18 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--long-text-generate-only", action="store_true", help="Skip ASR and only generate the WAV sample.")
     parser.add_argument("--min-recognized-chars", type=int, default=220)
     parser.add_argument("--min-keywords", type=int, default=3)
+    parser.add_argument("--simulated-audio-processing-test", action="store_true", help="Generate degraded speech audio and compare raw vs processed realtime ASR.")
+    parser.add_argument("--simulated-audio-clean", help="Path for the generated clean simulated WAV sample.")
+    parser.add_argument("--simulated-audio-degraded", help="Path for the degraded simulated WAV sample.")
+    parser.add_argument("--simulated-audio-report", help="Path for the simulated audio processing JSON report.")
+    parser.add_argument("--simulated-audio-generate-only", action="store_true", help="Skip ASR and only generate clean/degraded simulated WAV samples.")
+    parser.add_argument("--simulated-audio-segments", type=int, default=3)
+    parser.add_argument("--simulated-degrade-gain", type=float, default=0.18)
+    parser.add_argument("--simulated-noise-rms", type=float, default=75.0)
+    parser.add_argument("--simulated-dc-offset", type=float, default=80.0)
+    parser.add_argument("--simulated-seed", type=int, default=20260519)
+    parser.add_argument("--simulated-min-processed-chars", type=int, default=30)
+    parser.add_argument("--simulated-min-keywords", type=int, default=1)
     args = parser.parse_args(argv)
     if args.self_test:
         raise SystemExit(run_self_test())
@@ -541,6 +572,8 @@ def main(argv: list[str] | None = None) -> None:
                 args.min_keywords,
             )
         )
+    if args.simulated_audio_processing_test:
+        raise SystemExit(run_simulated_audio_processing_test(args))
 
     APP_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     LOGGER.info("server_start host=%s port=%s credential_path=%s device=%s", args.host, args.port, args.credential_path, args.device)
