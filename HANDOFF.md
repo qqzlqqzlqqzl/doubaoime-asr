@@ -2,9 +2,11 @@
 
 这份文档是给下一个接手的 AI 或开发者看的。目标是让接手者不用重新翻聊天记录，也能快速理解当前项目状态、重要决策、构建测试方法、常见坑和下一步方向。
 
-最后更新：2026-05-17
+最后更新：2026-06-16
 当前主要分支：`main`
 远端仓库：`https://github.com/qqzlqqzlqqzl/doubaoime-asr.git`
+
+项目冻结备注：2026-06-16，Windows 桌面语音输入助手方向已冻结。本仓库现在定位为失败的前瞻性验证、工程样本和经验档案，不再建议继续按产品化方向推进。冻结原因不是单个 bug，而是核心产品假设失败：非官方豆包 ASR + Windows 桌面胶水没有达到日常语音输入标准，长句截断、分词/断句/标点、最终文本合并和真实窗口输入体验都不够稳定；同时 macOS 和手机已有官方豆包输入法，Windows 官方版本一旦出现，本项目窗口期会消失。新增 [PROJECT_POSTMORTEM.md](PROJECT_POSTMORTEM.md)，接手者应先读它，再决定是否只复用工程资产。除非先证明官方稳定 ASR API、真实长句输入质量和 T01-T12 真实端到端闭环，否则不要继续修 UI、安装包、激活码、silence segmentation 或分发控制。
 
 最新未发布补丁：2026-05-17 已同步远端 `091eec2 Simplify float result input display`，并补 ASR bridge 自检与自动修复。背景：用户实测曾出现“语音转文字不行”，日志定位为 bridge 实时 ASR WebSocket `TimeoutError('timed out during opening handshake')`，清理残留进程后安装版长文本 ASR 和实时 `/start -> /status -> /stop` 都恢复正常。为避免以后靠用户手动杀进程，新增 Python bridge `POST /reset`，AHK `BridgeClient.SelfCheck()/Repair()/Reset()/StopManagedBridge()`，录音前和错误态会自动检查并清理坏 session；录音中/收尾轮询遇到错误会自动修复并提示重试。新增 `DoubaoASRHelper.exe --bridge-self-check-test` 和 `tests/test_asr_bridge.py`。验证已跑：源码 AHK `--bridge-self-check-test`、`.venv\Scripts\python.exe -m pytest -q`（`35 passed`）、`.venv\Scripts\python.exe -m compileall doubaoime_asr\asr_bridge.py`、`build-desktop-exe.ps1`、`test-desktop-exe.ps1`（输出 `AHK bridge desktop tests passed.`）、安装目录主程序 `--bridge-self-check-test`、`test-long-text-asr.ps1`（打包 `dist\asr_bridge.exe` 调真实 ASR，`ok=true`、识别 556 字、命中 9 个关键词）。`%LOCALAPPDATA%\DoubaoASRHelper` 已覆盖最新两个 EXE 且哈希与 `dist` 一致。注意：打包 `asr_bridge.exe` 冷启动可能接近 10 秒，本轮把 AHK 客户端 warmup 等待和桌面 smoke 等待都按这个事实放宽，避免把启动中误判成失败。
 

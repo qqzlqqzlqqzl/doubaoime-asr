@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-06-16：项目冻结复盘
+
+- 新增 [PROJECT_POSTMORTEM.md](PROJECT_POSTMORTEM.md)，将 Windows 桌面语音输入助手方向收束为一次失败的前瞻性验证。
+- 冻结结论：项目证明了 AHK 客户端 + Python ASR bridge、全局热键、托盘、剪贴板保护、打包分发、模拟音频闭环和部分自愈机制可行，但没有解决最核心的识别体验问题。长句截断、断句/标点/分词、最终文本合并和真实输入场景稳定性不足，无法达到日常产品化标准。
+- 复盘明确 V2/B 方案边界：V2 只有在有官方稳定 ASR API、长句/停顿/断句质量达标、真实窗口插入闭环先通过且 Windows 官方输入法窗口期仍存在时才值得重启；B 方案则只保留 AHK + Python bridge、打包、自测、音频处理和测试文档等工程资产。
+- 后续默认不继续修 UI、热键、silence segmentation、安装包、激活码或分发控制；除非先证明核心识别质量和真实端到端输入闭环，否则不要恢复产品化推进。
+
 ## 2026-05-19：模拟音频管道 ASR 闭环
 
 - 新增 `doubaoime_asr/audio_processing_e2e.py` 和 `test-simulated-audio-asr.ps1`，自动生成中文 TTS WAV，再降级为低音量、带底噪和 DC 偏移的 16kHz mono int16 样本。

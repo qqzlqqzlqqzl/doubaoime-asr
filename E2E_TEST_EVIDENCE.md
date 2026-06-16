@@ -4,6 +4,8 @@
 
 结论：没有全部测完。当前环境已经跑完一部分能自动化闭合的链路；需要真人按键、真实外部应用、重启、干净电脑、长时间运行或受控授权服务器的项目，下面明确标为 `BLOCKED` 或 `NOT_RUN`，不按通过计算。
 
+冻结快照：2026-06-16，本项目已作为失败的前瞻性验证冻结。自动化、模拟音频和部分物理链路证明了不少工程能力，但核心识别体验仍不达标：长句容易截断，分词、断句、标点和最终文本合并质量不足，真实输入场景不能达到可日常使用标准。后续不要把本文件里的 `PARTIAL`、模拟 TTS、源码自测或打包 smoke 当作产品发布证据。完整复盘见 [PROJECT_POSTMORTEM.md](PROJECT_POSTMORTEM.md)。
+
 ASR bridge 自检与自动修复备注：2026-05-17，针对用户反馈“语音转文字不行”，日志曾定位到实时 ASR WebSocket `TimeoutError('timed out during opening handshake')`。清理残留进程后，安装目录 `asr_bridge.exe` 的长文本 ASR 测试通过，识别 556 字、命中 9 个关键词；安装版实时 `/start -> 等 12 秒 -> /status -> /stop` 返回 `error=""` 且 `state=finished`。本轮新增 `POST /reset` 和 AHK `--bridge-self-check-test`，让程序在发现 bridge 错误态时自行 reset/restart，而不是要求用户手动结束进程。已通过源码 AHK 自检、Python stale session reset 单测、`asr_bridge.py` compileall、完整 `.venv\Scripts\python.exe -m pytest -q`（`35 passed`）、`build-desktop-exe.ps1`、`test-desktop-exe.ps1`（输出 `AHK bridge desktop tests passed.`）、安装目录主程序 `--bridge-self-check-test` 和 `test-long-text-asr.ps1`（打包 `dist\asr_bridge.exe` 调真实 ASR，报告 `ok=true`、识别 556 字、命中 9 个关键词）。打包主程序自动拉起 bridge 的 smoke 中，PyInstaller 冷启动实际接近 10 秒，本轮将测试等待窗口放宽到 30 秒，并让 AHK 在 warmup bridge 进程仍存在时继续等待到完整启动窗口，避免把“仍在启动”误判为不可用。
 
 实时音频处理备注：2026-05-19，实时录音链路已从原始 PCM 直传改为轻量软件处理后送 ASR：去 DC 偏移、噪声门/下扩展、AGC 增益、峰值限幅。处理器只处理当前 20ms 小帧，不保存历史音频。证据：`tests/test_audio_processing.py` 覆盖静音、底噪、低音量语音、大音量限幅和 2000 帧内存压力；`.venv\Scripts\python.exe -m pytest -q` 与 `-W error` 均为 `40 passed`；源码、`dist` 和安装目录的 `asr_bridge --self-test` 均通过；`test-desktop-exe.ps1` 通过；安装版首屏 `startup-performance-audio-processing-rebased-1s.json` 为 `378 / 324 / 318 / 355 / 298ms`。另修复 `device_fingerprint()` 和 PyInstaller 在 Python 3.13 下触发 Windows WMI 卡死的问题，activation 测试 `12 passed`。

@@ -4,6 +4,10 @@
 
 当前维护仓库：`https://github.com/qqzlqqzlqqzl/doubaoime-asr.git`。原始上游项目来自 `starccy/doubaoime-asr`，本仓库在其基础上补充了 Windows 桌面助手、打包、托盘、热键、激活码和测试文档。
 
+> **项目冻结说明（2026-06-16）**
+>
+> Windows 桌面助手方向已冻结。本仓库保留为一次失败的前瞻性验证、工程样本和经验档案，不再建议继续按产品化方向投入。主要原因是核心识别体验不达标：长句容易截断，分词、断句、标点和最终文本合并质量不足，真实输入场景达不到日常使用标准。完整复盘见 [PROJECT_POSTMORTEM.md](PROJECT_POSTMORTEM.md)。
+
 最新大版本说明见 [CHANGELOG.md](CHANGELOG.md)。2026-05-14 起，桌面版收敛为“AutoHotkey 客户端 + Python ASR bridge”的薄桥接架构，并新增 [UPSTREAM_DIFF_AUDIT.md](UPSTREAM_DIFF_AUDIT.md) 解释本仓库相对两个参考仓库的每一类差异。
 
 ## 免责声明
